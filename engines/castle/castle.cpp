@@ -239,8 +239,12 @@ void CastleEngine::applyPalette() {
 void CastleEngine::render() {
 	if (_paletteDirty)
 		applyPalette();
-	if (!_dirty)
+	if (!_dirty) {
+		// The backend only repaints the mouse cursor from updateScreen(), so
+		// it must be called every frame even when the page itself is unchanged.
+		_system->updateScreen();
 		return;
+	}
 	_screen.fillRect(Common::Rect(0, 0, _screen.w, _screen.h), 0);
 	if (_basePage)
 		_basePage->draw(_screen, *_res);
@@ -756,10 +760,10 @@ void CastleEngine::playVideo(const Common::String &dir, const Common::String &na
 					if (!clip.isEmpty())
 						_screen.copyRectToSurface(*frame, clip.left, clip.top, Common::Rect(0, 0, clip.width(), clip.height()));
 					_system->copyRectToScreen(_screen.getPixels(), _screen.pitch, 0, 0, _screen.w, _screen.h);
-					_system->updateScreen();
 				}
 			}
 		}
+		_system->updateScreen();
 		_system->delayMillis(10);
 	}
 	qt->close();
