@@ -135,6 +135,9 @@ public:
 	LiveObject *findCollage();
 	// Content offset of the zoom panels
 	Common::Point getScroll() const;
+	// The page's scrollable list or bitmap: position, maximum and rows per page
+	bool getScrollState(int &pos, int &maxPos, int &pageSize) const;
+	void setScrollPos(int pos);
 
 private:
 	LivePanel *addPanel(Panel *panel, const Common::Rect &rect, const Common::String &dir, Resources &res);

@@ -102,7 +102,7 @@ void LivePage::layoutObjects(LivePanel *lp, Resources &res) {
 			lo.nextFrameTime = g_system->getMillis() + 200;
 		} else if (!obj->file.empty() && (obj->isBitmap() || obj->cls == kObjButton || obj->cls == kObjToggleButton ||
 				obj->cls == kObjQuestionOKButton || obj->cls == kObjCollageButton || obj->cls == kObjNavRollOverButton ||
-				obj->cls == kObjHighlightingCastle || obj->cls == kObjCollectBitmap)) {
+				obj->cls == kObjHighlightingCastle || obj->cls == kObjCollectBitmap || obj->cls == kObjScrollBitmap)) {
 			lo.image = res.loadImage(lp->dir, obj->file);
 		}
 
@@ -305,17 +305,6 @@ static void highlightSection(Graphics::Surface &screen, const Image *mask, const
 	}
 }
 
-static const Collage *pageCollage(const LivePage *page) {
-	if (!page)
-		return nullptr;
-	const Common::Array<LivePanel *> &panels = page->getPanels();
-	for (uint i = 0; i < panels.size(); i++)
-		for (uint k = 0; k < panels[i]->objects.size(); k++)
-			if (panels[i]->objects[k].collage)
-				return panels[i]->objects[k].collage;
-	return nullptr;
-}
-
 // The list of an Index or Trail popup: one row per entry from the first
 // visible one, the selected entry on a highlight bar (Index) or with its
 // highlighted icon (Trail)
@@ -367,7 +356,9 @@ static void drawScrollBar(Graphics::Surface &screen, Resources &res, const LiveO
 	const GameObject *o = lo.obj;
 	if (o->strs.size() < 6)
 		return;
-	const Collage *c = pageCollage(lp.page);
+	int pos = 0, maxPos = 0, pageSize = 1;
+	if (lp.page)
+		lp.page->getScrollState(pos, maxPos, pageSize);
 	Common::Rect clip = lp.rect;
 	clip.clip(Common::Rect(0, 0, screen.w, screen.h));
 	Image *up = res.loadImage(lp.dir, o->strs[lo.value == 1 ? 4 : 0]);
@@ -382,9 +373,9 @@ static void drawScrollBar(Graphics::Surface &screen, Resources &res, const LiveO
 	}
 	if (coin) {
 		int travel = barBottom - barTop - coin->surface.h;
-		int pos = (c && c->maxScroll() > 0 && travel > 0) ? travel * c->scrollTop / c->maxScroll() : 0;
+		int y = (maxPos > 0 && travel > 0) ? travel * pos / maxPos : 0;
 		int x = lo.rect.left + (lo.rect.width() - coin->surface.w) / 2;
-		blitImage(screen, coin, Common::Rect(x, barTop + pos, x + coin->surface.w, barTop + pos + coin->surface.h), clip);
+		blitImage(screen, coin, Common::Rect(x, barTop + y, x + coin->surface.w, barTop + y + coin->surface.h), clip);
 	}
 	if (up)
 		blitImage(screen, up, Common::Rect(lo.rect.left, lo.rect.top, lo.rect.left + up->surface.w, lo.rect.top + upH), clip);
@@ -441,6 +432,17 @@ void LivePage::draw(Graphics::Surface &screen, Resources &res) const {
 			if (lo.obj->cls == kObjScrollBar) {
 				if (lo.visible)
 					drawScrollBar(screen, res, lo, *lp);
+				continue;
+			}
+			if (lo.obj->cls == kObjScrollBitmap) {
+				// The help text, scrolled by whole lines through its window
+				if (lo.visible && lo.image) {
+					int step = lo.obj->ints.size() > 2 && lo.obj->ints[2] > 0 ? lo.obj->ints[2] : 1;
+					Common::Rect clip = lo.rect;
+					clip.clip(lp->rect);
+					int top = lo.rect.top - lo.value * step;
+					blitImage(screen, lo.image, Common::Rect(lo.rect.left, top, lo.rect.left + lo.image->surface.w, top + lo.image->surface.h), clip);
+				}
 				continue;
 			}
 			if (!lo.visible || (!lo.image && lo.obj->cls != kObjZoomCaption))
@@ -550,6 +552,50 @@ Common::Point LivePage::getScroll() const {
 		if (_panels[i]->panel->type == kPanelZoomSprite || _panels[i]->panel->type == kPanelScroll)
 			return _panels[i]->scroll;
 	return Common::Point(0, 0);
+}
+
+// A ScrollBitmap (the help texts) scrolls a tall bitmap through its
+// rectangle by lines of a fixed height; ints[2] is the line height
+static int scrollBitmapMax(const LiveObject &lo) {
+	int step = lo.obj->ints.size() > 2 && lo.obj->ints[2] > 0 ? lo.obj->ints[2] : 1;
+	int extra = lo.image ? lo.image->surface.h - lo.rect.height() : 0;
+	return MAX(0, extra / step);
+}
+
+bool LivePage::getScrollState(int &pos, int &maxPos, int &pageSize) const {
+	for (uint i = 0; i < _panels.size(); i++)
+		for (uint k = 0; k < _panels[i]->objects.size(); k++) {
+			const LiveObject &lo = _panels[i]->objects[k];
+			if (lo.collage) {
+				pos = lo.collage->scrollTop;
+				maxPos = lo.collage->maxScroll();
+				pageSize = lo.collage->pageSize;
+				return true;
+			}
+			if (lo.obj->cls == kObjScrollBitmap) {
+				int step = lo.obj->ints.size() > 2 && lo.obj->ints[2] > 0 ? lo.obj->ints[2] : 1;
+				pos = lo.value;
+				maxPos = scrollBitmapMax(lo);
+				pageSize = MAX(1, lo.rect.height() / step);
+				return true;
+			}
+		}
+	return false;
+}
+
+void LivePage::setScrollPos(int pos) {
+	for (uint i = 0; i < _panels.size(); i++)
+		for (uint k = 0; k < _panels[i]->objects.size(); k++) {
+			LiveObject &lo = _panels[i]->objects[k];
+			if (lo.collage) {
+				lo.collage->scrollTo(pos);
+				return;
+			}
+			if (lo.obj->cls == kObjScrollBitmap) {
+				lo.value = CLIP(pos, 0, scrollBitmapMax(lo));
+				return;
+			}
+		}
 }
 
 // Builds the lists of the Collage objects. The Index entries come from the

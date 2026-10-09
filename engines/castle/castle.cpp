@@ -174,7 +174,7 @@ Common::Error CastleEngine::run() {
 				LiveObject *lo = (kind == 'c' || kind == 'p') ? hitTest(pt, &page) : nullptr;
 				debugC(1, kDebugScript, "Castle: scripted %c %d,%d -> %s", kind, pt.x, pt.y, lo ? objectClassName(lo->obj->cls) : "nothing");
 				if (kind == 'm') {
-					if (_dragging || _dragPage)
+					if (_dragging || _dragPage || _scrollBarDrag || (_pressedObject && _pressedObject->obj->cls == kObjCollage))
 						dragTo(pt);
 					else
 						handleMouseMove(pt);
@@ -253,6 +253,17 @@ void CastleEngine::handleEvents() {
 		case Common::EVENT_LBUTTONUP:
 			releaseMouse(event.mouse);
 			break;
+		case Common::EVENT_WHEELUP:
+		case Common::EVENT_WHEELDOWN: {
+			// The wheel scrolls the list or help text of the topmost page
+			LivePage *top = _popups.empty() ? _basePage : _popups.back();
+			int pos, maxPos, pageSize;
+			if (top && top->getScrollState(pos, maxPos, pageSize)) {
+				top->setScrollPos(pos + (event.type == Common::EVENT_WHEELUP ? -1 : 1));
+				_dirty = true;
+			}
+			break;
+		}
 		case Common::EVENT_MOUSEMOVE:
 			if (_dragging || _dragPage || _scrollBarDrag || (_pressedObject && _pressedObject->obj->cls == kObjCollage))
 				dragTo(event.mouse);
@@ -2366,48 +2377,46 @@ static void scrollBarGeometry(Resources &res, const LiveObject &lo, int &barTop,
 }
 
 void CastleEngine::scrollBarPress(LiveObject *lo, LivePage *page, const Common::Point &p) {
-	LiveObject *list = page->findCollage();
-	if (!list || !list->collage)
+	int pos, maxPos, pageSize;
+	if (!page->getScrollState(pos, maxPos, pageSize))
 		return;
-	Collage *c = list->collage;
 	int barTop, barBottom, coinH;
 	scrollBarGeometry(*_res, *lo, barTop, barBottom, coinH);
 	if (p.y < barTop) {
-		c->scrollBy(-1);
+		page->setScrollPos(pos - 1);
 		lo->value = 1;
 	} else if (p.y >= barBottom) {
-		c->scrollBy(1);
+		page->setScrollPos(pos + 1);
 		lo->value = 2;
 	} else {
 		int travel = barBottom - barTop - coinH;
-		int pos = (c->maxScroll() > 0 && travel > 0) ? travel * c->scrollTop / c->maxScroll() : 0;
-		int coinY = barTop + pos;
+		int y = (maxPos > 0 && travel > 0) ? travel * pos / maxPos : 0;
+		int coinY = barTop + y;
 		if (p.y >= coinY && p.y < coinY + coinH) {
 			_scrollBarDrag = true;
 			_scrollBarGrab = p.y - coinY;
 		} else if (p.y < coinY) {
-			c->scrollBy(-c->pageSize);
+			page->setScrollPos(pos - pageSize);
 		} else {
-			c->scrollBy(c->pageSize);
+			page->setScrollPos(pos + pageSize);
 		}
 	}
 	_dirty = true;
 }
 
 void CastleEngine::scrollBarDrag(LiveObject *lo, LivePage *page, const Common::Point &p) {
-	LiveObject *list = page ? page->findCollage() : nullptr;
-	if (!list || !list->collage)
+	int pos, maxPos, pageSize;
+	if (!page || !page->getScrollState(pos, maxPos, pageSize))
 		return;
-	Collage *c = list->collage;
 	int barTop, barBottom, coinH;
 	scrollBarGeometry(*_res, *lo, barTop, barBottom, coinH);
 	int travel = barBottom - barTop - coinH;
 	if (travel <= 0)
 		return;
-	int pos = CLIP(p.y - _scrollBarGrab - barTop, 0, travel);
-	int top = (pos * c->maxScroll() + travel / 2) / travel;
-	if (top != c->scrollTop) {
-		c->scrollTo(top);
+	int y = CLIP(p.y - _scrollBarGrab - barTop, 0, travel);
+	int top = (y * maxPos + travel / 2) / travel;
+	if (top != pos) {
+		page->setScrollPos(top);
 		_dirty = true;
 	}
 }
