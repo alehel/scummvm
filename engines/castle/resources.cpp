@@ -129,15 +129,112 @@ Common::SeekableReadStream *Resources::openExeWave(const Common::String &name) {
 	return _exe->getResource(Common::WinResourceID("WAVE"), Common::WinResourceID(id));
 }
 
+// Decodes an 8-bit Windows bitmap, including the RLE8 compressed ones that
+// the generic decoder does not handle.
+static Image *decodeBitmap8(Common::SeekableReadStream *stream) {
+	stream->seek(0);
+	if (stream->readByte() != 'B' || stream->readByte() != 'M')
+		return nullptr;
+	stream->readUint32LE();
+	stream->readUint32LE();
+	uint32 dataOffset = stream->readUint32LE();
+	uint32 headerSize = stream->readUint32LE();
+	int32 width = stream->readSint32LE();
+	int32 height = stream->readSint32LE();
+	stream->readUint16LE();
+	uint16 bpp = stream->readUint16LE();
+	uint32 compression = stream->readUint32LE();
+	stream->readUint32LE();
+	stream->readUint32LE();
+	stream->readUint32LE();
+	uint32 colors = stream->readUint32LE();
+	if (bpp != 8 || width <= 0 || height == 0) {
+		debugC(1, kDebugGraphics, "Castle: bitmap bpp %d size %dx%d compression %u not handled here", bpp, width, height, compression);
+		return nullptr;
+	}
+	debugC(2, kDebugGraphics, "Castle: bitmap %dx%d bpp %d compression %u colors %u", width, height, bpp, compression, colors);
+	if (colors == 0 || colors > 256)
+		colors = 256;
+	bool topDown = height < 0;
+	if (topDown)
+		height = -height;
+	stream->seek(14 + headerSize);
+	Image *img = new Image();
+	img->palette.resize(256, false);
+	for (uint i = 0; i < colors; i++) {
+		byte b = stream->readByte(), g = stream->readByte(), r = stream->readByte();
+		stream->readByte();
+		img->palette.set(i, r, g, b);
+	}
+	img->surface.create(width, height, Graphics::PixelFormat::createFormatCLUT8());
+	memset(img->surface.getPixels(), 0, img->surface.pitch * height);
+	stream->seek(dataOffset);
+	if (compression == 0) {
+		int stride = (width + 3) & ~3;
+		byte *row = (byte *)malloc(stride);
+		for (int y = 0; y < height; y++) {
+			stream->read(row, stride);
+			int dy = topDown ? y : height - 1 - y;
+			memcpy(img->surface.getBasePtr(0, dy), row, width);
+		}
+		free(row);
+	} else if (compression == 1) {
+		int x = 0, y = 0;
+		while (!stream->eos()) {
+			byte count = stream->readByte();
+			byte value = stream->readByte();
+			if (stream->eos())
+				break;
+			if (count > 0) {
+				for (int i = 0; i < count; i++) {
+					if (x < width && y < height) {
+						int dy = topDown ? y : height - 1 - y;
+						*((byte *)img->surface.getBasePtr(x, dy)) = value;
+					}
+					x++;
+				}
+			} else if (value == 0) {
+				x = 0;
+				y++;
+			} else if (value == 1) {
+				break;
+			} else if (value == 2) {
+				x += stream->readByte();
+				y += stream->readByte();
+			} else {
+				for (int i = 0; i < value; i++) {
+					byte px = stream->readByte();
+					if (x < width && y < height) {
+						int dy = topDown ? y : height - 1 - y;
+						*((byte *)img->surface.getBasePtr(x, dy)) = px;
+					}
+					x++;
+				}
+				if (value & 1)
+					stream->readByte();
+			}
+		}
+	} else {
+		delete img;
+		return nullptr;
+	}
+	return img;
+}
+
 Image *Resources::decodeImage(Common::SeekableReadStream *stream) {
 	byte magic[4];
 	stream->read(magic, 4);
 	stream->seek(0);
 	::Image::ImageDecoder *decoder;
-	if (magic[0] == 0x89 && magic[1] == 'P' && magic[2] == 'N' && magic[3] == 'G')
+	if (magic[0] == 0x89 && magic[1] == 'P' && magic[2] == 'N' && magic[3] == 'G') {
 		decoder = new ::Image::PNGDecoder();
-	else
+	} else {
+		Image *bmp = decodeBitmap8(stream);
+		if (bmp)
+			return bmp;
+		stream->seek(0);
 		decoder = new ::Image::BitmapDecoder();
+	}
 	if (!decoder->loadStream(*stream)) {
 		delete decoder;
 		return nullptr;
@@ -170,6 +267,8 @@ Image *Resources::loadImage(const Common::String &dir, const Common::String &nam
 	if (stream) {
 		img = decodeImage(stream);
 		delete stream;
+	} else {
+		debugC(1, kDebugGraphics, "Castle: no file for '%s'", key.c_str());
 	}
 	if (!img)
 		debugC(1, kDebugGraphics, "Castle: image '%s' (dir '%s') not found or undecodable", name.c_str(), dir.c_str());

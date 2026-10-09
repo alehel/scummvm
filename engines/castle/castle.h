@@ -102,6 +102,7 @@ private:
 	bool _paletteDirty;
 	uint _pendingBasePage;
 	bool _pendingBase;
+	Common::Point _pendingScroll;
 
 	Common::String _dumpDir;
 	int _dumpCount;

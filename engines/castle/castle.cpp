@@ -140,7 +140,13 @@ Common::Error CastleEngine::run() {
 		}
 		if (_pendingBase) {
 			_pendingBase = false;
+			Common::Point scroll = _pendingScroll;
+			_pendingScroll = Common::Point(0, 0);
 			openBasePage(_pendingBasePage);
+			if (_basePage && (scroll.x || scroll.y)) {
+				_basePage->setScroll(scroll);
+				_dirty = true;
+			}
 		}
 		uint32 now = _system->getMillis();
 		if (_basePage)
@@ -364,6 +370,11 @@ void CastleEngine::runAction(const Action *a, LivePage *page, LiveObject *obj) {
 	case kActAppendPage:
 	case kActOpenHelp:
 		openPopup(a->page);
+		break;
+	case kActZoom:
+		_pendingBasePage = a->page;
+		_pendingBase = true;
+		_pendingScroll = a->pt;
 		break;
 	case kActClosePage:
 		if (page && page->isPopup())

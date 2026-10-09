@@ -66,9 +66,16 @@ void LivePage::layoutObjects(LivePanel *lp, Resources &res) {
 			lo.frameDelay = obj->ints.size() > 2 ? MAX(25, (int)obj->ints[2]) : 100;
 			for (int k = 0; k < 5; k++)
 				lo.counters[k] = obj->ints.size() > 5 + (uint)k ? obj->ints[5 + k] : 0;
-			lo.spriteFlags = obj->ints.size() > 4 ? obj->ints[4] : 0;
-			lo.spriteState = obj->ints.size() > 11 ? obj->ints[11] : 0;
+			lo.spriteFlags = obj->ints.size() > 3 ? obj->ints[3] : 0;
+			lo.spriteState = obj->ints.size() > 10 ? obj->ints[10] : 0;
+			lo.visible = (lo.spriteState & 0x10) != 0;
 			lo.playing = (obj->flags & 0x20) != 0 && lo.frameCount > 0;
+			if ((lo.rect.width() <= 0 || lo.rect.height() <= 0) && obj->points.size() > 1) {
+				lo.rect.left = lp->rect.left + obj->points[1].x;
+				lo.rect.top = lp->rect.top + obj->points[1].y;
+				lo.rect.right = lo.rect.left;
+				lo.rect.bottom = lo.rect.top;
+			}
 			lo.nextFrameTime = g_system->getMillis() + lo.frameDelay;
 			if (!obj->file.empty()) {
 				lo.image = res.loadImage(lp->dir, frameName(obj, lo.frame));
@@ -86,6 +93,8 @@ void LivePage::layoutObjects(LivePanel *lp, Resources &res) {
 			lo.image = res.loadImage(lp->dir, obj->file);
 		}
 
+		if (obj->cls == kObjHighlightingCastle)
+			lo.visible = false;
 		if (lo.image) {
 			// Objects without a stored rectangle take the image size
 			if (lo.rect.width() <= 0 || lo.rect.height() <= 0) {
@@ -201,9 +210,10 @@ bool LivePage::open(Database &db, Resources &res, uint index, const Common::Poin
 	return true;
 }
 
-static void blitImage(Graphics::Surface &screen, const Image *img, const Common::Rect &dst) {
+static void blitImage(Graphics::Surface &screen, const Image *img, const Common::Rect &dst, const Common::Rect &clipTo) {
 	Common::Rect r = dst;
 	Common::Rect clip(0, 0, screen.w, screen.h);
+	clip.clip(clipTo);
 	r.clip(clip);
 	if (r.isEmpty())
 		return;
@@ -233,14 +243,22 @@ void LivePage::draw(Graphics::Surface &screen, Resources &res) const {
 			const LiveObject &lo = lp->objects[k];
 			if (!lo.visible || !lo.image)
 				continue;
-			blitImage(screen, lo.image, lo.rect);
+			Common::Rect r = lo.rect;
+			r.translate(-lp->scroll.x, -lp->scroll.y);
+			blitImage(screen, lo.image, r, lp->rect);
 		}
 		for (uint k = 0; k < lp->overlays.size(); k++) {
 			const Overlay &ov = lp->overlays[k];
 			if (ov.image)
-				blitImage(screen, ov.image, Common::Rect(ov.pos.x, ov.pos.y, ov.pos.x + ov.image->surface.w, ov.pos.y + ov.image->surface.h));
+				blitImage(screen, ov.image, Common::Rect(ov.pos.x, ov.pos.y, ov.pos.x + ov.image->surface.w, ov.pos.y + ov.image->surface.h), lp->rect);
 		}
 	}
+}
+
+void LivePage::setScroll(const Common::Point &p) {
+	for (uint i = 0; i < _panels.size(); i++)
+		if (_panels[i]->panel->type == kPanelZoomSprite || _panels[i]->panel->type == kPanelScroll)
+			_panels[i]->scroll = p;
 }
 
 LiveObject *LivePage::findObject(int id) {
@@ -260,7 +278,9 @@ LiveObject *LivePage::objectAt(const Common::Point &p, bool hotspotsOnly) {
 				continue;
 			if (hotspotsOnly && (lo.disabled || !lo.obj->findEvent(kEventClick)))
 				continue;
-			if (lo.rect.contains(p))
+			Common::Point q = p;
+			q += lp->scroll;
+			if (lo.rect.contains(q))
 				return &lo;
 		}
 	}

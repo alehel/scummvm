@@ -74,6 +74,7 @@ struct LivePanel {
 	Panel *panel;
 	Scope scope;
 	Common::Array<Overlay> overlays;
+	Common::Point scroll;   // content offset (zoom panels)
 	Common::Rect rect;      // screen rectangle
 	Common::String dir;
 	byte rgb[3];
@@ -89,6 +90,7 @@ public:
 	~LivePage();
 
 	bool open(Database &db, Resources &res, uint index, const Common::Point &origin);
+	void setScroll(const Common::Point &p);
 	void draw(Graphics::Surface &screen, Resources &res) const;
 	LiveObject *hitTest(const Common::Point &p);
 	LiveObject *objectAt(const Common::Point &p, bool hotspotsOnly);
