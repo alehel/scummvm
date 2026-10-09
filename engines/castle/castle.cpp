@@ -56,7 +56,7 @@ namespace Castle {
 CastleEngine::CastleEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst), _gameDescription(gameDesc),
 		_rnd("castle"), _script(nullptr), _hoverObject(nullptr), _hoverPage(nullptr), _db(nullptr), _res(nullptr), _basePage(nullptr), _dirty(true), _paletteDirty(true), _pendingBasePage(0),
 		_pendingBase(false), _dumpCount(0), _ani(nullptr), _aniNextFrame(0), _quest(nullptr), _quiz(nullptr), _activityCompleted(false), _spyChangedFlag(false), _saveSlot(-1), _savedPage(0), _pressedObject(nullptr), _pressedPage(nullptr), _dragging(false), _dragPage(nullptr), _dungeonTimerEnd(0), _scrollObject(nullptr), _scrollPage(nullptr), _scrollNext(0), _scrollStep(1), _ambientNext(0),
-		_trailNavigating(false), _pendingPopup(0), _scrollBarDrag(false), _scrollBarGrab(0), _editFocus(nullptr), _editFocusPage(nullptr), _pendingTransition(0), _noScreenUpdate(false) {
+		_trailNavigating(false), _pendingPopup(0), _scrollBarDrag(false), _scrollBarGrab(0), _editFocus(nullptr), _editFocusPage(nullptr), _pendingTransition(0), _noScreenUpdate(false), _repeatNext(0) {
 	const Common::FSNode gameDataDir(ConfMan.getPath("path"));
 	SearchMan.addSubDirectoryMatching(gameDataDir, "dkcode");
 	SearchMan.addSubDirectoryMatching(gameDataDir, "3drooms", 0, 3);
@@ -190,7 +190,8 @@ Common::Error CastleEngine::run() {
 				} else if (kind == 't') {
 					// Control codes map to their keys (13 Enter, 8 Backspace, 9 Tab);
 					// letters carry their own code
-					typeKey(pt.x, pt.x == 13 ? Common::KEYCODE_RETURN : pt.x == 8 ? Common::KEYCODE_BACKSPACE : pt.x == 9 ? Common::KEYCODE_TAB : (pt.x >= 'a' && pt.x <= 'z') ? pt.x : 0);
+					// codes from 256 up are key codes (273 Up, 274 Down, 280/281 Page Up/Down, 278 Home, 279 End)
+					typeKey(pt.x < 256 ? pt.x : 0, pt.x == 13 ? Common::KEYCODE_RETURN : pt.x == 8 ? Common::KEYCODE_BACKSPACE : pt.x == 9 ? Common::KEYCODE_TAB : ((pt.x >= 'a' && pt.x <= 'z') || pt.x >= 256) ? pt.x : 0);
 				} else if (lo) {
 					pressObject(lo, page, pt);
 					if (kind == 'c')
@@ -221,6 +222,7 @@ Common::Error CastleEngine::run() {
 		}
 		updateAnimation();
 		updateWaveQueue();
+		updateRepeat(now);
 		render();
 		_system->delayMillis(10);
 	}
@@ -952,7 +954,20 @@ void CastleEngine::pressObject(LiveObject *lo, LivePage *page, const Common::Poi
 		scrollBarPress(lo, page, p);
 		return;
 	}
+	if (lo->obj->cls == kObjRepeatingHotspot) {
+		// Clicks again on a timer while the button is held (ints[2] ms)
+		int interval = lo->obj->ints.size() > 2 ? lo->obj->ints[2] : 0;
+		_repeatNext = _system->getMillis() + MAX(interval, 100);
+	}
 	clickObject(lo, page);
+}
+
+void CastleEngine::updateRepeat(uint32 now) {
+	if (!_pressedObject || _pressedObject->obj->cls != kObjRepeatingHotspot || now < _repeatNext)
+		return;
+	int interval = _pressedObject->obj->ints.size() > 2 ? _pressedObject->obj->ints[2] : 0;
+	_repeatNext = now + MAX(interval, 100);
+	clickObject(_pressedObject, _pressedPage);
 }
 
 // Mouse button up: ends a drag and runs the sprite's release scripts (5)

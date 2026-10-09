@@ -162,6 +162,7 @@ private:
 	// Page-turn wipes between base pages, screen dumps of the test harness
 	void wipeTransition(const Graphics::Surface &from, int code);
 	void dumpSurface(const Graphics::Surface &surf);
+	void updateRepeat(uint32 now);
 
 	void handleEvents();
 	void render();
@@ -248,6 +249,7 @@ private:
 	LivePage *_editFocusPage;
 	int _pendingTransition;      // transition code of the pending page change
 	bool _noScreenUpdate;        // render() leaves the screen alone (wipes)
+	uint32 _repeatNext;          // RepeatingHotspot held: next click
 };
 
 } // End of namespace Castle
