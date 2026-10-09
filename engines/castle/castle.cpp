@@ -159,7 +159,9 @@ Common::Error CastleEngine::run() {
 		}
 	}
 	uint clickIdx = 0;
-	uint32 nextClick = _system->getMillis() + 1500;
+	// castle_clickdelay: milliseconds between scripted clicks (default 1500)
+	uint32 clickDelay = ConfMan.hasKey("castle_clickdelay") ? ConfMan.getInt("castle_clickdelay") : 1500;
+	uint32 nextClick = _system->getMillis() + clickDelay;
 	_dumpDir = dumpDirStr;
 
 	while (!shouldQuit()) {
@@ -197,7 +199,7 @@ Common::Error CastleEngine::run() {
 					if (kind == 'c')
 						releaseMouse(pt);
 				}
-				nextClick = _system->getMillis() + 1500;
+				nextClick = _system->getMillis() + clickDelay;
 			}
 		}
 		flushPendingPage();
