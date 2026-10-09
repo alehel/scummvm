@@ -77,6 +77,18 @@ void LivePage::layoutObjects(LivePanel *lp, Resources &res) {
 			lo.spriteFlags = obj->ints.size() > 3 ? obj->ints[3] : 0;
 			lo.spriteState = obj->ints.size() > 10 ? obj->ints[10] : 0;
 			lo.spriteLoops = obj->ints.size() > 14 ? obj->ints[14] : -1;
+			lo.limitRect = obj->rects.size() > 2 ? obj->rects[2] : Common::Rect();
+			lo.vx = obj->ints.size() > 12 ? obj->ints[12] : 0;
+			lo.vy = obj->ints.size() > 13 ? obj->ints[13] : 0;
+			// Region scripts start with the flags of their c field: 0x10 counts
+			// as already entered, 0x20 as already left
+			for (uint sidx = 0; sidx < obj->scripts.size() && sidx < 32; sidx++) {
+				const ScriptObject *sc = obj->scripts[sidx];
+				if (sc->a == 7 && (sc->c & 0x10))
+					lo.regionIn |= 1u << sidx;
+				if (sc->a == 8 && (sc->c & 0x20))
+					lo.regionOut |= 1u << sidx;
+			}
 			// Object flag 0x20 activates and starts the sprite when its panel
 			// opens (state bits 1 and 4); whether it shows is bit 0x10 alone.
 			if (obj->flags & 0x20)

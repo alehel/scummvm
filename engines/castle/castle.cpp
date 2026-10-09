@@ -1047,20 +1047,8 @@ void CastleEngine::dragTo(const Common::Point &p) {
 	}
 	if (!lo || !_dragging)
 		return;
-	int w = lo->rect.width(), h = lo->rect.height();
-	int nx = p.x - _dragOffset.x, ny = p.y - _dragOffset.y;
-	if (!lo->obj->rects.empty() && !lo->obj->rects[0].isEmpty()) {
-		Common::Rect lim = lo->obj->rects[0];
-		lim.translate(lo->panel->rect.left, lo->panel->rect.top);
-		nx = CLIP<int>(nx, lim.left, MAX<int>(lim.left, lim.right - w));
-		ny = CLIP<int>(ny, lim.top, MAX<int>(lim.top, lim.bottom - h));
-	}
-	if (nx != lo->rect.left || ny != lo->rect.top) {
-		lo->rect.moveTo(nx, ny);
-		debugC(3, kDebugScript, "Castle: drag sprite %d to %d,%d", lo->obj->id, nx, ny);
-		_dirty = true;
-	}
-	runSpriteRegionEvents(_pressedPage, lo);
+	int nx = p.x - _dragOffset.x - lo->panel->rect.left, ny = p.y - _dragOffset.y - lo->panel->rect.top;
+	moveSpriteTo(_pressedPage, lo, nx, ny, true);
 	if (scriptShouldStop() || _pressedObject != lo)
 		return;
 	// The drag scripts run on every move, even when the limit rectangle
@@ -1446,6 +1434,144 @@ void CastleEngine::runSpriteRegionEvents(LivePage *page, LiveObject *lo) {
 	}
 }
 
+void CastleEngine::moveSpriteTo(LivePage *page, LiveObject *lo, int nx, int ny, bool user) {
+	const GameObject *obj = lo->obj;
+	int w = lo->rect.width(), h = lo->rect.height();
+	int mode = obj->ints.size() > 8 ? obj->ints[8] : 0;   // motion mode p[7]
+	bool dragging = (lo->spriteState & 0x20) != 0;
+	const Common::Rect &lim = lo->limitRect;
+	int edges = 0;
+	if (dragging && !lim.isEmpty()) {
+		// A drag keeps the whole sprite inside the limit and notes the edges it
+		// pushed against (the original clamps the mouse point the same way)
+		if (nx < lim.left) {
+			edges |= 1;
+			nx = lim.left;
+		} else if (nx + w > lim.right) {
+			edges |= 4;
+			nx = MAX<int>(lim.left, lim.right - w);
+		}
+		if (ny < lim.top) {
+			edges |= 2;
+			ny = lim.top;
+		} else if (ny + h > lim.bottom) {
+			edges |= 8;
+			ny = MAX<int>(lim.top, lim.bottom - h);
+		}
+	} else if (!lim.isEmpty()) {
+		bool intersects = nx <= lim.right && ny <= lim.bottom && lim.left <= nx + w && lim.top <= ny + h;
+		if (!intersects) {
+			// Entirely outside the limit: deactivated, wrapped round or put back
+			switch (mode) {
+			case 4:
+				lo->spriteState &= ~5;
+				break;
+			case 5:
+				if ((lo->spriteFlags & 2) && !dragging && (lo->vx || lo->vy)) {
+					if (nx + w < lim.left)
+						nx = lim.right - 2;
+					else if (nx > lim.right)
+						nx = lim.left - w + 2;
+					if (ny + h < lim.top)
+						ny = lim.bottom - 2;
+					else if (ny > lim.bottom)
+						ny = lim.top - h + 2;
+				}
+				break;
+			case 2:
+			case 3:
+				nx = CLIP<int>(nx, lim.left, MAX<int>(lim.left, lim.right - w));
+				ny = CLIP<int>(ny, lim.top, MAX<int>(lim.top, lim.bottom - h));
+				if (mode == 2) {
+					lo->vx = -lo->vx;
+					lo->vy = -lo->vy;
+				}
+				break;
+			default:
+				break;
+			}
+		} else if (!dragging) {
+			// Crossing an edge: the edge scripts hear about it; modes 2 and 3
+			// keep the sprite inside, mode 2 reverses its motion
+			if (nx < lim.left) {
+				edges |= 1;
+				if (mode == 2)
+					lo->vx = -lo->vx;
+				if (mode == 2 || mode == 3)
+					nx = lim.left;
+			} else if (nx + w > lim.right) {
+				edges |= 4;
+				if (mode == 2)
+					lo->vx = -lo->vx;
+				if (mode == 2 || mode == 3)
+					nx = lim.right - w;
+			}
+			if (ny < lim.top) {
+				edges |= 2;
+				if (mode == 2)
+					lo->vy = -lo->vy;
+				if (mode == 2 || mode == 3)
+					ny = lim.top;
+			} else if (ny + h > lim.bottom) {
+				edges |= 8;
+				if (mode == 2)
+					lo->vy = -lo->vy;
+				if (mode == 2 || mode == 3)
+					ny = lim.bottom - h;
+			}
+		}
+	}
+	int sx = lo->panel->rect.left + nx, sy = lo->panel->rect.top + ny;
+	if (sx != lo->rect.left || sy != lo->rect.top) {
+		lo->rect.moveTo(sx, sy);
+		debugC(3, kDebugScript, "Castle: move sprite %d to %d,%d", obj->id, nx, ny);
+		_dirty = true;
+	}
+	if (edges) {
+		// Edge scripts (event 15) carry the edges they answer to in c
+		for (uint i = 0; i < obj->scripts.size(); i++) {
+			const ScriptObject *sc = obj->scripts[i];
+			if (sc->a != 15 || !(sc->c & edges))
+				continue;
+			runSpriteScript(page, lo, sc, 15, lo->frame);
+			if (scriptShouldStop())
+				return;
+		}
+	}
+	if (user)
+		runSpriteRegionEvents(page, lo);
+}
+
+// Self propelled sprites (flag 2, p[4] == 1) advance by their velocity, in
+// pixels per second, with one timer per axis as the original's tick
+void CastleEngine::updateSpriteMotion(LivePage *page, LiveObject *lo, uint32 now) {
+	const GameObject *obj = lo->obj;
+	if (!(lo->spriteFlags & 2) || obj->ints.size() < 6 || obj->ints[5] != 1 || (lo->spriteState & 7) != 7)
+		return;
+	if (now < lo->nextMotionTime)
+		return;
+	if (!lo->motionT0x)
+		lo->motionT0x = now;
+	if (!lo->motionT0y)
+		lo->motionT0y = now;
+	int dx = (int)(((int64)(now - lo->motionT0x) * lo->vx) / 1000);
+	int dy = (int)(((int64)(now - lo->motionT0y) * lo->vy) / 1000);
+	if (!dx && !dy)
+		return;
+	int x = lo->rect.left - lo->panel->rect.left, y = lo->rect.top - lo->panel->rect.top;
+	if (dx)
+		lo->motionT0x = now;
+	if (dy)
+		lo->motionT0y = now;
+	int step = 1000;
+	if (lo->vx)
+		step = MIN(step, 1000 / ABS(lo->vx));
+	if (lo->vy)
+		step = MIN(step, 1000 / ABS(lo->vy));
+	lo->nextMotionTime = now + MAX(step, 25);
+	moveSpriteTo(page, lo, x + dx, y + dy, true);
+}
+
 void CastleEngine::spriteMoved(LiveObject *lo) {
 	if (lo->panel && lo->panel->page)
 		runSpriteRegionEvents(lo->panel->page, lo);
@@ -1465,6 +1591,9 @@ void CastleEngine::updateSprites(uint32 now) {
 				LiveObject &lo = panels[i]->objects[k];
 				if (lo.obj->cls != kObjSprite || lo.frameCount <= 0)
 					continue;
+				updateSpriteMotion(page, &lo, now);
+				if (scriptShouldStop())
+					return;
 				// Only active (1), loaded (2) and running (4) sprites animate
 				if (!lo.playing || (lo.spriteState & 7) != 7 || now < lo.nextFrameTime)
 					continue;

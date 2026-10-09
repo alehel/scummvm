@@ -82,6 +82,12 @@ public:
 	// Region scripts (events 8 then 7) after a user driven move of the sprite
 	void runSpriteRegionEvents(LivePage *page, LiveObject *lo);
 	void spriteMoved(LiveObject *lo);
+	// Moves a sprite (panel relative target) inside its limit rectangle as
+	// the original's move routine: clamps, bounces or wraps by its motion
+	// mode, fires the edge scripts (event 15) and, for user moves, the
+	// region scripts
+	void moveSpriteTo(LivePage *page, LiveObject *lo, int nx, int ny, bool user);
+	void updateSpriteMotion(LivePage *page, LiveObject *lo, uint32 now);
 	void handleMouseMove(const Common::Point &p);
 	LiveObject *findHighlightObject(LivePage *page);
 	void updateNodeHotspots(LivePage *page, int node);

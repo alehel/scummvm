@@ -69,12 +69,15 @@ struct LiveObject {
 	bool dithered;          // spy pictures of the hut: drawn through a checkerboard
 	Common::Point origin;   // sprites: start position (panel relative) taken when activated
 	uint32 regionIn, regionOut; // sprites: region scripts (events 7/8) already fired, one bit per script
+	Common::Rect limitRect; // sprites: limit rectangle (panel relative, record rects[2], property 0x3e)
+	int vx, vy;             // sprites: velocity in pixels per second (record p[11], p[12])
+	uint32 motionT0x, motionT0y, nextMotionTime; // sprites: timing of the self propelled motion
 	Common::String cursor;  // cursor name shown over the object (scripts may change it)
 	Common::String text;    // edit boxes: the typed text
 	int selStart;           // edit boxes: start of the selected (auto-completed) text, -1 = none
 	Collage *collage;       // Collage objects: the list (owned by the page)
 	LiveObject() : obj(nullptr), panel(nullptr), image(nullptr), frame(0), frameCount(0), frameDelay(100), nextFrameTime(0),
-			playing(false), visible(true), disabled(false), hovered(false), zOrder(0), value(0), spriteFlags(0), spriteState(0), spriteLoops(-1), spriteStartTime(0), spriteStarted(false), overlayA(nullptr), overlayB(nullptr), altImage(nullptr), dithered(false), regionIn(0), regionOut(0), selStart(-1), collage(nullptr) {
+			playing(false), visible(true), disabled(false), hovered(false), zOrder(0), value(0), spriteFlags(0), spriteState(0), spriteLoops(-1), spriteStartTime(0), spriteStarted(false), overlayA(nullptr), overlayB(nullptr), altImage(nullptr), dithered(false), regionIn(0), regionOut(0), vx(0), vy(0), motionT0x(0), motionT0y(0), nextMotionTime(0), selStart(-1), collage(nullptr) {
 		memset(counters, 0, sizeof(counters));
 		memset(extra, 0, sizeof(extra));
 	}

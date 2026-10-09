@@ -766,6 +766,7 @@ void ScriptVM::setPropertyOf(LiveObject *lo, int prop, const Value &v) {
 				if (v.toBool()) {
 					lo->spriteState = (lo->spriteState | 4) & ~8;
 					lo->rect.moveTo(lo->panel->rect.left + lo->origin.x, lo->panel->rect.top + lo->origin.y);
+					lo->motionT0x = lo->motionT0y = 0;
 					lo->spriteLoops = lo->obj->ints.size() > 14 ? lo->obj->ints[14] : -1;
 					lo->nextFrameTime = g_system->getMillis() + lo->frameDelay;
 				} else {
@@ -815,6 +816,11 @@ void ScriptVM::setPropertyOf(LiveObject *lo, int prop, const Value &v) {
 	case kPropSpriteCounter1: case kPropSpriteCounter2: case kPropSpriteCounter3:
 	case kPropSpriteCounter4: case kPropSpriteCounter5:
 		lo->counters[prop - kPropSpriteCounter1] = n;
+		break;
+	case kPropSpriteRectA:
+		// The limit rectangle of the sprite's moves
+		if (v.type == kTypeRect)
+			lo->limitRect = v.rect;
 		break;
 	case kPropSpriteStart:
 		// The start point: an inactive sprite goes there at once
