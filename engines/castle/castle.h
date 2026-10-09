@@ -63,7 +63,7 @@ public:
 	int getBuiltinNumber(int id) const;
 	void runCommand(const Action *a, LivePage *page, LiveObject *obj);
 	void updateSprites(uint32 now);
-	void runSpriteFrameScripts(LivePage *page, LiveObject *lo, int frame);
+	void runSpriteFrameScripts(LivePage *page, LiveObject *lo, int event, int frame);
 	void handleMouseMove(const Common::Point &p);
 
 private:

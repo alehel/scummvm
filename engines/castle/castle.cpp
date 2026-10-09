@@ -134,6 +134,8 @@ Common::Error CastleEngine::run() {
 					const Event *ev = lo->obj->findEvent(kEventClick);
 					if (ev)
 						runEvent(ev, page, lo);
+					else if (lo->obj->cls == kObjSprite)
+						runSpriteFrameScripts(page, lo, 5, lo->frame);
 				}
 				nextClick = _system->getMillis() + 1500;
 			}
@@ -172,6 +174,8 @@ void CastleEngine::handleEvents() {
 				       lo->obj->file.c_str(), lo->obj->id, event.mouse.x, event.mouse.y);
 				if (ev)
 					runEvent(ev, page, lo);
+				else if (lo->obj->cls == kObjSprite)
+					runSpriteFrameScripts(page, lo, 5, lo->frame);
 			} else if (_ani) {
 				// Clicking skips a running animation
 				delete _ani;
@@ -533,10 +537,15 @@ void CastleEngine::setSpriteFrame(LiveObject *lo, int frame) {
 	_dirty = true;
 }
 
-void CastleEngine::runSpriteFrameScripts(LivePage *page, LiveObject *lo, int frame) {
+// Runs the sprite scripts registered for a sprite event:
+//   5 click, 9 frame reached (script->b is the 1-based frame),
+//   0xd last frame reached, 0x10 loop restarted, 10 timer
+void CastleEngine::runSpriteFrameScripts(LivePage *page, LiveObject *lo, int event, int frame) {
 	const GameObject *obj = lo->obj;
 	for (uint i = 0; i < obj->scripts.size(); i++) {
-		if (obj->scripts[i]->a != frame)
+		if (obj->scripts[i]->a != event)
+			continue;
+		if (event == 9 && obj->scripts[i]->b != frame)
 			continue;
 		Context ctx;
 		ctx.page = page;
@@ -549,7 +558,7 @@ void CastleEngine::runSpriteFrameScripts(LivePage *page, LiveObject *lo, int fra
 		ctx.scopes.push_back(&page->getScope());
 		if (_basePage && _basePage != page)
 			ctx.scopes.push_back(&_basePage->getScope());
-		debugC(2, kDebugScript, "Castle: sprite %d frame %d script", obj->id, frame);
+		debugC(2, kDebugScript, "Castle: sprite %d event %d frame %d script", obj->id, event, frame);
 		_script->runScript(obj->scripts[i], ctx);
 		if (scriptShouldStop())
 			return;
@@ -568,23 +577,37 @@ void CastleEngine::updateSprites(uint32 now) {
 		for (uint i = 0; i < panels.size(); i++) {
 			for (uint k = 0; k < panels[i]->objects.size(); k++) {
 				LiveObject &lo = panels[i]->objects[k];
-				if (lo.obj->cls != kObjSprite || !lo.playing || now < lo.nextFrameTime)
+				if (lo.obj->cls != kObjSprite || lo.frameCount <= 0)
+					continue;
+				if (!lo.spriteStarted) {
+					// Frame events fire for the initial frame as well
+					lo.spriteStarted = true;
+					runSpriteFrameScripts(page, &lo, 9, lo.frame);
+					if (lo.frame == lo.frameCount)
+						runSpriteFrameScripts(page, &lo, 0xd, lo.frame);
+					if (scriptShouldStop())
+						return;
+				}
+				if (!lo.playing || now < lo.nextFrameTime)
 					continue;
 				lo.nextFrameTime = now + lo.frameDelay;
 				int next = lo.frame + 1;
 				if (next > lo.frameCount) {
-					// past the last frame: run the end script, then loop or stop
-					runSpriteFrameScripts(page, &lo, lo.frameCount + 1);
+					if (lo.spriteLoops > 0)
+						lo.spriteLoops--;
+					if (lo.spriteLoops == 0) {
+						lo.playing = false;
+						continue;
+					}
+					next = 1;
+					runSpriteFrameScripts(page, &lo, 0x10, next);
 					if (scriptShouldStop())
 						return;
-					if (lo.obj->flags & 0x40)
-						setSpriteFrame(&lo, 1);
-					else
-						lo.playing = false;
-					continue;
 				}
 				setSpriteFrame(&lo, next);
-				runSpriteFrameScripts(page, &lo, next);
+				runSpriteFrameScripts(page, &lo, 9, next);
+				if (next == lo.frameCount)
+					runSpriteFrameScripts(page, &lo, 0xd, next);
 				if (scriptShouldStop())
 					return;
 			}

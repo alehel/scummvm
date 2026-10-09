@@ -68,8 +68,13 @@ void LivePage::layoutObjects(LivePanel *lp, Resources &res) {
 				lo.counters[k] = obj->ints.size() > 5 + (uint)k ? obj->ints[5 + k] : 0;
 			lo.spriteFlags = obj->ints.size() > 3 ? obj->ints[3] : 0;
 			lo.spriteState = obj->ints.size() > 10 ? obj->ints[10] : 0;
-			lo.visible = (lo.spriteState & 0x10) != 0;
-			lo.playing = (obj->flags & 0x20) != 0 && lo.frameCount > 0;
+			lo.spriteLoops = obj->ints.size() > 14 ? obj->ints[14] : -1;
+			// AutoPlay sprites become active and shown when the page opens
+			if (obj->flags & 0x20)
+				lo.spriteState |= 0x15;
+			lo.visible = (lo.spriteState & 0x10) != 0 && obj->c != 0;
+			lo.playing = (lo.spriteFlags & 8) != 0 && lo.frameDelay != 0;
+			lo.spriteStartTime = g_system->getMillis();
 			if ((lo.rect.width() <= 0 || lo.rect.height() <= 0) && obj->points.size() > 1) {
 				lo.rect.left = lp->rect.left + obj->points[1].x;
 				lo.rect.top = lp->rect.top + obj->points[1].y;
@@ -239,8 +244,21 @@ static void blitImage(Graphics::Surface &screen, const Image *img, const Common:
 void LivePage::draw(Graphics::Surface &screen, Resources &res) const {
 	for (uint i = 0; i < _panels.size(); i++) {
 		const LivePanel *lp = _panels[i];
-		for (uint k = 0; k < lp->objects.size(); k++) {
-			const LiveObject &lo = lp->objects[k];
+		// Draw in Z order (stable for equal Z)
+		Common::Array<const LiveObject *> order;
+		for (uint k = 0; k < lp->objects.size(); k++)
+			order.push_back(&lp->objects[k]);
+		for (uint a = 1; a < order.size(); a++) {
+			const LiveObject *x = order[a];
+			int b = a;
+			while (b > 0 && order[b - 1]->zOrder > x->zOrder) {
+				order[b] = order[b - 1];
+				b--;
+			}
+			order[b] = x;
+		}
+		for (uint k = 0; k < order.size(); k++) {
+			const LiveObject &lo = *order[k];
 			if (!lo.visible || !lo.image)
 				continue;
 			Common::Rect r = lo.rect;
@@ -276,8 +294,16 @@ LiveObject *LivePage::objectAt(const Common::Point &p, bool hotspotsOnly) {
 			LiveObject &lo = lp->objects[k];
 			if (!lo.visible)
 				continue;
-			if (hotspotsOnly && (lo.disabled || !lo.obj->findEvent(kEventClick)))
+			if (hotspotsOnly && lo.disabled)
 				continue;
+			if (hotspotsOnly && !lo.obj->findEvent(kEventClick)) {
+				bool clickScript = false;
+				for (uint s = 0; s < lo.obj->scripts.size(); s++)
+					if (lo.obj->scripts[s]->a == 5)
+						clickScript = true;
+				if (!clickScript)
+					continue;
+			}
 			Common::Point q = p;
 			q += lp->scroll;
 			if (lo.rect.contains(q))

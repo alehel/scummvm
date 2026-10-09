@@ -58,8 +58,11 @@ struct LiveObject {
 	int extra[9];
 	int spriteFlags;        // sprite boolean properties (+0x11c)
 	int spriteState;        // sprite state bits (+0x138)
+	int spriteLoops;        // remaining loops (-1 = forever)
+	uint32 spriteStartTime;
+	bool spriteStarted;
 	LiveObject() : obj(nullptr), panel(nullptr), image(nullptr), frame(0), frameCount(0), frameDelay(100), nextFrameTime(0),
-			playing(false), visible(true), disabled(false), zOrder(0), value(0), spriteFlags(0), spriteState(0) {
+			playing(false), visible(true), disabled(false), zOrder(0), value(0), spriteFlags(0), spriteState(0), spriteLoops(-1), spriteStartTime(0), spriteStarted(false) {
 		memset(counters, 0, sizeof(counters));
 		memset(extra, 0, sizeof(extra));
 	}

@@ -650,7 +650,7 @@ void ScriptVM::setPropertyOf(LiveObject *lo, int prop, const Value &v) {
 			else
 				lo->spriteFlags &= ~spriteFlagBit(prop);
 			if (prop == 0x44) {
-				lo->playing = v.toBool();
+				lo->playing = v.toBool() && lo->frameDelay != 0;
 				lo->nextFrameTime = 0;
 			}
 			_vm->markDirty();
