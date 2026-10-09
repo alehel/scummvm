@@ -18,16 +18,16 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  */
-#ifndef CASTLE_QUIZ_H
-#define CASTLE_QUIZ_H
+#ifndef DKPENGE_QUIZ_H
+#define DKPENGE_QUIZ_H
 
 #include "common/array.h"
 #include "common/random.h"
 #include "common/str.h"
 
-namespace Castle {
+namespace DKPenge {
 
-class CastleEngine;
+class DKPengeEngine;
 class Database;
 class Quest;
 struct Question;
@@ -54,7 +54,7 @@ public:
 		kAnswerMisspelled = 2
 	};
 
-	Quiz(CastleEngine *vm, Database *db, Quest *quest, Common::RandomSource &rnd);
+	Quiz(DKPengeEngine *vm, Database *db, Quest *quest, Common::RandomSource &rnd);
 
 	// Forgets every conversation (new game)
 	void reset();
@@ -102,7 +102,7 @@ private:
 	int lookupGroup(const QuestionStep &st, int evt, int param) const;
 	bool runGroup(int q, Record &rec, const Question &qu, int group, int &next);
 
-	CastleEngine *_vm;
+	DKPengeEngine *_vm;
 	Database *_db;
 	Quest *_quest;
 	Common::RandomSource &_rnd;
@@ -113,6 +113,6 @@ private:
 	int _depth;
 };
 
-} // End of namespace Castle
+} // End of namespace DKPenge
 
 #endif

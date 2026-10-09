@@ -24,12 +24,12 @@
 #include "common/system.h"
 #include "common/textconsole.h"
 
-#include "castle/castle.h"
-#include "castle/detection.h"
-#include "castle/page.h"
-#include "castle/vm.h"
+#include "dkpenge/dkpenge.h"
+#include "dkpenge/detection.h"
+#include "dkpenge/page.h"
+#include "dkpenge/vm.h"
 
-namespace Castle {
+namespace DKPenge {
 
 /*
  * Script language summary (reverse engineered from CASTLE.EXE):
@@ -134,7 +134,7 @@ void Scope::init(const Extension *ext) {
 		subs.push_back(ext->objs[i]);
 }
 
-ScriptVM::ScriptVM(CastleEngine *vm) : _vm(vm), _depth(0) {
+ScriptVM::ScriptVM(DKPengeEngine *vm) : _vm(vm), _depth(0) {
 }
 
 ScriptVM::~ScriptVM() {
@@ -170,7 +170,7 @@ bool ScriptVM::setDocVariable(int id, const Value &v) {
 	Context ctx;
 	Variable *var = findVariable(id, ctx);
 	if (!var) {
-		debugC(1, kDebugScript, "Castle: document variable %d not found", id);
+		debugC(1, kDebugScript, "DKPenge: document variable %d not found", id);
 		return false;
 	}
 	if (var->values.empty())
@@ -183,7 +183,7 @@ bool ScriptVM::setDocVariable(int id, const Value &v) {
 	case kTypeReal: slot = Value::real(v.toReal()); break;
 	default: slot = v; break;
 	}
-	debugC(2, kDebugScript, "Castle: document variable %d = %s", id, slot.toString().c_str());
+	debugC(2, kDebugScript, "DKPenge: document variable %d = %s", id, slot.toString().c_str());
 	return true;
 }
 
@@ -202,7 +202,7 @@ Value ScriptVM::getVariable(const Operand &op, Context &ctx) {
 Value ScriptVM::getVariableElement(const Operand &op, int index1, Context &ctx) {
 	Variable *var = findVariable(op.b, ctx);
 	if (!var) {
-		debugC(1, kDebugScript, "Castle: variable %d not found", op.b);
+		debugC(1, kDebugScript, "DKPenge: variable %d not found", op.b);
 		return Value();
 	}
 	if (index1 <= 0)
@@ -234,10 +234,10 @@ void ScriptVM::setVariable(const Operand &op, const Value &val, Context &ctx) {
 void ScriptVM::setVariableElement(const Operand &op, int index1, const Value &val, Context &ctx) {
 	if (index1 <= 0)
 		index1 = op.u2;
-	debugC(3, kDebugScript, "Castle: set var %d%s%s%s = %s", op.b, index1 > 1 ? Common::String::format("[%d]", index1).c_str() : "", op.e ? "." : "", op.e ? Common::String::format("%d", op.e).c_str() : "", val.toString().c_str());
+	debugC(3, kDebugScript, "DKPenge: set var %d%s%s%s = %s", op.b, index1 > 1 ? Common::String::format("[%d]", index1).c_str() : "", op.e ? "." : "", op.e ? Common::String::format("%d", op.e).c_str() : "", val.toString().c_str());
 	Variable *var = findVariable(op.b, ctx);
 	if (!var) {
-		debugC(1, kDebugScript, "Castle: variable %d not found for assignment", op.b);
+		debugC(1, kDebugScript, "DKPenge: variable %d not found for assignment", op.b);
 		return;
 	}
 	uint index = index1 > 0 ? index1 - 1 : 0;
@@ -400,7 +400,7 @@ Value ScriptVM::binaryOp(int op, const Value &a, const Value &b) {
 	case 11: return Value::number(y == 0 ? x : x / y);
 	case 12: return Value::number(y == 0 ? 0 : x % y);
 	default:
-		debugC(1, kDebugScript, "Castle: unknown binary op %d", op);
+		debugC(1, kDebugScript, "DKPenge: unknown binary op %d", op);
 		return Value::logical(false);
 	}
 }
@@ -420,7 +420,7 @@ Value ScriptVM::unaryOp(int op, const Value &a) {
 Value ScriptVM::callFunction(int id, Common::Array<Value> &stack, Context &ctx) {
 	ObjectRef *sub = findSub(id, ctx);
 	if (!sub) {
-		debugC(1, kDebugScript, "Castle: function %d not found", id);
+		debugC(1, kDebugScript, "DKPenge: function %d not found", id);
 		return Value();
 	}
 	// Built-in functions are document level objects without a script body
@@ -468,7 +468,7 @@ Value ScriptVM::callFunction(int id, Common::Array<Value> &stack, Context &ctx) 
 		case 7: return args[2];
 		case 10: return Value::string(args[0].toString());
 		default:
-			debugC(1, kDebugScript, "Castle: built-in function %d not implemented", builtin);
+			debugC(1, kDebugScript, "DKPenge: built-in function %d not implemented", builtin);
 			return Value::logical(true);
 		}
 	}
@@ -493,9 +493,9 @@ Value ScriptVM::callFunction(int id, Common::Array<Value> &stack, Context &ctx) 
 		}
 		if (i < (int)local.vars.size() && !local.vars[i].values.empty()) {
 			local.vars[i].values[0] = v;
-			debugC(3, kDebugScript, "Castle: function %d argument %d -> var %d = %s", id, i, local.vars[i].id, v.toString().c_str());
+			debugC(3, kDebugScript, "DKPenge: function %d argument %d -> var %d = %s", id, i, local.vars[i].id, v.toString().c_str());
 		} else {
-			debugC(1, kDebugScript, "Castle: function %d has no parameter variable for argument %d", id, i);
+			debugC(1, kDebugScript, "DKPenge: function %d has no parameter variable for argument %d", id, i);
 		}
 	}
 	bool r = runScript(sub->script, sub_ctx);
@@ -515,7 +515,7 @@ Value ScriptVM::evaluate(const Expression *expr, Context &ctx) {
 				stack.push_back(Value());
 		} else if ((op >= 1 && op <= 13) || op == 16) {
 			if (stack.size() < 2) {
-				debugC(1, kDebugScript, "Castle: expression stack underflow");
+				debugC(1, kDebugScript, "DKPenge: expression stack underflow");
 				return Value();
 			}
 			Value b = stack.back(); stack.pop_back();
@@ -541,7 +541,7 @@ Value ScriptVM::evaluate(const Expression *expr, Context &ctx) {
 				stack.push_back(resolveKind(var, ctx) == 1 ? getVariableElement(var, index1, ctx) : Value());
 			}
 		} else {
-			debugC(1, kDebugScript, "Castle: unknown expression op %d", op);
+			debugC(1, kDebugScript, "DKPenge: unknown expression op %d", op);
 		}
 	}
 	return stack.empty() ? Value() : stack.back();
@@ -566,7 +566,7 @@ bool ScriptVM::assign(const Expression *lhs, const Expression *rhs, Context &ctx
 		else
 			setProperty(target.b, target.e, v, ctx);
 	} else {
-		debugC(1, kDebugScript, "Castle: cannot assign to operand type %d", target.type);
+		debugC(1, kDebugScript, "DKPenge: cannot assign to operand type %d", target.type);
 		return false;
 	}
 	return true;
@@ -574,7 +574,7 @@ bool ScriptVM::assign(const Expression *lhs, const Expression *rhs, Context &ctx
 
 bool ScriptVM::runScript(const ScriptObject *script, Context &ctx) {
 	if (_depth > 32) {
-		warning("Castle: script recursion too deep");
+		warning("DKPenge: script recursion too deep");
 		return false;
 	}
 	_depth++;
@@ -585,7 +585,7 @@ bool ScriptVM::runScript(const ScriptObject *script, Context &ctx) {
 	int steps = 0;
 	while (pc >= 0 && pc < count && result) {
 		if (++steps > 100000) {
-			warning("Castle: script runaway");
+			warning("DKPenge: script runaway");
 			break;
 		}
 		int op = ops[pc];
@@ -653,7 +653,7 @@ bool ScriptVM::runScript(const ScriptObject *script, Context &ctx) {
 Value ScriptVM::getProperty(int objId, int prop, Context &ctx) {
 	LiveObject *lo = _vm->findLiveObject(objId, ctx.page);
 	if (!lo) {
-		debugC(1, kDebugScript, "Castle: object %d not found (get prop %d)", objId, prop);
+		debugC(1, kDebugScript, "DKPenge: object %d not found (get prop %d)", objId, prop);
 		return Value();
 	}
 	return getPropertyOf(lo, prop);
@@ -662,7 +662,7 @@ Value ScriptVM::getProperty(int objId, int prop, Context &ctx) {
 void ScriptVM::setProperty(int objId, int prop, const Value &v, Context &ctx) {
 	LiveObject *lo = _vm->findLiveObject(objId, ctx.page);
 	if (!lo) {
-		debugC(1, kDebugScript, "Castle: object %d not found (set prop %d)", objId, prop);
+		debugC(1, kDebugScript, "DKPenge: object %d not found (set prop %d)", objId, prop);
 		return;
 	}
 	setPropertyOf(lo, prop, v);
@@ -730,14 +730,14 @@ Value ScriptVM::getPropertyOf(LiveObject *lo, int prop) {
 	default:
 		if (prop >= 0x30 && prop <= 0x38)
 			return Value::number(lo->extra[prop - 0x30]);
-		debugC(1, kDebugScript, "Castle: get property %d of %s not implemented", prop, objectClassName(lo->obj->cls));
+		debugC(1, kDebugScript, "DKPenge: get property %d of %s not implemented", prop, objectClassName(lo->obj->cls));
 		return Value();
 	}
 }
 
 void ScriptVM::setPropertyOf(LiveObject *lo, int prop, const Value &v) {
 	int n = v.toInt();
-	debugC(3, kDebugScript, "Castle: set %s %d prop %d = %s", objectClassName(lo->obj->cls), lo->obj->id, prop, v.toString().c_str());
+	debugC(3, kDebugScript, "DKPenge: set %s %d prop %d = %s", objectClassName(lo->obj->cls), lo->obj->id, prop, v.toString().c_str());
 	if (lo->obj->cls == kObjSprite && prop != kPropVisible) {
 		if (spriteFlagBit(prop)) {
 			if (v.toBool())
@@ -847,10 +847,10 @@ void ScriptVM::setPropertyOf(LiveObject *lo, int prop, const Value &v) {
 			lo->extra[prop - 0x30] = n;
 			break;
 		}
-		debugC(1, kDebugScript, "Castle: set property %d of %s = %s not implemented", prop, objectClassName(lo->obj->cls), v.toString().c_str());
+		debugC(1, kDebugScript, "DKPenge: set property %d of %s = %s not implemented", prop, objectClassName(lo->obj->cls), v.toString().c_str());
 		break;
 	}
 	_vm->markDirty();
 }
 
-} // End of namespace Castle
+} // End of namespace DKPenge

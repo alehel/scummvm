@@ -19,18 +19,18 @@
  *
  */
 
-#ifndef CASTLE_VM_H
-#define CASTLE_VM_H
+#ifndef DKPENGE_VM_H
+#define DKPENGE_VM_H
 
 #include "common/array.h"
 #include "common/rect.h"
 #include "common/str.h"
 
-#include "castle/database.h"
+#include "dkpenge/database.h"
 
-namespace Castle {
+namespace DKPenge {
 
-class CastleEngine;
+class DKPengeEngine;
 class LivePage;
 struct LiveObject;
 struct LivePanel;
@@ -134,7 +134,7 @@ struct Context {
 
 class ScriptVM {
 public:
-	ScriptVM(CastleEngine *vm);
+	ScriptVM(DKPengeEngine *vm);
 	~ScriptVM();
 
 	// Runs a script object. Returns the script's result (true unless an
@@ -170,11 +170,11 @@ private:
 	Value getPropertyOf(LiveObject *lo, int prop);
 	void setPropertyOf(LiveObject *lo, int prop, const Value &v);
 
-	CastleEngine *_vm;
+	DKPengeEngine *_vm;
 	Scope _docScope;
 	int _depth;
 };
 
-} // End of namespace Castle
+} // End of namespace DKPenge
 
 #endif

@@ -19,8 +19,8 @@
  *
  */
 
-#ifndef CASTLE_CASTLE_H
-#define CASTLE_CASTLE_H
+#ifndef DKPENGE_DKPENGE_H
+#define DKPENGE_DKPENGE_H
 
 #include "common/array.h"
 #include "common/rect.h"
@@ -32,7 +32,7 @@
 
 struct ADGameDescription;
 
-namespace Castle {
+namespace DKPenge {
 
 class Database;
 class Resources;
@@ -50,10 +50,10 @@ class Quiz;
 struct Value;
 struct Collage;
 
-class CastleEngine : public Engine {
+class DKPengeEngine : public Engine {
 public:
-	CastleEngine(OSystem *syst, const ADGameDescription *gameDesc);
-	~CastleEngine() override;
+	DKPengeEngine(OSystem *syst, const ADGameDescription *gameDesc);
+	~DKPengeEngine() override;
 
 	Common::Error run() override;
 	bool hasFeature(EngineFeature f) const override;
@@ -276,6 +276,6 @@ private:
 	uint32 _repeatNext;          // RepeatingHotspot held: next click
 };
 
-} // End of namespace Castle
+} // End of namespace DKPenge
 
 #endif

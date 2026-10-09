@@ -21,10 +21,10 @@
 #include "common/debug.h"
 #include "common/textconsole.h"
 
-#include "castle/detection.h"
-#include "castle/quest.h"
+#include "dkpenge/detection.h"
+#include "dkpenge/quest.h"
 
-namespace Castle {
+namespace DKPenge {
 
 Quest::Quest(Common::RandomSource &rnd) : _rnd(rnd) {
 	reset();
@@ -65,7 +65,7 @@ void Quest::randomize() {
 		_tasks[t][_rnd.getRandomNumber(kTaskChoices - 1)] = 1;
 	}
 	_scenario = _rnd.getRandomNumber(2) + 1;
-	debugC(1, kDebugGeneral, "Castle: quest laid out, scenario %d", _scenario);
+	debugC(1, kDebugGeneral, "DKPenge: quest laid out, scenario %d", _scenario);
 }
 
 bool Quest::setSpy(int spy) {
@@ -215,7 +215,7 @@ void Quest::saveToStream(Common::WriteStream &s) const {
 bool Quest::loadFromStream(Common::ReadStream &s) {
 	int version = s.readSint16BE();
 	if (version != 5 && version != 6) {
-		warning("Castle: unknown quest save version %d", version);
+		warning("DKPenge: unknown quest save version %d", version);
 		return false;
 	}
 	_spy = s.readUint32BE();
@@ -240,4 +240,4 @@ bool Quest::loadFromStream(Common::ReadStream &s) {
 	return true;
 }
 
-} // End of namespace Castle
+} // End of namespace DKPenge

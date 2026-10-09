@@ -22,17 +22,17 @@
 #include "base/plugins.h"
 #include "engines/advancedDetector.h"
 
-#include "castle/castle.h"
-#include "castle/detection.h"
+#include "dkpenge/dkpenge.h"
+#include "dkpenge/detection.h"
 
-class CastleMetaEngine : public AdvancedMetaEngine<ADGameDescription> {
+class DKPengeMetaEngine : public AdvancedMetaEngine<ADGameDescription> {
 public:
 	const char *getName() const override {
-		return "castle";
+		return "dkpenge";
 	}
 
 	Common::Error createInstance(OSystem *syst, Engine **engine, const ADGameDescription *desc) const override {
-		*engine = new Castle::CastleEngine(syst, desc);
+		*engine = new DKPenge::DKPengeEngine(syst, desc);
 		return Common::kNoError;
 	}
 
@@ -43,8 +43,8 @@ public:
 	}
 };
 
-#if PLUGIN_ENABLED_DYNAMIC(CASTLE)
-	REGISTER_PLUGIN_DYNAMIC(CASTLE, PLUGIN_TYPE_ENGINE, CastleMetaEngine);
+#if PLUGIN_ENABLED_DYNAMIC(DKPENGE)
+	REGISTER_PLUGIN_DYNAMIC(DKPENGE, PLUGIN_TYPE_ENGINE, DKPengeMetaEngine);
 #else
-	REGISTER_PLUGIN_STATIC(CASTLE, PLUGIN_TYPE_ENGINE, CastleMetaEngine);
+	REGISTER_PLUGIN_STATIC(DKPENGE, PLUGIN_TYPE_ENGINE, DKPengeMetaEngine);
 #endif

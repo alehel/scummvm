@@ -25,12 +25,12 @@
 #include "graphics/font.h"
 #include "graphics/surface.h"
 
-#include "castle/collage.h"
-#include "castle/detection.h"
-#include "castle/page.h"
-#include "castle/resources.h"
+#include "dkpenge/collage.h"
+#include "dkpenge/detection.h"
+#include "dkpenge/page.h"
+#include "dkpenge/resources.h"
 
-namespace Castle {
+namespace DKPenge {
 
 LivePage::LivePage() : _index(0), _rec(nullptr), _tmpl(nullptr), _mouseEntered(false), _changed(false), _paletteImage(nullptr), _paletteFixed(false) {
 }
@@ -192,7 +192,7 @@ bool LivePage::open(Database &db, Resources &res, uint index, const Common::Poin
 	_index = index;
 	_rec = db.getRecord(index);
 	if (!_rec) {
-		warning("Castle: page %u does not exist", index);
+		warning("DKPenge: page %u does not exist", index);
 		return false;
 	}
 	_origin = origin;
@@ -200,7 +200,7 @@ bool LivePage::open(Database &db, Resources &res, uint index, const Common::Poin
 	_scope.init(_rec->ext);
 	_tmpl = _rec->isPage ? db.findTemplate(_rec->id) : nullptr;
 	if (_rec->isPage && !_tmpl)
-		debugC(1, kDebugGeneral, "Castle: page %u (type %d) has no template with id %d", index, _rec->type, _rec->id);
+		debugC(1, kDebugGeneral, "DKPenge: page %u (type %d) has no template with id %d", index, _rec->type, _rec->id);
 
 	Common::Point base = origin;
 	if (_rec->isPage && (_rec->type == kPagePopup || _rec->type == kPageDragPopup || _rec->type == kPageRolloffClose))
@@ -259,7 +259,7 @@ bool LivePage::open(Database &db, Resources &res, uint index, const Common::Poin
 			((_tmpl && _tmpl->centred) || (_bounds.left == 0 && _bounds.top == 0 && !(_tmpl && _tmpl->hasPos4c))))
 		moveBy((640 - _bounds.width()) / 2 - _bounds.left, (480 - _bounds.height()) / 2 - _bounds.top);
 	createCollages(db, res);
-	debugC(1, kDebugGeneral, "Castle: opened page %u type %d template %d dir '%s' panels %u bounds %d,%d,%d,%d",
+	debugC(1, kDebugGeneral, "DKPenge: opened page %u type %d template %d dir '%s' panels %u bounds %d,%d,%d,%d",
 	       index, _rec->type, _rec->id, _dir.c_str(), _panels.size(), _bounds.left, _bounds.top, _bounds.right, _bounds.bottom);
 	// Edit boxes draw with their text style (size and alignment)
 	for (uint pi = 0; pi < _panels.size(); pi++)
@@ -427,7 +427,7 @@ void LivePage::draw(Graphics::Surface &screen, Resources &res) const {
 		}
 		for (uint k = 0; k < order.size(); k++) {
 			const LiveObject &lo = *order[k];
-			debugC(4, kDebugGraphics, "Castle: draw %s %d visible=%d image=%p z=%d rect=%d,%d,%d,%d", objectClassName(lo.obj->cls), lo.obj->id, lo.visible ? 1 : 0, (const void *)lo.image, lo.zOrder, lo.rect.left, lo.rect.top, lo.rect.right, lo.rect.bottom);
+			debugC(4, kDebugGraphics, "DKPenge: draw %s %d visible=%d image=%p z=%d rect=%d,%d,%d,%d", objectClassName(lo.obj->cls), lo.obj->id, lo.visible ? 1 : 0, (const void *)lo.image, lo.zOrder, lo.rect.left, lo.rect.top, lo.rect.right, lo.rect.bottom);
 			if (lo.obj->cls == kObjEditBox || lo.obj->cls == kObjRoomEditBox || lo.obj->cls == kObjScrollEditBox) {
 				// The typed text, vertically centred in the box
 				const Graphics::Font *font = nullptr;
@@ -693,7 +693,7 @@ void LivePage::createCollages(Database &db, Resources &res) {
 				}
 			}
 			c->pageSize = MAX(1, lo.rect.height() / c->itemHeight);
-			debugC(2, kDebugGraphics, "Castle: collage %s with %d items, %d rows of %d px", obj->collageA.c_str(), c->count(), c->pageSize, c->itemHeight);
+			debugC(2, kDebugGraphics, "DKPenge: collage %s with %d items, %d rows of %d px", obj->collageA.c_str(), c->count(), c->pageSize, c->itemHeight);
 		}
 	}
 }
@@ -783,4 +783,4 @@ void LivePage::update(uint32 now, Resources &res) {
 	}
 }
 
-} // End of namespace Castle
+} // End of namespace DKPenge

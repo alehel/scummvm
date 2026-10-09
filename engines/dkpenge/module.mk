@@ -1,8 +1,8 @@
-MODULE := engines/castle
+MODULE := engines/dkpenge
 
 MODULE_OBJS = \
 	ani.o \
-	castle.o \
+	dkpenge.o \
 	collage.o \
 	database.o \
 	metaengine.o \
@@ -13,7 +13,7 @@ MODULE_OBJS = \
 	vm.o
 
 # This module can be built as a plugin
-ifeq ($(ENABLE_CASTLE), DYNAMIC_PLUGIN)
+ifeq ($(ENABLE_DKPENGE), DYNAMIC_PLUGIN)
 PLUGIN := 1
 endif
 

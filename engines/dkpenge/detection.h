@@ -19,14 +19,14 @@
  *
  */
 
-#ifndef CASTLE_DETECTION_H
-#define CASTLE_DETECTION_H
+#ifndef DKPENGE_DETECTION_H
+#define DKPENGE_DETECTION_H
 
 #include "engines/advancedDetector.h"
 
-namespace Castle {
+namespace DKPenge {
 
-enum CastleDebugChannels {
+enum DKPengeDebugChannels {
 	kDebugGeneral = 1,
 	kDebugDatabase,
 	kDebugScript,
@@ -34,9 +34,9 @@ enum CastleDebugChannels {
 	kDebugSound,
 };
 
-extern const PlainGameDescriptor castleGames[];
+extern const PlainGameDescriptor dkpengeGames[];
 extern const ADGameDescription gameDescriptions[];
 
-} // End of namespace Castle
+} // End of namespace DKPenge
 
 #endif

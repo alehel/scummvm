@@ -19,15 +19,15 @@
  *
  */
 
-#ifndef CASTLE_ANI_H
-#define CASTLE_ANI_H
+#ifndef DKPENGE_ANI_H
+#define DKPENGE_ANI_H
 
 #include "common/rect.h"
 #include "common/stream.h"
 #include "audio/audiostream.h"
 #include "graphics/surface.h"
 
-namespace Castle {
+namespace DKPenge {
 
 /*
  * DK Multimedia ".ANI" animation ("WINPICS").
@@ -97,6 +97,6 @@ private:
 	Audio::QueuingAudioStream *_audio;
 };
 
-} // End of namespace Castle
+} // End of namespace DKPenge
 
 #endif

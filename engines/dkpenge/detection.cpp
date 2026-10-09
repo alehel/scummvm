@@ -22,11 +22,11 @@
 #include "base/plugins.h"
 #include "engines/advancedDetector.h"
 
-#include "castle/detection.h"
+#include "dkpenge/detection.h"
 
-namespace Castle {
+namespace DKPenge {
 
-const PlainGameDescriptor castleGames[] = {
+const PlainGameDescriptor dkpengeGames[] = {
 	{ "castle", "Castle Explorer" },
 	{ nullptr, nullptr }
 };
@@ -61,21 +61,21 @@ static const char *const directoryGlobs[] = {
 	nullptr
 };
 
-} // End of namespace Castle
+} // End of namespace DKPenge
 
-class CastleMetaEngineDetection : public AdvancedMetaEngineDetection<ADGameDescription> {
+class DKPengeMetaEngineDetection : public AdvancedMetaEngineDetection<ADGameDescription> {
 public:
-	CastleMetaEngineDetection() : AdvancedMetaEngineDetection(Castle::gameDescriptions, Castle::castleGames) {
+	DKPengeMetaEngineDetection() : AdvancedMetaEngineDetection(DKPenge::gameDescriptions, DKPenge::dkpengeGames) {
 		_maxScanDepth = 2;
-		_directoryGlobs = Castle::directoryGlobs;
+		_directoryGlobs = DKPenge::directoryGlobs;
 	}
 
 	const char *getName() const override {
-		return "castle";
+		return "dkpenge";
 	}
 
 	const char *getEngineName() const override {
-		return "Castle Explorer";
+		return "DKPenge";
 	}
 
 	const char *getOriginalCopyright() const override {
@@ -83,8 +83,8 @@ public:
 	}
 
 	const DebugChannelDef *getDebugChannels() const override {
-		return Castle::debugFlagList;
+		return DKPenge::debugFlagList;
 	}
 };
 
-REGISTER_PLUGIN_STATIC(CASTLE_DETECTION, PLUGIN_TYPE_ENGINE_DETECTION, CastleMetaEngineDetection);
+REGISTER_PLUGIN_STATIC(DKPENGE_DETECTION, PLUGIN_TYPE_ENGINE_DETECTION, DKPengeMetaEngineDetection);

@@ -24,10 +24,10 @@
 #include "common/memstream.h"
 #include "common/textconsole.h"
 
-#include "castle/database.h"
-#include "castle/detection.h"
+#include "dkpenge/database.h"
+#include "dkpenge/detection.h"
 
-namespace Castle {
+namespace DKPenge {
 
 static const char *const kObjectClassNames[kObjClassCount] = {
 	"AmbientAnimation", "Bitmap", "BoxIconBitmap", "BUTTON", "ClipRect", "CoinBitmap",
@@ -210,7 +210,7 @@ Database::~Database() {
 int Database::readCount(Common::SeekableReadStream &s) const {
 	int16 n = s.readSint16BE();
 	if (n < 0)
-		error("Castle: negative count %d at %d", n, (int)s.pos());
+		error("DKPenge: negative count %d at %d", n, (int)s.pos());
 	return n;
 }
 
@@ -408,7 +408,7 @@ Action *Database::readAction(Common::SeekableReadStream &s, int16 type) {
 		a->name = readInlineString(s);
 		break;
 	default:
-		error("Castle: unknown action type %d at %d", type, (int)s.pos());
+		error("DKPenge: unknown action type %d at %d", type, (int)s.pos());
 	}
 	return a;
 }
@@ -618,7 +618,7 @@ void Database::readCollageSub(Common::SeekableReadStream &s, const Common::Strin
 		}
 		return;
 	}
-	error("Castle: unknown collage class '%s'", cls.c_str());
+	error("DKPenge: unknown collage class '%s'", cls.c_str());
 }
 
 GameObject *Database::readObject(Common::SeekableReadStream &s, int16 cls) {
@@ -855,7 +855,7 @@ GameObject *Database::readObject(Common::SeekableReadStream &s, int16 cls) {
 		// These derive from a different base class; the base fields were
 		// already consumed above in a compatible way only partially, so
 		// re-read the record with the scroll layout.
-		error("Castle: scroll object class %s not supported in this layout", objectClassName(cls));
+		error("DKPenge: scroll object class %s not supported in this layout", objectClassName(cls));
 	case kObjCollage:
 		o->ints.push_back(s.readByte());
 		o->ints.push_back(s.readByte());
@@ -867,7 +867,7 @@ GameObject *Database::readObject(Common::SeekableReadStream &s, int16 cls) {
 		readCollageSub(s, o->collageB, o);
 		break;
 	default:
-		error("Castle: unknown object class %d at %d", cls, (int)s.pos());
+		error("DKPenge: unknown object class %d at %d", cls, (int)s.pos());
 	}
 	return o;
 }
@@ -929,7 +929,7 @@ Panel *Database::readPanelBody(Common::SeekableReadStream &s, int16 type) {
 PageRecord *Database::readRecord(uint index) {
 	uint32 start = _pageDataStart + _offsets[index];
 	if (start >= _size)
-		error("Castle: record %u out of range", index);
+		error("DKPenge: record %u out of range", index);
 	Common::MemoryReadStream s(_data + start, _size - start);
 	PageRecord *rec = new PageRecord();
 	int16 t = s.readSint16BE();
@@ -1012,7 +1012,7 @@ bool Database::readDocument(Common::SeekableReadStream &s, uint32 end) {
 		const VariableTable &v = _docExt->vars[i];
 		if (i < base && v.type == 4 && _mouseVar < 0)
 			_mouseVar = v.name;
-		debugC(2, kDebugDatabase, "Castle: document variable %d (%s list) type %d dims %d ints %d strs %d pts %d", v.name, i < base ? "first" : "second", v.type, v.dims.size() ? v.dims[0] : 0, v.ints.size(), v.strs.size(), v.pts.size());
+		debugC(2, kDebugDatabase, "DKPenge: document variable %d (%s list) type %d dims %d ints %d strs %d pts %d", v.name, i < base ? "first" : "second", v.type, v.dims.size() ? v.dims[0] : 0, v.ints.size(), v.strs.size(), v.pts.size());
 	}
 	n = readCount(s);
 	for (int i = 0; i < n; i++)
@@ -1021,7 +1021,7 @@ bool Database::readDocument(Common::SeekableReadStream &s, uint32 end) {
 	for (int i = 0; i < n; i++) {
 		_builtinIds.push_back(s.readSint16BE());
 		_builtinNums.push_back(s.readSint16BE());
-		debugC(2, kDebugDatabase, "Castle: built-in function id %d = number %d", _builtinIds.back(), _builtinNums.back());
+		debugC(2, kDebugDatabase, "DKPenge: built-in function id %d = number %d", _builtinIds.back(), _builtinNums.back());
 	}
 
 	s.readSint16BE();
@@ -1049,7 +1049,7 @@ bool Database::readDocument(Common::SeekableReadStream &s, uint32 end) {
 		for (int k = 0; k < 2 + 6 + 4; k++)
 			extra[k] = s.readSint16BE();
 		t->centred = extra[6] != 0;
-		debugC(3, kDebugDatabase, "Castle: template %d type %d flags %d size %d,%d pos4c %d,%d (%d) extra %d %d %d %d %d %d %d %d %d %d %d %d", t->id, t->type, t->flags, t->size.x, t->size.y, t->pos4c.x, t->pos4c.y, t->hasPos4c ? 1 : 0, extra[0], extra[1], extra[2], extra[3], extra[4], extra[5], extra[6], extra[7], extra[8], extra[9], extra[10], extra[11]);
+		debugC(3, kDebugDatabase, "DKPenge: template %d type %d flags %d size %d,%d pos4c %d,%d (%d) extra %d %d %d %d %d %d %d %d %d %d %d %d", t->id, t->type, t->flags, t->size.x, t->size.y, t->pos4c.x, t->pos4c.y, t->hasPos4c ? 1 : 0, extra[0], extra[1], extra[2], extra[3], extra[4], extra[5], extra[6], extra[7], extra[8], extra[9], extra[10], extra[11]);
 		f = s.readSint16BE();
 		if (f)
 			readRect(s);
@@ -1110,7 +1110,7 @@ bool Database::readDocumentTail(Common::SeekableReadStream &s, uint32 end) {
 			st.flags[k] = s.readSint16BE();
 		st.fontName = readInlineString(s);
 		s.skip(2);
-		debugC(2, kDebugDatabase, "Castle: text style id %d font %d size %d flags %d %d %d %d '%s'", st.id, st.fontId, st.size, st.flags[0], st.flags[1], st.flags[2], st.flags[3], st.fontName.c_str());
+		debugC(2, kDebugDatabase, "DKPenge: text style id %d font %d size %d flags %d %d %d %d '%s'", st.id, st.fontId, st.size, st.flags[0], st.flags[1], st.flags[2], st.flags[3], st.fontName.c_str());
 		_tail.styles.push_back(st);
 	}
 	n = readCount(s);
@@ -1163,7 +1163,7 @@ bool Database::readDocumentTail(Common::SeekableReadStream &s, uint32 end) {
 				case 11:
 					break;
 				default:
-					warning("Castle: unknown question object type %d at %d", o.type, (int)s.pos());
+					warning("DKPenge: unknown question object type %d at %d", o.type, (int)s.pos());
 					return false;
 				}
 				qu.objects.push_back(o);
@@ -1216,17 +1216,17 @@ bool Database::readDocumentTail(Common::SeekableReadStream &s, uint32 end) {
 	for (int i = 0; i < 3; i++)
 		_tail.quitPages[i] = s.readUint32BE();
 
-	debugC(1, kDebugDatabase, "Castle: document parse ended at %d, page table at %u; spy var %d, scenario var %d, new game var %d",
+	debugC(1, kDebugDatabase, "DKPenge: document parse ended at %d, page table at %u; spy var %d, scenario var %d, new game var %d",
 	       (int)s.pos(), end, _tail.getSpyVar(), _tail.getScenarioVar(), _tail.getNewGameVar());
 	if ((uint32)s.pos() != end)
-		warning("Castle: document tail ended at %d, expected %u", (int)s.pos(), end);
+		warning("DKPenge: document tail ended at %d, expected %u", (int)s.pos(), end);
 	return true;
 }
 
 bool Database::load(const Common::Path &filename) {
 	Common::File f;
 	if (!f.open(filename)) {
-		warning("Castle: cannot open %s", filename.toString().c_str());
+		warning("DKPenge: cannot open %s", filename.toString().c_str());
 		return false;
 	}
 	_size = f.size();
@@ -1246,7 +1246,7 @@ bool Database::load(const Common::Path &filename) {
 	for (int i = 0; i < n; i++)
 		_strings.push_back(readInlineString(s));
 	if ((uint32)s.pos() != strStart + _stringTableSize)
-		warning("Castle: string table size mismatch");
+		warning("DKPenge: string table size mismatch");
 
 	readDocument(s, _pageTableStart);
 
@@ -1255,9 +1255,9 @@ bool Database::load(const Common::Path &filename) {
 	for (uint32 i = 0; i < count; i++)
 		_offsets.push_back(s.readUint32BE());
 
-	debugC(1, kDebugDatabase, "Castle: loaded database '%s' (%s): %u strings, %u templates, %u records, start page %u",
+	debugC(1, kDebugDatabase, "DKPenge: loaded database '%s' (%s): %u strings, %u templates, %u records, start page %u",
 	       _title.c_str(), _version.c_str(), _strings.size(), _templates.size(), _offsets.size(), getStartPage());
 	return true;
 }
 
-} // End of namespace Castle
+} // End of namespace DKPenge

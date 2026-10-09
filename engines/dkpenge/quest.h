@@ -18,15 +18,15 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  */
-#ifndef CASTLE_QUEST_H
-#define CASTLE_QUEST_H
+#ifndef DKPENGE_QUEST_H
+#define DKPENGE_QUEST_H
 
 #include "common/array.h"
 #include "common/random.h"
 #include "common/str.h"
 #include "common/stream.h"
 
-namespace Castle {
+namespace DKPenge {
 
 // The spy quest: the player picks one of two spies, collects coins and
 // evidence in the castle rooms and answers the questions in the spy's
@@ -116,6 +116,6 @@ private:
 	int _mode;
 };
 
-} // End of namespace Castle
+} // End of namespace DKPenge
 
 #endif

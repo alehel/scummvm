@@ -19,21 +19,21 @@
  *
  */
 
-#ifndef CASTLE_PAGE_H
-#define CASTLE_PAGE_H
+#ifndef DKPENGE_PAGE_H
+#define DKPENGE_PAGE_H
 
 #include "common/array.h"
 #include "common/rect.h"
 #include "common/str.h"
 
-#include "castle/database.h"
-#include "castle/vm.h"
+#include "dkpenge/database.h"
+#include "dkpenge/vm.h"
 
 namespace Graphics {
 struct Surface;
 }
 
-namespace Castle {
+namespace DKPenge {
 
 class Resources;
 struct Image;
@@ -167,6 +167,6 @@ private:
 	Scope _scope;
 };
 
-} // End of namespace Castle
+} // End of namespace DKPenge
 
 #endif

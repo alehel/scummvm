@@ -18,16 +18,16 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  */
-#include "castle/quiz.h"
-#include "castle/castle.h"
-#include "castle/database.h"
-#include "castle/detection.h"
-#include "castle/quest.h"
+#include "dkpenge/quiz.h"
+#include "dkpenge/dkpenge.h"
+#include "dkpenge/database.h"
+#include "dkpenge/detection.h"
+#include "dkpenge/quest.h"
 
 #include "common/debug.h"
 #include "common/algorithm.h"
 
-namespace Castle {
+namespace DKPenge {
 
 // Step record fields, in the order of the file
 enum {
@@ -58,7 +58,7 @@ enum {
 	kObjDocFlag = 11
 };
 
-Quiz::Quiz(CastleEngine *vm, Database *db, Quest *quest, Common::RandomSource &rnd)
+Quiz::Quiz(DKPengeEngine *vm, Database *db, Quest *quest, Common::RandomSource &rnd)
 	: _vm(vm), _db(db), _quest(quest), _rnd(rnd), _question(0), _flag(false), _idleStart(0), _depth(0) {
 }
 
@@ -146,7 +146,7 @@ void Quiz::startQuestion(int q) {
 	if (!qu)
 		return;
 	advance(record(q), *qu);
-	debugC(1, kDebugScript, "Castle: quiz: spy %d question %d starts at step %d", _quest->getSpy(), q, record(q).curStep);
+	debugC(1, kDebugScript, "DKPenge: quiz: spy %d question %d starts at step %d", _quest->getSpy(), q, record(q).curStep);
 	_vm->quizSetState(0);
 }
 
@@ -185,7 +185,7 @@ bool Quiz::fireEvent(int evt, int param) {
 	if (idx < 0)
 		return false;
 	int group = lookupGroup(qu->steps[idx], evt, param);
-	debugC(1, kDebugScript, "Castle: quiz: event %d(%d) at step %d -> group %d", evt, param, rec.curStep, group);
+	debugC(1, kDebugScript, "DKPenge: quiz: event %d(%d) at step %d -> group %d", evt, param, rec.curStep, group);
 	if (group == -1)
 		return false;
 	int next = -1;
@@ -211,7 +211,7 @@ bool Quiz::runGroup(int q, Record &rec, const Question &qu, int group, int &next
 		const QuestionObject &o = qu.objects[i];
 		if (o.value != group)
 			continue;
-		debugC(2, kDebugScript, "Castle: quiz: object type %d '%s' %u %d %d", o.type, o.str.c_str(), o.u, o.a, o.b);
+		debugC(2, kDebugScript, "DKPenge: quiz: object type %d '%s' %u %d %d", o.type, o.str.c_str(), o.u, o.a, o.b);
 		switch (o.type) {
 		case kObjMovie:
 		case kObjVideo:
@@ -295,7 +295,7 @@ int Quiz::checkAnswer(int n, const Common::String &text) const {
 		if (lists[i].ints[0] == _question && lists[i].ints[1] == _quest->getSpy() && lists[i].ints[2] == n)
 			list = &lists[i];
 	if (!list) {
-		debugC(1, kDebugScript, "Castle: quiz: no answer list for question %d spy %d answer %d", _question, _quest->getSpy(), n);
+		debugC(1, kDebugScript, "DKPenge: quiz: no answer list for question %d spy %d answer %d", _question, _quest->getSpy(), n);
 		return kAnswerWrong;
 	}
 	Common::String norm = normalize(text);
@@ -308,4 +308,4 @@ int Quiz::checkAnswer(int n, const Common::String &text) const {
 	return kAnswerWrong;
 }
 
-} // End of namespace Castle
+} // End of namespace DKPenge

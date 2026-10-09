@@ -19,14 +19,14 @@
  *
  */
 
-#ifndef CASTLE_COLLAGE_H
-#define CASTLE_COLLAGE_H
+#ifndef DKPENGE_COLLAGE_H
+#define DKPENGE_COLLAGE_H
 
 #include "common/array.h"
 #include "common/rect.h"
 #include "common/str.h"
 
-namespace Castle {
+namespace DKPenge {
 
 // An entry of a collage list
 struct CollageItem {
@@ -83,6 +83,6 @@ struct Collage {
 	static int compareText(const Common::String &a, const Common::String &b);
 };
 
-} // End of namespace Castle
+} // End of namespace DKPenge
 
 #endif

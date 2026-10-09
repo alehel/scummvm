@@ -21,9 +21,9 @@
 
 #include "common/util.h"
 
-#include "castle/collage.h"
+#include "dkpenge/collage.h"
 
-namespace Castle {
+namespace DKPenge {
 
 Collage::Collage() : tracker(false), selected(-1), scrollTop(0), pageSize(1), itemHeight(1), indent(0), lastClickTime(0), lastClickItem(-1) {
 	fg[0] = fg[1] = fg[2] = 0;
@@ -128,4 +128,4 @@ int Collage::findPrefix(const Common::String &text) const {
 	return hi;
 }
 
-} // End of namespace Castle
+} // End of namespace DKPenge

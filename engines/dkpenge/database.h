@@ -19,8 +19,8 @@
  *
  */
 
-#ifndef CASTLE_DATABASE_H
-#define CASTLE_DATABASE_H
+#ifndef DKPENGE_DATABASE_H
+#define DKPENGE_DATABASE_H
 
 #include "common/array.h"
 #include "common/hashmap.h"
@@ -28,7 +28,7 @@
 #include "common/str.h"
 #include "common/stream.h"
 
-namespace Castle {
+namespace DKPenge {
 
 /*
  * CASTLE.PNG is the page database of the DK Multimedia engine ("DKC").
@@ -579,6 +579,6 @@ const char *objectClassName(int cls);
 const char *actionName(int type);
 const char *eventName(int type);
 
-} // End of namespace Castle
+} // End of namespace DKPenge
 
 #endif

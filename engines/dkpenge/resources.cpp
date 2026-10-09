@@ -38,10 +38,10 @@
 #include "image/bmp.h"
 #include "image/png.h"
 
-#include "castle/detection.h"
-#include "castle/resources.h"
+#include "dkpenge/detection.h"
+#include "dkpenge/resources.h"
 
-namespace Castle {
+namespace DKPenge {
 
 static const char *const kImageExtensions[] = { ".png", ".dib", ".bmp", ".sbm", nullptr };
 static const char *const kWaveExtensions[] = { ".wav", nullptr };
@@ -87,7 +87,7 @@ Resources::~Resources() {
 bool Resources::init() {
 	_exe = new Common::PEResources();
 	if (!_exe->loadFromEXE(Common::Path("CASTLE.EXE"))) {
-		warning("Castle: could not load resources from CASTLE.EXE");
+		warning("DKPenge: could not load resources from CASTLE.EXE");
 		delete _exe;
 		_exe = nullptr;
 	}
@@ -438,10 +438,10 @@ static Image *decodeBitmap8(Common::SeekableReadStream *stream) {
 	stream->readUint32LE();
 	uint32 colors = stream->readUint32LE();
 	if (bpp != 8 || width <= 0 || height == 0) {
-		debugC(1, kDebugGraphics, "Castle: bitmap bpp %d size %dx%d compression %u not handled here", bpp, width, height, compression);
+		debugC(1, kDebugGraphics, "DKPenge: bitmap bpp %d size %dx%d compression %u not handled here", bpp, width, height, compression);
 		return nullptr;
 	}
-	debugC(2, kDebugGraphics, "Castle: bitmap %dx%d bpp %d compression %u colors %u", width, height, bpp, compression, colors);
+	debugC(2, kDebugGraphics, "DKPenge: bitmap %dx%d bpp %d compression %u colors %u", width, height, bpp, compression, colors);
 	if (colors == 0 || colors > 256)
 		colors = 256;
 	bool topDown = height < 0;
@@ -508,7 +508,7 @@ Image *Resources::decodeImage(Common::SeekableReadStream *stream) {
 	img->hasTransparentColor = decoder->hasTransparentColor();
 	img->transparentColor = decoder->getTransparentColor();
 	findKeyIndex(img);
-	debugC(3, kDebugGraphics, "Castle: decoded %dx%d palette %u transparent %d (%u)", img->surface.w, img->surface.h, img->palette.size(), img->hasTransparentColor ? 1 : 0, img->transparentColor);
+	debugC(3, kDebugGraphics, "DKPenge: decoded %dx%d palette %u transparent %d (%u)", img->surface.w, img->surface.h, img->palette.size(), img->hasTransparentColor ? 1 : 0, img->transparentColor);
 	delete decoder;
 	return img;
 }
@@ -518,7 +518,7 @@ Image *Resources::loadImage(const Common::String &dir, const Common::String &nam
 		return nullptr;
 	Common::String key = name.hasPrefix("@") ? name : makePath(dir, name);
 	key.toLowercase();
-	debugC(3, kDebugGraphics, "Castle: loadImage '%s' key '%s' cached=%d", name.c_str(), key.c_str(), _imageCache.contains(key) ? 1 : 0);
+	debugC(3, kDebugGraphics, "DKPenge: loadImage '%s' key '%s' cached=%d", name.c_str(), key.c_str(), _imageCache.contains(key) ? 1 : 0);
 	if (_imageCache.contains(key))
 		return _imageCache[key];
 
@@ -533,13 +533,13 @@ Image *Resources::loadImage(const Common::String &dir, const Common::String &nam
 		img = decodeImage(stream);
 		delete stream;
 	} else {
-		debugC(1, kDebugGraphics, "Castle: no file for '%s'", key.c_str());
+		debugC(1, kDebugGraphics, "DKPenge: no file for '%s'", key.c_str());
 	}
 	if (!img)
-		debugC(1, kDebugGraphics, "Castle: image '%s' (dir '%s') not found or undecodable", name.c_str(), dir.c_str());
-	if (img && ConfMan.hasKey("castle_dumpimage") && name.equalsIgnoreCase(ConfMan.get("castle_dumpimage"))) {
+		debugC(1, kDebugGraphics, "DKPenge: image '%s' (dir '%s') not found or undecodable", name.c_str(), dir.c_str());
+	if (img && ConfMan.hasKey("dkpenge_dumpimage") && name.equalsIgnoreCase(ConfMan.get("dkpenge_dumpimage"))) {
 		Common::DumpFile f;
-		if (f.open(Common::Path(ConfMan.get("castle_dump") + "/image.png", '/'))) {
+		if (f.open(Common::Path(ConfMan.get("dkpenge_dump") + "/image.png", '/'))) {
 			byte pal[768];
 			img->palette.grab(pal, 0, 256);
 			::Image::writePNG(f, img->surface, pal, 256);
@@ -592,7 +592,7 @@ Graphics::Cursor *Resources::getCursor(const Common::String &nameIn) {
 			cursor = group->cursors[0].cursor;
 		} else {
 			delete group;
-			debugC(1, kDebugGraphics, "Castle: cursor '%s' (id %d) not found", nameIn.c_str(), id);
+			debugC(1, kDebugGraphics, "DKPenge: cursor '%s' (id %d) not found", nameIn.c_str(), id);
 			cursor = Graphics::makeDefaultWinCursor();
 			_ownedCursors.push_back(cursor);
 		}
@@ -617,7 +617,7 @@ const Graphics::Font *Resources::getTextFont() {
 #ifdef USE_FREETYPE2
 		_textFont = Graphics::loadTTFFontFromArchive("LiberationSerif-Regular.ttf", 16, Graphics::kTTFSizeModeCell);
 #endif
-		debugC(1, kDebugGraphics, "Castle: text font %s", _textFont ? "from fonts.dat" : "fallback");
+		debugC(1, kDebugGraphics, "DKPenge: text font %s", _textFont ? "from fonts.dat" : "fallback");
 	}
 	if (_textFont)
 		return _textFont;
@@ -654,4 +654,4 @@ Common::SeekableReadStream *Resources::openVideo(const Common::String &dir, cons
 	return openFile(dir, name, kVideoExtensions);
 }
 
-} // End of namespace Castle
+} // End of namespace DKPenge

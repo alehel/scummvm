@@ -19,8 +19,8 @@
  *
  */
 
-#ifndef CASTLE_RESOURCES_H
-#define CASTLE_RESOURCES_H
+#ifndef DKPENGE_RESOURCES_H
+#define DKPENGE_RESOURCES_H
 
 #include "common/hashmap.h"
 #include "common/path.h"
@@ -39,7 +39,7 @@ class Font;
 struct WinCursorGroup;
 }
 
-namespace Castle {
+namespace DKPenge {
 
 // A decoded 8-bit image with its palette
 struct Image {
@@ -116,6 +116,6 @@ private:
 	Common::Array<Graphics::Cursor *> _ownedCursors;
 };
 
-} // End of namespace Castle
+} // End of namespace DKPenge
 
 #endif

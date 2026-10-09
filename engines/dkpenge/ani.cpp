@@ -25,10 +25,10 @@
 #include "audio/decoders/adpcm.h"
 #include "audio/decoders/raw.h"
 
-#include "castle/ani.h"
-#include "castle/detection.h"
+#include "dkpenge/ani.h"
+#include "dkpenge/detection.h"
 
-namespace Castle {
+namespace DKPenge {
 
 AniDecoder::AniDecoder() : _stream(nullptr), _frameCount(0), _fps(0), _prerollMul(0), _formatTag(0), _channels(0),
 		_sampleRate(0), _blockAlign(0), _bitsPerSample(0), _audioChunkSize(0), _curFrame(-1), _audio(nullptr) {
@@ -56,7 +56,7 @@ bool AniDecoder::load(Common::SeekableReadStream *stream) {
 	_stream = stream;
 	uint16 version = stream->readUint16LE();
 	if (version != 1) {
-		warning("Castle: unsupported ANI version %d", version);
+		warning("DKPenge: unsupported ANI version %d", version);
 		return false;
 	}
 	_frameCount = stream->readUint32LE();
@@ -90,7 +90,7 @@ bool AniDecoder::load(Common::SeekableReadStream *stream) {
 		queueAudio(audioSize);
 		stream->skip(compSize);
 	}
-	debugC(1, kDebugGraphics, "Castle: ANI %u frames, %u fps, audio tag %u %uHz, preroll %u", _frameCount, _fps, _formatTag, _sampleRate, preroll);
+	debugC(1, kDebugGraphics, "DKPenge: ANI %u frames, %u fps, audio tag %u %uHz, preroll %u", _frameCount, _fps, _formatTag, _sampleRate, preroll);
 	return true;
 }
 
@@ -99,7 +99,7 @@ bool AniDecoder::readChunkHeader(uint32 &audioSize, Common::Rect &rect, uint32 &
 		return false;
 	uint16 type = _stream->readUint16LE();
 	if (type != 1) {
-		warning("Castle: bad ANI chunk type %d at %d", type, (int)_stream->pos());
+		warning("DKPenge: bad ANI chunk type %d at %d", type, (int)_stream->pos());
 		return false;
 	}
 	audioSize = _stream->readUint32LE();
@@ -132,7 +132,7 @@ void AniDecoder::queueAudio(uint32 size) {
 	} else if (_formatTag == 2) {
 		as = Audio::makeADPCMStream(ms, DisposeAfterUse::YES, size, Audio::kADPCMMS, _sampleRate, _channels, _blockAlign);
 	} else {
-		warning("Castle: unsupported ANI audio format %d", _formatTag);
+		warning("DKPenge: unsupported ANI audio format %d", _formatTag);
 		delete ms;
 		return;
 	}
@@ -188,4 +188,4 @@ bool AniDecoder::decodeNextFrame(Common::Rect &dirty) {
 	return true;
 }
 
-} // End of namespace Castle
+} // End of namespace DKPenge

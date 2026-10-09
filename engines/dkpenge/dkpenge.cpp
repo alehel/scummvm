@@ -40,21 +40,21 @@
 #include "engines/metaengine.h"
 #include "image/png.h"
 
-#include "castle/ani.h"
-#include "castle/castle.h"
-#include "castle/collage.h"
-#include "castle/database.h"
-#include "castle/detection.h"
-#include "castle/page.h"
-#include "castle/quest.h"
-#include "castle/quiz.h"
-#include "castle/resources.h"
-#include "castle/vm.h"
+#include "dkpenge/ani.h"
+#include "dkpenge/dkpenge.h"
+#include "dkpenge/collage.h"
+#include "dkpenge/database.h"
+#include "dkpenge/detection.h"
+#include "dkpenge/page.h"
+#include "dkpenge/quest.h"
+#include "dkpenge/quiz.h"
+#include "dkpenge/resources.h"
+#include "dkpenge/vm.h"
 
-namespace Castle {
+namespace DKPenge {
 
-CastleEngine::CastleEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst),
-		_rnd("castle"), _script(nullptr), _hoverObject(nullptr), _hoverPage(nullptr), _db(nullptr), _res(nullptr), _basePage(nullptr), _dirty(true), _paletteDirty(true), _pendingBasePage(0),
+DKPengeEngine::DKPengeEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst),
+		_rnd("dkpenge"), _script(nullptr), _hoverObject(nullptr), _hoverPage(nullptr), _db(nullptr), _res(nullptr), _basePage(nullptr), _dirty(true), _paletteDirty(true), _pendingBasePage(0),
 		_pendingBase(false), _dumpCount(0), _ani(nullptr), _aniNextFrame(0), _quest(nullptr), _quiz(nullptr), _spyChangedFlag(false), _saveSlot(-1), _savedPage(0), _pressedObject(nullptr), _pressedPage(nullptr), _dragging(false), _dragPage(nullptr), _dungeonTimerEnd(0), _scrollObject(nullptr), _scrollPage(nullptr), _scrollNext(0), _scrollStep(1), _ambientNext(0), _castleSection(-1),
 		_trailNavigating(false), _pendingPopup(0), _scrollBarDrag(false), _scrollBarGrab(0), _editFocus(nullptr), _editFocusPage(nullptr), _pendingTransition(0), _noScreenUpdate(false), _repeatNext(0) {
 	const Common::FSNode gameDataDir(ConfMan.getPath("path"));
@@ -75,7 +75,7 @@ CastleEngine::CastleEngine(OSystem *syst, const ADGameDescription *gameDesc) : E
 	SearchMan.addSubDirectoryMatching(gameDataDir, "options", 0, 2);
 }
 
-CastleEngine::~CastleEngine() {
+DKPengeEngine::~DKPengeEngine() {
 	closeAllPopups();
 	delete _basePage;
 	delete _ani;
@@ -88,11 +88,11 @@ CastleEngine::~CastleEngine() {
 	delete _db;
 }
 
-bool CastleEngine::hasFeature(EngineFeature f) const {
+bool DKPengeEngine::hasFeature(EngineFeature f) const {
 	return f == kSupportsReturnToLauncher || f == kSupportsLoadingDuringRuntime || f == kSupportsSavingDuringRuntime;
 }
 
-Common::Error CastleEngine::run() {
+Common::Error DKPengeEngine::run() {
 	initGraphics(640, 480);
 	_screen.create(640, 480, Graphics::PixelFormat::createFormatCLUT8());
 
@@ -103,9 +103,9 @@ Common::Error CastleEngine::run() {
 	_res->init();
 	_script = new ScriptVM(this);
 	_script->initDocScope(_db->getDocExtension());
-	// Debug harness: castle_seed makes the random choices reproducible
-	if (ConfMan.hasKey("castle_seed"))
-		_rnd.setSeed(ConfMan.getInt("castle_seed"));
+	// Debug harness: dkpenge_seed makes the random choices reproducible
+	if (ConfMan.hasKey("dkpenge_seed"))
+		_rnd.setSeed(ConfMan.getInt("dkpenge_seed"));
 	_quest = new Quest(_rnd);
 	_quiz = new Quiz(this, _db, _quest, _rnd);
 	for (uint i = 0; i < ARRAYSIZE(_toggles); i++)
@@ -118,18 +118,18 @@ Common::Error CastleEngine::run() {
 	uint start = _db->getStartPage();
 	if (ConfMan.hasKey("boot_param"))
 		start = ConfMan.getInt("boot_param");
-	if (ConfMan.hasKey("castle_dump"))
-		_dumpDir = ConfMan.get("castle_dump");
+	if (ConfMan.hasKey("dkpenge_dump"))
+		_dumpDir = ConfMan.get("dkpenge_dump");
 	// A game chosen in the launcher resumes on the page it was saved from
 	if (ConfMan.hasKey("save_slot") && ConfMan.getInt("save_slot") >= 0) {
 		if (loadGameState(ConfMan.getInt("save_slot")).getCode() == Common::kNoError && _savedPage)
 			start = _savedPage;
 	}
-	// Debug harness: castle_spy presets the chosen spy, castle_questdone
+	// Debug harness: dkpenge_spy presets the chosen spy, dkpenge_questdone
 	// completes every chest task and the stage (the state after the scrolls)
-	if (ConfMan.hasKey("castle_spy"))
-		setSpy(ConfMan.getInt("castle_spy"), false);
-	if (ConfMan.hasKey("castle_questdone") && ConfMan.getBool("castle_questdone")) {
+	if (ConfMan.hasKey("dkpenge_spy"))
+		setSpy(ConfMan.getInt("dkpenge_spy"), false);
+	if (ConfMan.hasKey("dkpenge_questdone") && ConfMan.getBool("dkpenge_questdone")) {
 		for (int t = 0; t < Quest::kTasks; t++)
 			for (int ch = 0; ch < Quest::kTaskChoices; ch++)
 				if (_quest->getTask(t, ch) == 1)
@@ -141,9 +141,9 @@ Common::Error CastleEngine::run() {
 	setCursor(_db->getDefaultCursor());
 	CursorMan.showMouse(true);
 
-	// Debug harness: CASTLE_DUMP=<dir> writes a PNG of the screen after each
-	// render, CASTLE_CLICKS="x,y;x,y;..." performs scripted clicks and quits.
-	Common::String dumpDirStr = ConfMan.hasKey("castle_dump") ? ConfMan.get("castle_dump") : Common::String();
+	// Debug harness: DKPENGE_DUMP=<dir> writes a PNG of the screen after each
+	// render, DKPENGE_CLICKS="x,y;x,y;..." performs scripted clicks and quits.
+	Common::String dumpDirStr = ConfMan.hasKey("dkpenge_dump") ? ConfMan.get("dkpenge_dump") : Common::String();
 	const char *dumpDir = dumpDirStr.empty() ? nullptr : dumpDirStr.c_str();
 	// Each entry is "x,y" for a click, "m:x,y" for a mouse move, "p:x,y"
 	// for a button press, "r:x,y" for a release, "s:slot,0" saves and
@@ -153,8 +153,8 @@ Common::Error CastleEngine::run() {
 	// a delta (dragging when a button is held), "u:0,0" releases in place.
 	Common::Array<Common::Point> clicks;
 	Common::Array<char> clickKind;
-	if (ConfMan.hasKey("castle_clicks")) {
-		Common::StringTokenizer tok(ConfMan.get("castle_clicks"), ";");
+	if (ConfMan.hasKey("dkpenge_clicks")) {
+		Common::StringTokenizer tok(ConfMan.get("dkpenge_clicks"), ";");
 		while (!tok.empty()) {
 			Common::String t = tok.nextToken();
 			char kind = 'c';
@@ -169,8 +169,8 @@ Common::Error CastleEngine::run() {
 		}
 	}
 	uint clickIdx = 0;
-	// castle_clickdelay: milliseconds between scripted clicks (default 1500)
-	uint32 clickDelay = ConfMan.hasKey("castle_clickdelay") ? ConfMan.getInt("castle_clickdelay") : 1500;
+	// dkpenge_clickdelay: milliseconds between scripted clicks (default 1500)
+	uint32 clickDelay = ConfMan.hasKey("dkpenge_clickdelay") ? ConfMan.getInt("dkpenge_clickdelay") : 1500;
 	uint32 nextClick = _system->getMillis() + clickDelay;
 	Common::Point lastPt(0, 0);
 	_dumpDir = dumpDirStr;
@@ -202,7 +202,7 @@ Common::Error CastleEngine::run() {
 				if ((kind == 'c' || kind == 'p') && !lo)
 					lo = hitTest(pt, &page);
 				lastPt = pt;
-				debugC(1, kDebugScript, "Castle: scripted %c %d,%d -> %s", kind, pt.x, pt.y, lo ? objectClassName(lo->obj->cls) : "nothing");
+				debugC(1, kDebugScript, "DKPenge: scripted %c %d,%d -> %s", kind, pt.x, pt.y, lo ? objectClassName(lo->obj->cls) : "nothing");
 				if (kind == 'm') {
 					if (_dragging || _dragPage || _scrollBarDrag || (_pressedObject && _pressedObject->obj->cls == kObjCollage))
 						dragTo(pt);
@@ -259,7 +259,7 @@ Common::Error CastleEngine::run() {
 	return Common::kNoError;
 }
 
-void CastleEngine::handleEvents() {
+void DKPengeEngine::handleEvents() {
 	Common::Event event;
 	while (_eventMan->pollEvent(event)) {
 		switch (event.type) {
@@ -267,7 +267,7 @@ void CastleEngine::handleEvents() {
 			LivePage *page = nullptr;
 			LiveObject *lo = hitTest(event.mouse, &page);
 			if (lo) {
-				debugC(1, kDebugScript, "Castle: click on %s '%s' (id %d) at %d,%d", objectClassName(lo->obj->cls),
+				debugC(1, kDebugScript, "DKPenge: click on %s '%s' (id %d) at %d,%d", objectClassName(lo->obj->cls),
 				       lo->obj->file.c_str(), lo->obj->id, event.mouse.x, event.mouse.y);
 				pressObject(lo, page, event.mouse);
 			} else if ((page = popupAt(event.mouse)) && page->getType() == kPageDragPopup) {
@@ -317,7 +317,7 @@ void CastleEngine::handleEvents() {
 	}
 }
 
-LiveObject *CastleEngine::hitTest(const Common::Point &p, LivePage **pageOut) {
+LiveObject *DKPengeEngine::hitTest(const Common::Point &p, LivePage **pageOut) {
 	for (int i = (int)_popups.size() - 1; i >= 0; i--) {
 		LiveObject *lo = _popups[i]->hitTest(p);
 		if (lo) {
@@ -338,11 +338,11 @@ LiveObject *CastleEngine::hitTest(const Common::Point &p, LivePage **pageOut) {
 	return nullptr;
 }
 
-void CastleEngine::applyPalette() {
+void DKPengeEngine::applyPalette() {
 	const Image *img = _basePage ? _basePage->getPaletteImage() : nullptr;
 	for (uint i = 0; i < _popups.size() && !img; i++)
 		img = _popups[i]->getPaletteImage();
-	debugC(2, kDebugGraphics, "Castle: palette from image %dx%d with %u entries", img ? img->surface.w : 0, img ? img->surface.h : 0, img ? img->palette.size() : 0);
+	debugC(2, kDebugGraphics, "DKPenge: palette from image %dx%d with %u entries", img ? img->surface.w : 0, img ? img->surface.h : 0, img ? img->palette.size() : 0);
 	if (img && img->palette.size() > 0) {
 		_system->getPaletteManager()->setPalette(img->palette.data(), 0, MIN<uint>(256, img->palette.size()));
 		byte pal[768];
@@ -353,7 +353,7 @@ void CastleEngine::applyPalette() {
 }
 
 // Draws the open pages into the back buffer
-void CastleEngine::composeScreen() {
+void DKPengeEngine::composeScreen() {
 	_screen.fillRect(Common::Rect(0, 0, _screen.w, _screen.h), 0);
 	if (_basePage)
 		_basePage->draw(_screen, *_res);
@@ -366,7 +366,7 @@ void CastleEngine::composeScreen() {
 	_dirty = false;
 }
 
-void CastleEngine::render() {
+void DKPengeEngine::render() {
 	if (_paletteDirty)
 		applyPalette();
 	if (!_dirty) {
@@ -384,13 +384,13 @@ void CastleEngine::render() {
 		dumpSurface(_screen);
 }
 
-void CastleEngine::dumpSurface(const Graphics::Surface &surf) {
+void DKPengeEngine::dumpSurface(const Graphics::Surface &surf) {
 	if (_dumpDir.empty())
 		return;
 	{
 		Common::DumpFile f;
 		Common::Path path(Common::String::format("%s/castle%03d.png", _dumpDir.c_str(), _dumpCount++), '/');
-		debugC(1, kDebugGraphics, "Castle: dump %s", path.toString().c_str());
+		debugC(1, kDebugGraphics, "DKPenge: dump %s", path.toString().c_str());
 		if (f.open(path)) {
 			byte pal[768];
 			_system->getPaletteManager()->grabPalette(pal, 0, 256);
@@ -400,7 +400,7 @@ void CastleEngine::dumpSurface(const Graphics::Surface &surf) {
 	}
 }
 
-void CastleEngine::openBasePage(uint index, const Common::Point &scroll) {
+void DKPengeEngine::openBasePage(uint index, const Common::Point &scroll) {
 	updateTrailScroll();
 	_hoverObject = nullptr;
 	_castleSection = -1;
@@ -433,7 +433,7 @@ void CastleEngine::openBasePage(uint index, const Common::Point &scroll) {
 		startRoomQuestions(_basePage);
 }
 
-void CastleEngine::runPageEvents(LivePage *page, int eventType) {
+void DKPengeEngine::runPageEvents(LivePage *page, int eventType) {
 	PageRecord *rec = page->getRecord();
 	if (!rec)
 		return;
@@ -466,7 +466,7 @@ void CastleEngine::runPageEvents(LivePage *page, int eventType) {
 	}
 }
 
-void CastleEngine::openPopup(uint index) {
+void DKPengeEngine::openPopup(uint index) {
 	for (uint i = 0; i < _popups.size(); i++)
 		if (_popups[i]->getIndex() == index)
 			return;
@@ -476,7 +476,7 @@ void CastleEngine::openPopup(uint index) {
 		return;
 	}
 	_popups.push_back(page);
-	debugC(2, kDebugGraphics, "Castle: popup %u at %d,%d %dx%d", index, page->getBounds().left, page->getBounds().top, page->getBounds().width(), page->getBounds().height());
+	debugC(2, kDebugGraphics, "DKPenge: popup %u at %d,%d %dx%d", index, page->getBounds().left, page->getBounds().top, page->getBounds().width(), page->getBounds().height());
 	applyQuestObjects(page, true);
 	setupCollages(page);
 	recordTrail(page, true);
@@ -485,7 +485,7 @@ void CastleEngine::openPopup(uint index) {
 	runPageEvents(page, kEventOpen);
 }
 
-void CastleEngine::closePopup(uint index) {
+void DKPengeEngine::closePopup(uint index) {
 	for (int i = (int)_popups.size() - 1; i >= 0; i--) {
 		if (_popups[i]->getIndex() == index || index == 0xffffffff) {
 			if (_hoverPage == _popups[i]) {
@@ -502,7 +502,7 @@ void CastleEngine::closePopup(uint index) {
 				_pressedPage = nullptr;
 				_scrollBarDrag = false;
 			}
-			debugC(2, kDebugGraphics, "Castle: closing popup %u", _popups[i]->getIndex());
+			debugC(2, kDebugGraphics, "DKPenge: closing popup %u", _popups[i]->getIndex());
 			pageClosing(_popups[i]);
 			delete _popups[i];
 			_popups.remove_at(i);
@@ -512,7 +512,7 @@ void CastleEngine::closePopup(uint index) {
 	}
 }
 
-void CastleEngine::closeAllPopups() {
+void DKPengeEngine::closeAllPopups() {
 	if (_hoverPage && _hoverPage != _basePage) {
 		_hoverObject = nullptr;
 	_castleSection = -1;
@@ -526,7 +526,7 @@ void CastleEngine::closeAllPopups() {
 	_pressedPage = nullptr;
 	_scrollBarDrag = false;
 	if (!_popups.empty())
-		debugC(2, kDebugGraphics, "Castle: closing all %u popups", _popups.size());
+		debugC(2, kDebugGraphics, "DKPenge: closing all %u popups", _popups.size());
 	for (uint i = 0; i < _popups.size(); i++) {
 		pageClosing(_popups[i]);
 		delete _popups[i];
@@ -535,11 +535,11 @@ void CastleEngine::closeAllPopups() {
 	_dirty = true;
 }
 
-void CastleEngine::runEvent(const Event *ev, LivePage *page, LiveObject *obj) {
+void DKPengeEngine::runEvent(const Event *ev, LivePage *page, LiveObject *obj) {
 	runActions(ev->actions, page, obj);
 }
 
-void CastleEngine::runActions(const Common::Array<Action *> &actions, LivePage *page, LiveObject *obj) {
+void DKPengeEngine::runActions(const Common::Array<Action *> &actions, LivePage *page, LiveObject *obj) {
 	for (uint i = 0; i < actions.size(); i++) {
 		runAction(actions[i], page, obj);
 		if (shouldQuit() || _pendingBase)
@@ -552,7 +552,7 @@ void CastleEngine::runActions(const Common::Array<Action *> &actions, LivePage *
 	}
 }
 
-bool CastleEngine::pageAlive(const LivePage *page) const {
+bool DKPengeEngine::pageAlive(const LivePage *page) const {
 	if (page == _basePage)
 		return true;
 	for (uint k = 0; k < _popups.size(); k++)
@@ -561,8 +561,8 @@ bool CastleEngine::pageAlive(const LivePage *page) const {
 	return false;
 }
 
-void CastleEngine::runAction(const Action *a, LivePage *page, LiveObject *obj) {
-	debugC(2, kDebugScript, "Castle: action %s page=%u x=%d name='%s'", actionName(a->type), a->page, a->x, a->name.c_str());
+void DKPengeEngine::runAction(const Action *a, LivePage *page, LiveObject *obj) {
+	debugC(2, kDebugScript, "DKPenge: action %s page=%u x=%d name='%s'", actionName(a->type), a->page, a->x, a->name.c_str());
 	switch (a->type) {
 	case kActChangePage: {
 		PageRecord *target = _db->getRecord(a->page);
@@ -611,7 +611,7 @@ void CastleEngine::runAction(const Action *a, LivePage *page, LiveObject *obj) {
 	case kActFileSaveAs:
 		// The Save As page copies a text file from the CD to disk through a
 		// Windows file dialog; no script ever opens that page
-		debugC(1, kDebugScript, "Castle: FileSaveAs is not supported");
+		debugC(1, kDebugScript, "DKPenge: FileSaveAs is not supported");
 		break;
 	case kActClosePage:
 		if (page && page->isPopup())
@@ -803,7 +803,7 @@ void CastleEngine::runAction(const Action *a, LivePage *page, LiveObject *obj) {
 		case 10: _quest->setMode(3); break;
 		case 0xb: _quest->setMode(2); break;
 		default:
-			debugC(1, kDebugScript, "Castle: GeneralPurposeAction %d not implemented", a->x);
+			debugC(1, kDebugScript, "DKPenge: GeneralPurposeAction %d not implemented", a->x);
 			break;
 		}
 		break;
@@ -889,7 +889,7 @@ void CastleEngine::runAction(const Action *a, LivePage *page, LiveObject *obj) {
 		doTransition(page, a->p[0], a->p[1], a->p[2]);
 		break;
 	default:
-		debugC(1, kDebugScript, "Castle: unimplemented action %s", actionName(a->type));
+		debugC(1, kDebugScript, "DKPenge: unimplemented action %s", actionName(a->type));
 		break;
 	}
 }
@@ -898,7 +898,7 @@ void CastleEngine::runAction(const Action *a, LivePage *page, LiveObject *obj) {
 // the views from the room's nodes. Every node-bound object carries the node
 // it belongs to; this enables the ones for the given node and disables the
 // rest (-1 while turning disables everything).
-void CastleEngine::updateNodeHotspots(LivePage *page, int node) {
+void DKPengeEngine::updateNodeHotspots(LivePage *page, int node) {
 	if (!page)
 		page = _basePage;
 	if (!page)
@@ -930,7 +930,7 @@ void CastleEngine::updateNodeHotspots(LivePage *page, int node) {
 
 // DoTransition: plays the walk animation sprite that leads to the next node;
 // its last frame script then changes to the destination page.
-void CastleEngine::doTransition(LivePage *page, int mode, int spriteId, int async) {
+void DKPengeEngine::doTransition(LivePage *page, int mode, int spriteId, int async) {
 	LiveObject *lo = findLiveObject(spriteId, page);
 	if (!lo || lo->obj->cls != kObjSprite)
 		return;
@@ -964,7 +964,7 @@ void CastleEngine::doTransition(LivePage *page, int mode, int spriteId, int asyn
 }
 
 // The zoom caption object (by id, else the first one on the base page)
-LiveObject *CastleEngine::findZoomCaption(int id, LivePage *page) {
+LiveObject *DKPengeEngine::findZoomCaption(int id, LivePage *page) {
 	LiveObject *lo = findLiveObject(id, page);
 	if (lo && lo->obj->cls == kObjZoomCaption)
 		return lo;
@@ -986,7 +986,7 @@ LiveObject *CastleEngine::findZoomCaption(int id, LivePage *page) {
 // Mouse button down on an object. Hotspots run their on_click event right
 // away (as the original does); sprites run their press scripts (event 4)
 // and, when draggable (flag 0x10), start following the mouse.
-void CastleEngine::pressObject(LiveObject *lo, LivePage *page, const Common::Point &p) {
+void DKPengeEngine::pressObject(LiveObject *lo, LivePage *page, const Common::Point &p) {
 	setMouseVar(p, lo->panel);
 	_pressedObject = lo;
 	_pressedPage = page;
@@ -1026,7 +1026,7 @@ void CastleEngine::pressObject(LiveObject *lo, LivePage *page, const Common::Poi
 	clickObject(lo, page);
 }
 
-void CastleEngine::updateRepeat(uint32 now) {
+void DKPengeEngine::updateRepeat(uint32 now) {
 	if (!_pressedObject || _pressedObject->obj->cls != kObjRepeatingHotspot || now < _repeatNext)
 		return;
 	int interval = _pressedObject->obj->ints.size() > 2 ? _pressedObject->obj->ints[2] : 0;
@@ -1035,7 +1035,7 @@ void CastleEngine::updateRepeat(uint32 now) {
 }
 
 // Mouse button up: ends a drag and runs the sprite's release scripts (5)
-void CastleEngine::releaseMouse(const Common::Point &p) {
+void DKPengeEngine::releaseMouse(const Common::Point &p) {
 	setMouseVar(p, _pressedObject ? _pressedObject->panel : nullptr);
 	LiveObject *lo = _pressedObject;
 	LivePage *page = _pressedPage;
@@ -1065,7 +1065,7 @@ void CastleEngine::releaseMouse(const Common::Point &p) {
 
 // Moves a dragged sprite with the mouse, kept inside its limit rectangle
 // when one is stored, then runs its drag scripts (6)
-void CastleEngine::dragTo(const Common::Point &p) {
+void DKPengeEngine::dragTo(const Common::Point &p) {
 	setMouseVar(p, _pressedObject ? _pressedObject->panel : nullptr);
 	if (_dragPage) {
 		int dx = p.x - _dragOffset.x - _dragPage->getBounds().left;
@@ -1102,7 +1102,7 @@ void CastleEngine::dragTo(const Common::Point &p) {
 }
 
 // The topmost popup under a point
-LivePage *CastleEngine::popupAt(const Common::Point &p) {
+LivePage *DKPengeEngine::popupAt(const Common::Point &p) {
 	for (int i = (int)_popups.size() - 1; i >= 0; i--)
 		if (_popups[i]->getBounds().contains(p))
 			return _popups[i];
@@ -1111,7 +1111,7 @@ LivePage *CastleEngine::popupAt(const Common::Point &p) {
 
 // The dungeon's countdown: when it runs out the page's DungeonTimer object
 // gets its timer-end event
-void CastleEngine::updateDungeonTimer(uint32 now) {
+void DKPengeEngine::updateDungeonTimer(uint32 now) {
 	if (!_dungeonTimerEnd || now < _dungeonTimerEnd)
 		return;
 	_dungeonTimerEnd = 0;
@@ -1138,7 +1138,7 @@ void CastleEngine::updateDungeonTimer(uint32 now) {
 // A click on an object: its on_click event or the built-in behaviour of a
 // page-turn corner (sound and a page change
 // with the curl transition towards the stored page).
-void CastleEngine::clickObject(LiveObject *lo, LivePage *page) {
+void DKPengeEngine::clickObject(LiveObject *lo, LivePage *page) {
 	const GameObject *o = lo->obj;
 	switch (o->cls) {
 	case kObjCoinBitmap:
@@ -1275,7 +1275,7 @@ void CastleEngine::clickObject(LiveObject *lo, LivePage *page) {
 
 // Scroll-edge objects of the zoom pages scroll their panel while the mouse
 // rests on them, speeding up from 1 to 8 pixels per tick.
-void CastleEngine::updateScrolling(uint32 now) {
+void DKPengeEngine::updateScrolling(uint32 now) {
 	// No scrolling under an open popup (FUN_00480ca0: every popup template
 	// in the data clears the flag that would allow it)
 	if (!_scrollObject || !_scrollPage || now < _scrollNext || !_popups.empty())
@@ -1290,7 +1290,7 @@ void CastleEngine::updateScrolling(uint32 now) {
 
 // One tick of the hover strip under the pointer: ints[0] gives the
 // direction (0 up, 1 down, 2 left, 3 right, 4-7 the diagonals)
-void CastleEngine::scrollStripBy(int st) {
+void DKPengeEngine::scrollStripBy(int st) {
 	if (!_scrollObject || !_scrollPage || st <= 0)
 		return;
 	int dir = _scrollObject->obj->ints.empty() ? -1 : _scrollObject->obj->ints[0];
@@ -1315,7 +1315,7 @@ void CastleEngine::scrollStripBy(int st) {
 // Zoom pages carry a ZoomAmbientSoundObj: every few seconds (and whenever
 // the view scrolls) it loops the wave of the SoundHotspot under the centre
 // of the view, switching when a different region comes into view.
-void CastleEngine::updateAmbientSound(uint32 now, bool force) {
+void DKPengeEngine::updateAmbientSound(uint32 now, bool force) {
 	if (!force && now < _ambientNext)
 		return;
 	_ambientNext = now + 4000;
@@ -1349,13 +1349,13 @@ void CastleEngine::updateAmbientSound(uint32 now, bool force) {
 	_ambientName = name;
 	if (name.empty())
 		return;
-	debugC(1, kDebugSound, "Castle: ambient sound '%s'", name.c_str());
+	debugC(1, kDebugSound, "DKPenge: ambient sound '%s'", name.c_str());
 	playWaveChannel(_basePage->getDir(), name, -2, true);
 }
 
 // The castle of the Castle Guide: its colour reference bitmap gives every
 // pixel the number of the section drawn there (0 and 255: none)
-int CastleEngine::castleSectionAt(const LiveObject *hl, const Common::Point &p) const {
+int DKPengeEngine::castleSectionAt(const LiveObject *hl, const Common::Point &p) const {
 	if (!hl->image)
 		return -1;
 	int x = p.x - hl->rect.left, y = p.y - hl->rect.top;
@@ -1367,7 +1367,7 @@ int CastleEngine::castleSectionAt(const LiveObject *hl, const Common::Point &p) 
 
 // The ColourHotspot of a castle section: an object without a rectangle of
 // its own whose number (ints[0]) is the colour of the section
-LiveObject *CastleEngine::findColourHotspot(LivePage *page, int section) {
+LiveObject *DKPengeEngine::findColourHotspot(LivePage *page, int section) {
 	if (!page)
 		return nullptr;
 	const Common::Array<LivePanel *> &panels = page->getPanels();
@@ -1383,14 +1383,14 @@ LiveObject *CastleEngine::findColourHotspot(LivePage *page, int section) {
 // The pointer moved onto another section of the castle (FUN_00465ef0): the
 // new section lights up and its hotspot gets the roll-on; leaving the castle
 // (-1) restores the plain artwork. The hotspots never get a roll-off.
-void CastleEngine::hoverCastleSection(LivePage *page, LiveObject *hl, int section) {
+void DKPengeEngine::hoverCastleSection(LivePage *page, LiveObject *hl, int section) {
 	if (section == _castleSection)
 		return;
 	_castleSection = section;
 	hl->value = section;
 	hl->visible = section > 0;
 	_dirty = true;
-	debugC(2, kDebugScript, "Castle: castle section %d", section);
+	debugC(2, kDebugScript, "DKPenge: castle section %d", section);
 	if (section <= 0)
 		return;
 	LiveObject *hs = findColourHotspot(page, section);
@@ -1401,7 +1401,7 @@ void CastleEngine::hoverCastleSection(LivePage *page, LiveObject *hl, int sectio
 		runEvent(ev, page, hs);
 }
 
-LiveObject *CastleEngine::findHighlightObject(LivePage *page) {
+LiveObject *DKPengeEngine::findHighlightObject(LivePage *page) {
 	if (!page)
 		page = _basePage;
 	if (!page)
@@ -1414,11 +1414,11 @@ LiveObject *CastleEngine::findHighlightObject(LivePage *page) {
 	return nullptr;
 }
 
-int CastleEngine::getBuiltinNumber(int id) const {
+int DKPengeEngine::getBuiltinNumber(int id) const {
 	return _db->getBuiltinNumber(id);
 }
 
-LiveObject *CastleEngine::findLiveObject(int id, LivePage *page) {
+LiveObject *DKPengeEngine::findLiveObject(int id, LivePage *page) {
 	LiveObject *lo = page ? page->findObject(id) : nullptr;
 	if (lo)
 		return lo;
@@ -1432,15 +1432,15 @@ LiveObject *CastleEngine::findLiveObject(int id, LivePage *page) {
 	return nullptr;
 }
 
-bool CastleEngine::scriptShouldStop() const {
+bool DKPengeEngine::scriptShouldStop() const {
 	return shouldQuit() || _pendingBase;
 }
 
-void CastleEngine::runScriptAction(const Action *a, Context &ctx) {
+void DKPengeEngine::runScriptAction(const Action *a, Context &ctx) {
 	runAction(a, ctx.page, ctx.object);
 }
 
-void CastleEngine::runCommand(const Action *a, LivePage *page, LiveObject *obj) {
+void DKPengeEngine::runCommand(const Action *a, LivePage *page, LiveObject *obj) {
 	if (!a->script)
 		return;
 	Context ctx;
@@ -1462,7 +1462,7 @@ void CastleEngine::runCommand(const Action *a, LivePage *page, LiveObject *obj) 
 	_script->runScript(a->script, ctx);
 }
 
-void CastleEngine::setSpriteFrame(LiveObject *lo, int frame) {
+void DKPengeEngine::setSpriteFrame(LiveObject *lo, int frame) {
 	if (lo->obj->cls != kObjSprite && lo->obj->cls != kObjAmbientAnimation)
 		return;
 	if (frame < 1)
@@ -1470,7 +1470,7 @@ void CastleEngine::setSpriteFrame(LiveObject *lo, int frame) {
 	if (lo->frameCount > 0 && frame > lo->frameCount)
 		frame = lo->frameCount;
 	lo->frame = frame;
-	debugC(3, kDebugScript, "Castle: sprite %d frame -> %d", lo->obj->id, frame);
+	debugC(3, kDebugScript, "DKPenge: sprite %d frame -> %d", lo->obj->id, frame);
 	if (!lo->obj->file.empty()) {
 		Common::String name = lo->obj->cls == kObjSprite ? Common::String::format("%s%04d", lo->obj->file.c_str(), frame) : lo->obj->strs[MIN<uint>(frame - 1, lo->obj->strs.size() - 1)];
 		Image *img = _res->loadImage(lo->panel->dir, name);
@@ -1484,7 +1484,7 @@ void CastleEngine::setSpriteFrame(LiveObject *lo, int frame) {
 //   5 click, 9 frame reached (script->b is the 1-based frame),
 //   0xd last frame reached, 0x10 loop restarted, 10 timer
 // Jumping to a frame from a script also fires that frame's scripts
-void CastleEngine::spriteGotoFrame(LiveObject *lo, int frame) {
+void DKPengeEngine::spriteGotoFrame(LiveObject *lo, int frame) {
 	setSpriteFrame(lo, frame);
 	LivePage *page = lo->panel ? lo->panel->page : nullptr;
 	if (!page)
@@ -1494,7 +1494,7 @@ void CastleEngine::spriteGotoFrame(LiveObject *lo, int frame) {
 		runSpriteFrameScripts(page, lo, 0xd, lo->frame);
 }
 
-void CastleEngine::runSpriteFrameScripts(LivePage *page, LiveObject *lo, int event, int frame) {
+void DKPengeEngine::runSpriteFrameScripts(LivePage *page, LiveObject *lo, int event, int frame) {
 	const GameObject *obj = lo->obj;
 	for (uint i = 0; i < obj->scripts.size(); i++) {
 		if (obj->scripts[i]->a != event)
@@ -1507,7 +1507,7 @@ void CastleEngine::runSpriteFrameScripts(LivePage *page, LiveObject *lo, int eve
 	}
 }
 
-void CastleEngine::runSpriteScript(LivePage *page, LiveObject *lo, const ScriptObject *script, int event, int frame) {
+void DKPengeEngine::runSpriteScript(LivePage *page, LiveObject *lo, const ScriptObject *script, int event, int frame) {
 	Context ctx;
 	ctx.page = page;
 	ctx.object = lo;
@@ -1519,7 +1519,7 @@ void CastleEngine::runSpriteScript(LivePage *page, LiveObject *lo, const ScriptO
 	ctx.scopes.push_back(&page->getScope());
 	if (_basePage && _basePage != page)
 		ctx.scopes.push_back(&_basePage->getScope());
-	debugC(2, kDebugScript, "Castle: sprite %d event %d frame %d script", lo->obj->id, event, frame);
+	debugC(2, kDebugScript, "DKPenge: sprite %d event %d frame %d script", lo->obj->id, event, frame);
 	_script->runScript(script, ctx);
 }
 
@@ -1527,7 +1527,7 @@ void CastleEngine::runSpriteScript(LivePage *page, LiveObject *lo, const ScriptO
 // scripts carry a rectangle; while dragging, the mouse inside it fires the
 // "entered" script (7) once, outside it the "left" script (8) once, as the
 // original's event runner does with two flags per script.
-void CastleEngine::runSpriteRegionEvents(LivePage *page, LiveObject *lo) {
+void DKPengeEngine::runSpriteRegionEvents(LivePage *page, LiveObject *lo) {
 	const GameObject *obj = lo->obj;
 	bool dragging = (lo->spriteState & 0x20) != 0;
 	static const int order[2] = { 8, 7 };
@@ -1564,7 +1564,7 @@ void CastleEngine::runSpriteRegionEvents(LivePage *page, LiveObject *lo) {
 	}
 }
 
-void CastleEngine::moveSpriteTo(LivePage *page, LiveObject *lo, int nx, int ny, bool user) {
+void DKPengeEngine::moveSpriteTo(LivePage *page, LiveObject *lo, int nx, int ny, bool user) {
 	const GameObject *obj = lo->obj;
 	int w = lo->rect.width(), h = lo->rect.height();
 	int mode = obj->ints.size() > 8 ? obj->ints[8] : 0;   // motion mode p[7]
@@ -1654,7 +1654,7 @@ void CastleEngine::moveSpriteTo(LivePage *page, LiveObject *lo, int nx, int ny, 
 	int sx = lo->panel->rect.left + nx, sy = lo->panel->rect.top + ny;
 	if (sx != lo->rect.left || sy != lo->rect.top) {
 		lo->rect.moveTo(sx, sy);
-		debugC(3, kDebugScript, "Castle: move sprite %d to %d,%d", obj->id, nx, ny);
+		debugC(3, kDebugScript, "DKPenge: move sprite %d to %d,%d", obj->id, nx, ny);
 		_dirty = true;
 	}
 	if (edges) {
@@ -1674,7 +1674,7 @@ void CastleEngine::moveSpriteTo(LivePage *page, LiveObject *lo, int nx, int ny, 
 
 // Self propelled sprites (flag 2, p[4] == 1) advance by their velocity, in
 // pixels per second, with one timer per axis as the original's tick
-void CastleEngine::updateSpriteMotion(LivePage *page, LiveObject *lo, uint32 now) {
+void DKPengeEngine::updateSpriteMotion(LivePage *page, LiveObject *lo, uint32 now) {
 	const GameObject *obj = lo->obj;
 	if (!(lo->spriteFlags & 2) || obj->ints.size() < 6 || obj->ints[5] != 1 || (lo->spriteState & 7) != 7)
 		return;
@@ -1702,12 +1702,12 @@ void CastleEngine::updateSpriteMotion(LivePage *page, LiveObject *lo, uint32 now
 	moveSpriteTo(page, lo, x + dx, y + dy, true);
 }
 
-void CastleEngine::spriteMoved(LiveObject *lo) {
+void DKPengeEngine::spriteMoved(LiveObject *lo) {
 	if (lo->panel && lo->panel->page)
 		runSpriteRegionEvents(lo->panel->page, lo);
 }
 
-void CastleEngine::updateSprites(uint32 now) {
+void DKPengeEngine::updateSprites(uint32 now) {
 	Common::Array<LivePage *> pages;
 	if (_basePage)
 		pages.push_back(_basePage);
@@ -1740,7 +1740,7 @@ void CastleEngine::updateSprites(uint32 now) {
 // at either end: 1 loops, 2 bounces, 3 stops on the last frame, anything else
 // ends the animation (running bit cleared, bit 8 set).
 // Returns false when a script changed the page.
-bool CastleEngine::advanceSprite(LivePage *page, LiveObject *lo) {
+bool DKPengeEngine::advanceSprite(LivePage *page, LiveObject *lo) {
 	const GameObject *obj = lo->obj;
 	int mode = obj->ints.size() > 7 ? obj->ints[7] : 1;
 	bool forward = (lo->spriteState & 0x40) != 0;
@@ -1776,7 +1776,7 @@ bool CastleEngine::advanceSprite(LivePage *page, LiveObject *lo) {
 }
 
 // Counts down the remaining loops; false when the animation is over.
-bool CastleEngine::spriteLoopDone(LivePage *page, LiveObject *lo) {
+bool DKPengeEngine::spriteLoopDone(LivePage *page, LiveObject *lo) {
 	if (lo->spriteLoops > 0)
 		lo->spriteLoops--;
 	if (lo->spriteLoops == 0) {
@@ -1787,13 +1787,13 @@ bool CastleEngine::spriteLoopDone(LivePage *page, LiveObject *lo) {
 	return true;
 }
 
-void CastleEngine::spriteFinished(LivePage *page, LiveObject *lo) {
+void DKPengeEngine::spriteFinished(LivePage *page, LiveObject *lo) {
 	lo->playing = false;
 	lo->spriteState = (lo->spriteState & ~4) | 8;
 }
 
 // The panel under a screen point: the topmost page's panel containing it
-LivePanel *CastleEngine::panelAt(const Common::Point &p) {
+LivePanel *DKPengeEngine::panelAt(const Common::Point &p) {
 	for (int i = (int)_popups.size() - 1; i >= 0; i--) {
 		const Common::Array<LivePanel *> &panels = _popups[i]->getPanels();
 		for (uint k = 0; k < panels.size(); k++)
@@ -1813,7 +1813,7 @@ LivePanel *CastleEngine::panelAt(const Common::Point &p) {
 
 // The mouse variable holds the position relative to the panel's window,
 // as the original's panels received their mouse messages
-void CastleEngine::setMouseVar(const Common::Point &p, LivePanel *panel) {
+void DKPengeEngine::setMouseVar(const Common::Point &p, LivePanel *panel) {
 	int id = _db->getMouseVar();
 	if (id < 0)
 		return;
@@ -1826,12 +1826,12 @@ void CastleEngine::setMouseVar(const Common::Point &p, LivePanel *panel) {
 	_script->setDocVariable(id, Value::point(q));
 }
 
-void CastleEngine::objectCursorChanged(LiveObject *lo) {
+void DKPengeEngine::objectCursorChanged(LiveObject *lo) {
 	if (lo == _hoverObject || (lo == _pressedObject && _dragging))
 		setCursor(lo->cursor.empty() ? _db->getDefaultCursor() : lo->cursor);
 }
 
-void CastleEngine::setCursor(const Common::String &name) {
+void DKPengeEngine::setCursor(const Common::String &name) {
 	if (name == _cursorName)
 		return;
 	Graphics::Cursor *cursor = _res->getCursor(name);
@@ -1841,7 +1841,7 @@ void CastleEngine::setCursor(const Common::String &name) {
 	_cursorName = name;
 }
 
-void CastleEngine::handleMouseMove(const Common::Point &p) {
+void DKPengeEngine::handleMouseMove(const Common::Point &p) {
 	setMouseVar(p, nullptr);
 	LivePage *page = nullptr;
 	LiveObject *lo = nullptr;
@@ -1886,7 +1886,7 @@ void CastleEngine::handleMouseMove(const Common::Point &p) {
 			hoverCastleSection(_hoverPage, hl, -1);
 		_castleSection = -1;
 	}
-	debugC(2, kDebugScript, "Castle: mouse %d,%d over %s%s", p.x, p.y, lo ? objectClassName(lo->obj->cls) : "nothing", lo == _hoverObject ? " (unchanged)" : "");
+	debugC(2, kDebugScript, "DKPenge: mouse %d,%d over %s%s", p.x, p.y, lo ? objectClassName(lo->obj->cls) : "nothing", lo == _hoverObject ? " (unchanged)" : "");
 	if (lo == _hoverObject)
 		return;
 	if (_hoverObject) {
@@ -1935,10 +1935,10 @@ void CastleEngine::handleMouseMove(const Common::Point &p) {
 	}
 }
 
-void CastleEngine::playWave(const Common::String &dir, const Common::String &name, bool loop) {
+void DKPengeEngine::playWave(const Common::String &dir, const Common::String &name, bool loop) {
 	Common::SeekableReadStream *s = _res->openWave(dir, name);
 	if (!s) {
-		debugC(1, kDebugSound, "Castle: wave '%s' not found", name.c_str());
+		debugC(1, kDebugSound, "DKPenge: wave '%s' not found", name.c_str());
 		return;
 	}
 	Audio::SeekableAudioStream *stream = Audio::makeWAVStream(s, DisposeAfterUse::YES);
@@ -1951,14 +1951,14 @@ void CastleEngine::playWave(const Common::String &dir, const Common::String &nam
 		_mixer->playStream(Audio::Mixer::kSFXSoundType, &_waveHandle, stream);
 }
 
-void CastleEngine::playVideo(const Common::String &dir, const Common::String &name, const Common::Rect &destIn) {
-	if (ConfMan.hasKey("castle_skipvideo") && ConfMan.getBool("castle_skipvideo")) {
-		debugC(1, kDebugGraphics, "Castle: skipping video '%s'", name.c_str());
+void DKPengeEngine::playVideo(const Common::String &dir, const Common::String &name, const Common::Rect &destIn) {
+	if (ConfMan.hasKey("dkpenge_skipvideo") && ConfMan.getBool("dkpenge_skipvideo")) {
+		debugC(1, kDebugGraphics, "DKPenge: skipping video '%s'", name.c_str());
 		return;
 	}
 	Common::SeekableReadStream *s = _res->openVideo(dir, name);
 	if (!s) {
-		debugC(1, kDebugGraphics, "Castle: video '%s' not found", name.c_str());
+		debugC(1, kDebugGraphics, "DKPenge: video '%s' not found", name.c_str());
 		return;
 	}
 	Video::QuickTimeDecoder *qt = new Video::QuickTimeDecoder();
@@ -1978,7 +1978,7 @@ void CastleEngine::playVideo(const Common::String &dir, const Common::String &na
 		int y = dest.top + (dest.height() - qt->getHeight()) / 2;
 		dest = Common::Rect(x, y, x + qt->getWidth(), y + qt->getHeight());
 	}
-	debugC(1, kDebugGraphics, "Castle: playing video '%s' %dx%d at %d,%d", name.c_str(), qt->getWidth(), qt->getHeight(), dest.left, dest.top);
+	debugC(1, kDebugGraphics, "DKPenge: playing video '%s' %dx%d at %d,%d", name.c_str(), qt->getWidth(), qt->getHeight(), dest.left, dest.top);
 	qt->start();
 	bool skip = false;
 	int frames = 0;
@@ -2016,17 +2016,17 @@ void CastleEngine::playVideo(const Common::String &dir, const Common::String &na
 	_dirty = true;
 }
 
-void CastleEngine::stopWave() {
+void DKPengeEngine::stopWave() {
 	_mixer->stopHandle(_waveHandle);
 }
 
 // Waves started on a numbered channel can be stopped again by channel (and
 // optionally by name); the library pages use channel 0 for the read-aloud
 // narration and restart it on every click.
-void CastleEngine::playWaveChannel(const Common::String &dir, const Common::String &name, int channel, bool loop) {
+void DKPengeEngine::playWaveChannel(const Common::String &dir, const Common::String &name, int channel, bool loop) {
 	Common::SeekableReadStream *s = _res->openWave(dir, name);
 	if (!s) {
-		debugC(1, kDebugSound, "Castle: wave '%s' not found", name.c_str());
+		debugC(1, kDebugSound, "DKPenge: wave '%s' not found", name.c_str());
 		return;
 	}
 	Audio::SeekableAudioStream *stream = Audio::makeWAVStream(s, DisposeAfterUse::YES);
@@ -2049,7 +2049,7 @@ void CastleEngine::playWaveChannel(const Common::String &dir, const Common::Stri
 	_channels.push_back(wc);
 }
 
-void CastleEngine::stopWaveChannel(int channel, const Common::String &name) {
+void DKPengeEngine::stopWaveChannel(int channel, const Common::String &name) {
 	for (uint i = 0; i < _channels.size();) {
 		if (_channels[i].channel == channel && (name.empty() || _channels[i].name.equalsIgnoreCase(name))) {
 			_mixer->stopHandle(_channels[i].handle);
@@ -2060,10 +2060,10 @@ void CastleEngine::stopWaveChannel(int channel, const Common::String &name) {
 	}
 }
 
-void CastleEngine::playAnimation(const Common::String &dir, const Common::String &name, const Common::Point &pos) {
+void DKPengeEngine::playAnimation(const Common::String &dir, const Common::String &name, const Common::Point &pos) {
 	Common::SeekableReadStream *s = _res->openAnimation(dir, name);
 	if (!s) {
-		debugC(1, kDebugGraphics, "Castle: animation '%s' not found", name.c_str());
+		debugC(1, kDebugGraphics, "DKPenge: animation '%s' not found", name.c_str());
 		return;
 	}
 	delete _ani;
@@ -2080,7 +2080,7 @@ void CastleEngine::playAnimation(const Common::String &dir, const Common::String
 	_mixer->playStream(Audio::Mixer::kSFXSoundType, &_aniAudioHandle, _ani->getAudioStream());
 }
 
-void CastleEngine::updateAnimation() {
+void DKPengeEngine::updateAnimation() {
 	if (!_ani)
 		return;
 	uint32 now = _system->getMillis();
@@ -2114,17 +2114,17 @@ void CastleEngine::updateAnimation() {
 
 // The quest module publishes its state through document variables so that
 // the page scripts can test them (spy type, scenario, new game flag)
-void CastleEngine::afterQuestLoad(bool ok, bool fireEvent) {
+void DKPengeEngine::afterQuestLoad(bool ok, bool fireEvent) {
 	const DocumentTail &tail = _db->getTail();
 	_script->setDocVariable(tail.getNewGameVar(), Value::logical(!ok));
 	_script->setDocVariable(tail.getScenarioVar(), Value::number(_quest->getScenario()));
 	setSpy(_quest->getSpy(), fireEvent);
 }
 
-void CastleEngine::setSpy(int spy, bool fireEvent) {
+void DKPengeEngine::setSpy(int spy, bool fireEvent) {
 	_quest->setSpy(spy);
 	_script->setDocVariable(_db->getTail().getSpyVar(), Value::number(spy));
-	debugC(1, kDebugScript, "Castle: spy type %d", spy);
+	debugC(1, kDebugScript, "DKPenge: spy type %d", spy);
 	if (_basePage)
 		applyQuestObjects(_basePage, false);
 	for (uint i = 0; i < _popups.size(); i++)
@@ -2135,7 +2135,7 @@ void CastleEngine::setSpy(int spy, bool fireEvent) {
 }
 
 // on_SpyChanged goes to every open page, topmost first
-void CastleEngine::fireSpyChanged() {
+void DKPengeEngine::fireSpyChanged() {
 	Common::Array<LivePage *> pages;
 	for (int i = (int)_popups.size() - 1; i >= 0; i--)
 		pages.push_back(_popups[i]);
@@ -2157,7 +2157,7 @@ void CastleEngine::fireSpyChanged() {
 // Sets up the quest objects of a page: coins and evidence waiting to be
 // found, the spy pictures of the hut, the chest icon of the chosen spy and
 // the toggles of the options page
-void CastleEngine::applyQuestObjects(LivePage *page, bool onOpen) {
+void DKPengeEngine::applyQuestObjects(LivePage *page, bool onOpen) {
 	int spy = _quest->getSpy();
 	const Common::Array<LivePanel *> &panels = page->getPanels();
 	for (uint i = 0; i < panels.size(); i++) {
@@ -2168,7 +2168,7 @@ void CastleEngine::applyQuestObjects(LivePage *page, bool onOpen) {
 			case kObjCoinBitmap: {
 				bool present = o->ints.size() > 1 && _quest->getCoin(o->ints[1], o->ints[0]) == 1;
 				lo.visible = spy != 0 && present;
-				debugC(2, kDebugScript, "Castle: coin room %d slot %d state %d -> %s", o->ints.size() > 1 ? o->ints[1] : -1, o->ints.empty() ? -1 : o->ints[0],
+				debugC(2, kDebugScript, "DKPenge: coin room %d slot %d state %d -> %s", o->ints.size() > 1 ? o->ints[1] : -1, o->ints.empty() ? -1 : o->ints[0],
 				       o->ints.size() > 1 ? _quest->getCoin(o->ints[1], o->ints[0]) : -1, lo.visible ? "shown" : "hidden");
 				lo.zOrder = present ? 3 : -30000;
 				break;
@@ -2185,7 +2185,7 @@ void CastleEngine::applyQuestObjects(LivePage *page, bool onOpen) {
 				// The map item of the active scenario of its task
 				lo.visible = spy != 0 && o->ints.size() > 1 && _quest->getTask(o->ints[0], o->ints[1]) == 1;
 				lo.value = 0;
-				debugC(2, kDebugScript, "Castle: map item '%s' task %d choice %d at %d,%d -> %s", o->file.c_str(), o->ints.size() > 1 ? o->ints[0] : -1, o->ints.size() > 1 ? o->ints[1] : -1, lo.rect.left, lo.rect.top, lo.visible ? "shown" : "hidden");
+				debugC(2, kDebugScript, "DKPenge: map item '%s' task %d choice %d at %d,%d -> %s", o->file.c_str(), o->ints.size() > 1 ? o->ints[0] : -1, o->ints.size() > 1 ? o->ints[1] : -1, lo.rect.left, lo.rect.top, lo.visible ? "shown" : "hidden");
 				break;
 			case kObjSpyDitherBitmap:
 				// The chosen spy has left the hut: only the other one stays
@@ -2222,7 +2222,7 @@ void CastleEngine::applyQuestObjects(LivePage *page, bool onOpen) {
 
 // The spy's chest (SpyChestPanel): its 31 object slots show the lid, the
 // found evidence, the purse with the coin sprite frames and the coins
-void CastleEngine::updateSpyChest(LivePage *page) {
+void DKPengeEngine::updateSpyChest(LivePage *page) {
 	const Common::Array<LivePanel *> &panels = page->getPanels();
 	const Panel *chest = nullptr;
 	for (uint i = 0; i < panels.size() && !chest; i++)
@@ -2236,7 +2236,7 @@ void CastleEngine::updateSpyChest(LivePage *page) {
 	int done = _quest->countTasksDone();
 	int coins = _quest->countCoins();
 	int spy = _quest->getSpy();
-	debugC(1, kDebugScript, "Castle: spy chest: spy %d, %d coins, %d tasks done, stage %d", spy, coins, done, _quest->getStage());
+	debugC(1, kDebugScript, "DKPenge: spy chest: spy %d, %d coins, %d tasks done, stage %d", spy, coins, done, _quest->getStage());
 	if (done == 4 && _quest->getStage() == 2) {
 		if (slots[7])
 			slots[7]->visible = true;
@@ -2282,7 +2282,7 @@ void CastleEngine::updateSpyChest(LivePage *page) {
 	_dirty = true;
 }
 
-void CastleEngine::showSpriteFrame(LiveObject *lo, int frame) {
+void DKPengeEngine::showSpriteFrame(LiveObject *lo, int frame) {
 	setSpriteFrame(lo, frame);
 	if (lo->image) {
 		lo->visible = true;
@@ -2294,7 +2294,7 @@ void CastleEngine::showSpriteFrame(LiveObject *lo, int frame) {
 	}
 }
 
-LivePanel *CastleEngine::findSpyChest(LivePage **pageOut) {
+LivePanel *DKPengeEngine::findSpyChest(LivePage **pageOut) {
 	Common::Array<LivePage *> pages;
 	for (int i = (int)_popups.size() - 1; i >= 0; i--)
 		pages.push_back(_popups[i]);
@@ -2312,11 +2312,11 @@ LivePanel *CastleEngine::findSpyChest(LivePage **pageOut) {
 }
 
 // Something went into the chest: the chest sound plays
-void CastleEngine::chestFlash() {
+void DKPengeEngine::chestFlash() {
 	playWaveChannel(Common::String(), "@chest1s", -1);
 }
 
-int CastleEngine::toggleCodeOf(int objectId) const {
+int DKPengeEngine::toggleCodeOf(int objectId) const {
 	const Common::Array<ToggleDesc> &toggles = _db->getTail().toggles;
 	for (uint i = 0; i < toggles.size(); i++)
 		if (toggles[i].objectId == objectId)
@@ -2324,11 +2324,11 @@ int CastleEngine::toggleCodeOf(int objectId) const {
 	return -1;
 }
 
-bool CastleEngine::toggleState(int code) const {
+bool DKPengeEngine::toggleState(int code) const {
 	return code >= 0 && code < (int)ARRAYSIZE(_toggles) ? _toggles[code] : true;
 }
 
-void CastleEngine::setToggleState(int code, bool on) {
+void DKPengeEngine::setToggleState(int code, bool on) {
 	if (code < 0 || code >= (int)ARRAYSIZE(_toggles))
 		return;
 	_toggles[code] = on;
@@ -2336,11 +2336,11 @@ void CastleEngine::setToggleState(int code, bool on) {
 }
 
 // Option 11 switches the sounds, 18 the page transitions
-void CastleEngine::applyToggles() {
+void DKPengeEngine::applyToggles() {
 	_mixer->muteSoundType(Audio::Mixer::kSFXSoundType, !toggleState(0xb));
 }
 
-void CastleEngine::newGame() {
+void DKPengeEngine::newGame() {
 	_quest->reset();
 	_quiz->reset();
 	setSpy(0, true);
@@ -2348,7 +2348,7 @@ void CastleEngine::newGame() {
 }
 
 // "Start new game": a game in progress first asks whether to save it
-void CastleEngine::startGame() {
+void DKPengeEngine::startGame() {
 	if (!_quest->isDirty()) {
 		newGame();
 		return;
@@ -2358,14 +2358,14 @@ void CastleEngine::startGame() {
 	openPopup(mode == 1 || mode == 2 ? tail.questPages[2] : tail.questPages[1]);
 }
 
-void CastleEngine::runOptionsAction(int code, LivePage *page, LiveObject *obj) {
-	debugC(1, kDebugScript, "Castle: OptionsAction %d", code);
+void DKPengeEngine::runOptionsAction(int code, LivePage *page, LiveObject *obj) {
+	debugC(1, kDebugScript, "DKPenge: OptionsAction %d", code);
 	const DocumentTail &tail = _db->getTail();
 	switch (code) {
 	case 1: case 2: case 3: case 4: case 5: case 6: case 7: case 8: case 9:
 		// Printing and the Windows clipboard
 	case 0xd: case 0xe: case 0x13:
-		debugC(1, kDebugScript, "Castle: print/copy option %d is not supported", code);
+		debugC(1, kDebugScript, "DKPenge: print/copy option %d is not supported", code);
 		break;
 	case 0xb:
 	case 0x12:
@@ -2407,20 +2407,20 @@ void CastleEngine::runOptionsAction(int code, LivePage *page, LiveObject *obj) {
 		startGame();
 		break;
 	default:
-		debugC(1, kDebugScript, "Castle: OptionsAction %d not implemented", code);
+		debugC(1, kDebugScript, "DKPenge: OptionsAction %d not implemented", code);
 		break;
 	}
 }
 
 // --- Savegames ---------------------------------------------------------
 
-#define CASTLE_SAVE_TAG MKTAG('C', 'S', 'T', 'L')
+#define DKPENGE_SAVE_TAG MKTAG('C', 'S', 'T', 'L')
 
-Common::Error CastleEngine::saveGameState(int slot, const Common::String &desc, bool isAutosave) {
+Common::Error DKPengeEngine::saveGameState(int slot, const Common::String &desc, bool isAutosave) {
 	Common::OutSaveFile *f = _saveFileMan->openForSaving(getSaveStateName(slot));
 	if (!f)
 		return Common::kWritingFailed;
-	f->writeUint32BE(CASTLE_SAVE_TAG);
+	f->writeUint32BE(DKPENGE_SAVE_TAG);
 	f->writeByte(1);
 	f->writeUint32BE(_basePage ? _basePage->getIndex() : 0);
 	f->writeByte(ARRAYSIZE(_toggles));
@@ -2435,15 +2435,15 @@ Common::Error CastleEngine::saveGameState(int slot, const Common::String &desc, 
 		return Common::kWritingFailed;
 	_saveSlot = slot;
 	_quest->setDirty(false);
-	debugC(1, kDebugGeneral, "Castle: saved game to slot %d", slot);
+	debugC(1, kDebugGeneral, "DKPenge: saved game to slot %d", slot);
 	return Common::kNoError;
 }
 
-Common::Error CastleEngine::loadGameState(int slot) {
+Common::Error DKPengeEngine::loadGameState(int slot) {
 	Common::InSaveFile *f = _saveFileMan->openForLoading(getSaveStateName(slot));
 	if (!f)
 		return Common::kReadingFailed;
-	bool ok = f->readUint32BE() == CASTLE_SAVE_TAG;
+	bool ok = f->readUint32BE() == DKPENGE_SAVE_TAG;
 	if (ok) {
 		f->readByte(); // version
 		_savedPage = f->readUint32BE();
@@ -2457,19 +2457,19 @@ Common::Error CastleEngine::loadGameState(int slot) {
 	}
 	delete f;
 	if (!ok) {
-		warning("Castle: savegame slot %d could not be read", slot);
+		warning("DKPenge: savegame slot %d could not be read", slot);
 		_quest->randomize();
 		return Common::kReadingFailed;
 	}
 	_saveSlot = slot;
 	applyToggles();
-	debugC(1, kDebugGeneral, "Castle: loaded game from slot %d (spy %d, page %u)", slot, _quest->getSpy(), _savedPage);
+	debugC(1, kDebugGeneral, "DKPenge: loaded game from slot %d (spy %d, page %u)", slot, _quest->getSpy(), _savedPage);
 	return Common::kNoError;
 }
 
 // --- The spy's questions ----------------------------------------------
 
-void CastleEngine::flushPendingPage() {
+void DKPengeEngine::flushPendingPage() {
 	if (!_pendingBase)
 		return;
 	_pendingBase = false;
@@ -2503,7 +2503,7 @@ void CastleEngine::flushPendingPage() {
 
 // A room page opened: its scenario hotspot (mode 0) starts the question
 // bound to it and the spy asks it
-void CastleEngine::startRoomQuestions(LivePage *page) {
+void DKPengeEngine::startRoomQuestions(LivePage *page) {
 	const Common::Array<LivePanel *> &panels = page->getPanels();
 	for (uint i = 0; i < panels.size(); i++) {
 		for (uint k = 0; k < panels[i]->objects.size(); k++) {
@@ -2511,7 +2511,7 @@ void CastleEngine::startRoomQuestions(LivePage *page) {
 			const GameObject *o = lo.obj;
 			if (o->cls != kObjRandomScenarioHotspot || o->ints.size() < 4)
 				continue;
-			debugC(2, kDebugScript, "Castle: scenario hotspot mode %d question %d name '%s'", o->ints[2], o->ints[3], o->strs.empty() ? "" : o->strs[0].c_str());
+			debugC(2, kDebugScript, "DKPenge: scenario hotspot mode %d question %d name '%s'", o->ints[2], o->ints[3], o->strs.empty() ? "" : o->strs[0].c_str());
 			if (o->ints[2] != 0)
 				continue;
 			lo.value = 0;
@@ -2538,7 +2538,7 @@ static LiveObject *findObjectOfClass(LivePage *page, int cls, bool editBoxes) {
 }
 
 // The edit box that receives the keyboard: the topmost page with one
-LiveObject *CastleEngine::findEditBox(LivePage **pageOut) {
+LiveObject *DKPengeEngine::findEditBox(LivePage **pageOut) {
 	// A clicked box keeps the keyboard while its page is on top
 	if (_editFocus && _editFocusPage && (_popups.empty() ? _editFocusPage == _basePage : _editFocusPage == _popups.back())) {
 		*pageOut = _editFocusPage;
@@ -2561,7 +2561,7 @@ LiveObject *CastleEngine::findEditBox(LivePage **pageOut) {
 	return nullptr;
 }
 
-void CastleEngine::typeKey(int ascii, int keycode) {
+void DKPengeEngine::typeKey(int ascii, int keycode) {
 	if (collageKey(ascii, keycode))
 		return;
 	LivePage *page = nullptr;
@@ -2606,13 +2606,13 @@ void CastleEngine::typeKey(int ascii, int keycode) {
 // QuestionOKButton: checks the typed answer against the lists of the
 // current question. A recognised misspelling keeps the popup open (the
 // original beeps); otherwise the popup closes and the spy reacts.
-void CastleEngine::answerClicked(LiveObject *lo, LivePage *page) {
+void DKPengeEngine::answerClicked(LiveObject *lo, LivePage *page) {
 	LiveObject *edit = findObjectOfClass(page, 0, true);
 	if (!edit)
 		return;
 	int n = lo->obj->ints.size() > 2 ? lo->obj->ints[2] : 1;
 	int result = _quiz->checkAnswer(n, edit->text);
-	debugC(1, kDebugScript, "Castle: quiz: answer %d '%s' -> '%s' -> %d", n, edit->text.c_str(), _quiz->normalize(edit->text).c_str(), result);
+	debugC(1, kDebugScript, "DKPenge: quiz: answer %d '%s' -> '%s' -> %d", n, edit->text.c_str(), _quiz->normalize(edit->text).c_str(), result);
 	if (result == Quiz::kAnswerMisspelled)
 		return;
 	if (page->isPopup())
@@ -2624,7 +2624,7 @@ void CastleEngine::answerClicked(LiveObject *lo, LivePage *page) {
 
 // The conversation videos play over the room view (the first panel of the
 // room page); the names are relative to the room's directory
-void CastleEngine::quizPlayVideo(const Common::String &name) {
+void DKPengeEngine::quizPlayVideo(const Common::String &name) {
 	Common::Rect dest;
 	Common::String dir;
 	if (_basePage) {
@@ -2635,13 +2635,13 @@ void CastleEngine::quizPlayVideo(const Common::String &name) {
 	playVideo(dir, name, dest);
 }
 
-void CastleEngine::quizPlayWave(const Common::String &name) {
+void DKPengeEngine::quizPlayWave(const Common::String &name) {
 	playWave(_basePage ? _basePage->getDir() : Common::String(), name, false);
 }
 
 // Page changes inside a conversation take effect at once, the objects
 // that follow in the group run on the new page
-void CastleEngine::quizChangePage(uint page, int transition) {
+void DKPengeEngine::quizChangePage(uint page, int transition) {
 	Action a;
 	a.type = kActChangePage;
 	a.page = page;
@@ -2650,11 +2650,11 @@ void CastleEngine::quizChangePage(uint page, int transition) {
 	flushPendingPage();
 }
 
-void CastleEngine::quizOpenPopup(uint page) {
+void DKPengeEngine::quizOpenPopup(uint page) {
 	openPopup(page);
 }
 
-void CastleEngine::quizSendMessage(int objectId, int msg) {
+void DKPengeEngine::quizSendMessage(int objectId, int msg) {
 	Action a;
 	a.type = kActSendMessage;
 	a.p[0] = objectId;
@@ -2663,7 +2663,7 @@ void CastleEngine::quizSendMessage(int objectId, int msg) {
 }
 
 // The conversation state goes to the document variable the room scripts test
-void CastleEngine::quizSetState(int state) {
+void DKPengeEngine::quizSetState(int state) {
 	_script->setDocVariable(_db->getTail().vars[0], Value::number(state));
 	_quest->setExtra(state);
 }
@@ -2673,7 +2673,7 @@ void CastleEngine::quizSetState(int state) {
 
 // Fills the Trail list with the navigation history (the Index list is built
 // from its record when the page opens)
-void CastleEngine::setupCollages(LivePage *page) {
+void DKPengeEngine::setupCollages(LivePage *page) {
 	LiveObject *lo = page->findCollage();
 	if (!lo || !lo->collage || !lo->collage->tracker)
 		return;
@@ -2692,7 +2692,7 @@ void CastleEngine::setupCollages(LivePage *page) {
 }
 
 // The list that receives the keyboard: the topmost page with one
-LiveObject *CastleEngine::findCollage(LivePage **pageOut) {
+LiveObject *DKPengeEngine::findCollage(LivePage **pageOut) {
 	for (int i = (int)_popups.size() - 1; i >= 0; i--) {
 		LiveObject *lo = _popups[i]->findCollage();
 		if (lo) {
@@ -2712,7 +2712,7 @@ LiveObject *CastleEngine::findCollage(LivePage **pageOut) {
 
 // A click on the list selects the entry under the mouse; a double click
 // goes to it
-void CastleEngine::collagePress(LiveObject *lo, LivePage *page, const Common::Point &p) {
+void DKPengeEngine::collagePress(LiveObject *lo, LivePage *page, const Common::Point &p) {
 	Collage *c = lo->collage;
 	if (!c)
 		return;
@@ -2731,7 +2731,7 @@ void CastleEngine::collagePress(LiveObject *lo, LivePage *page, const Common::Po
 
 // Releasing the mouse on a Trail entry goes back to it (the Tracker's
 // event handler of the original activates on event 4)
-void CastleEngine::collageRelease(LiveObject *lo, LivePage *page, const Common::Point &p) {
+void DKPengeEngine::collageRelease(LiveObject *lo, LivePage *page, const Common::Point &p) {
 	Collage *c = lo->collage;
 	if (!c || !c->tracker)
 		return;
@@ -2741,7 +2741,7 @@ void CastleEngine::collageRelease(LiveObject *lo, LivePage *page, const Common::
 }
 
 // The selection changed: the Index's edit box shows the entry's full text
-void CastleEngine::collageSelected(LivePage *page, LiveObject *lo) {
+void DKPengeEngine::collageSelected(LivePage *page, LiveObject *lo) {
 	Collage *c = lo->collage;
 	_dirty = true;
 	if (c->tracker || c->selected < 0)
@@ -2757,7 +2757,7 @@ void CastleEngine::collageSelected(LivePage *page, LiveObject *lo) {
 // Text typed into the Index's edit box: the first entry sorting at or after
 // it is selected and completed in the box, the completion selected so that
 // the next key replaces it
-void CastleEngine::collageTyped(LivePage *page, LiveObject *lo) {
+void DKPengeEngine::collageTyped(LivePage *page, LiveObject *lo) {
 	Collage *c = lo->collage;
 	LiveObject *edit = page->findObjectOfClass(kObjEditBox);
 	_dirty = true;
@@ -2778,7 +2778,7 @@ void CastleEngine::collageTyped(LivePage *page, LiveObject *lo) {
 	}
 }
 
-void CastleEngine::scrollCollage(LivePage *page, int delta) {
+void DKPengeEngine::scrollCollage(LivePage *page, int delta) {
 	LiveObject *lo = page ? page->findCollage() : nullptr;
 	if (!lo)
 		lo = findCollage(&page);
@@ -2791,7 +2791,7 @@ void CastleEngine::scrollCollage(LivePage *page, int delta) {
 // Goes to the selected entry: Index entries change the page (scrolling a
 // zoom page to the entry's position) and open a popup (a library book, a
 // glossary entry); Trail entries return to the recorded location
-void CastleEngine::activateCollageItem(LivePage *page, LiveObject *lo) {
+void DKPengeEngine::activateCollageItem(LivePage *page, LiveObject *lo) {
 	Collage *c = lo->collage;
 	if (!c || c->selected < 0 || c->selected >= c->count())
 		return;
@@ -2800,7 +2800,7 @@ void CastleEngine::activateCollageItem(LivePage *page, LiveObject *lo) {
 		goToTrailEntry(it.entry);
 		return;
 	}
-	debugC(1, kDebugScript, "Castle: index entry '%s' page %u popup %u at %d,%d", it.full.c_str(), it.page, it.popup, it.pt.x, it.pt.y);
+	debugC(1, kDebugScript, "DKPenge: index entry '%s' page %u popup %u at %d,%d", it.full.c_str(), it.page, it.popup, it.pt.x, it.pt.y);
 	if (page->isPopup())
 		closePopup(page->getIndex());
 	// lo and c are gone with the popup
@@ -2840,7 +2840,7 @@ static void scrollBarGeometry(Resources &res, const LiveObject &lo, int &barTop,
 	coinH = coin ? coin->surface.h : 16;
 }
 
-void CastleEngine::scrollBarPress(LiveObject *lo, LivePage *page, const Common::Point &p) {
+void DKPengeEngine::scrollBarPress(LiveObject *lo, LivePage *page, const Common::Point &p) {
 	int pos, maxPos, pageSize;
 	if (!page->getScrollState(pos, maxPos, pageSize))
 		return;
@@ -2868,7 +2868,7 @@ void CastleEngine::scrollBarPress(LiveObject *lo, LivePage *page, const Common::
 	_dirty = true;
 }
 
-void CastleEngine::scrollBarDrag(LiveObject *lo, LivePage *page, const Common::Point &p) {
+void DKPengeEngine::scrollBarDrag(LiveObject *lo, LivePage *page, const Common::Point &p) {
 	int pos, maxPos, pageSize;
 	if (!page || !page->getScrollState(pos, maxPos, pageSize))
 		return;
@@ -2887,7 +2887,7 @@ void CastleEngine::scrollBarDrag(LiveObject *lo, LivePage *page, const Common::P
 
 // Keys on a page with a list (the GroupCollage of the original): Enter
 // goes to the selection, the cursor keys move it, characters search
-bool CastleEngine::collageKey(int ascii, int keycode) {
+bool DKPengeEngine::collageKey(int ascii, int keycode) {
 	LivePage *page = nullptr;
 	LiveObject *lo = findCollage(&page);
 	if (!lo || !lo->collage)
@@ -2943,7 +2943,7 @@ bool CastleEngine::collageKey(int ascii, int keycode) {
 // the Castle Guide carry their titles in the document; other pages carry
 // theirs in their record. Pages without a title (the title page, the
 // options) are not recorded.
-bool CastleEngine::describeLocation(LivePage *page, bool popup, TrailEntry &e) {
+bool DKPengeEngine::describeLocation(LivePage *page, bool popup, TrailEntry &e) {
 	const DocumentTail &t = _db->getTail();
 	PageRecord *rec = page->getRecord();
 	if (!rec)
@@ -2983,7 +2983,7 @@ bool CastleEngine::describeLocation(LivePage *page, bool popup, TrailEntry &e) {
 	return !e.title.empty() && e.icon > 0;
 }
 
-void CastleEngine::recordTrail(LivePage *page, bool popup) {
+void DKPengeEngine::recordTrail(LivePage *page, bool popup) {
 	if (_trailNavigating) {
 		// Returning to an entry: the pages opened on the way are not new
 		if (popup || !_pendingPopup)
@@ -3001,11 +3001,11 @@ void CastleEngine::recordTrail(LivePage *page, bool popup) {
 	if (_trail.size() >= 60)
 		_trail.remove_at(0);
 	_trail.push_back(e);
-	debugC(1, kDebugScript, "Castle: trail %u: '%s' icon %d page %u popup %u", _trail.size(), e.title.c_str(), e.icon, e.page, e.popup);
+	debugC(1, kDebugScript, "DKPenge: trail %u: '%s' icon %d page %u popup %u", _trail.size(), e.title.c_str(), e.icon, e.page, e.popup);
 }
 
 // Keeps the latest entry's view position up to date while on a zoom page
-void CastleEngine::updateTrailScroll() {
+void DKPengeEngine::updateTrailScroll() {
 	if (!_basePage || _trail.empty())
 		return;
 	TrailEntry &last = _trail.back();
@@ -3013,11 +3013,11 @@ void CastleEngine::updateTrailScroll() {
 		last.scroll = _basePage->getScroll();
 }
 
-void CastleEngine::goToTrailEntry(int entry) {
+void DKPengeEngine::goToTrailEntry(int entry) {
 	if (entry < 0 || entry >= (int)_trail.size())
 		return;
 	TrailEntry e = _trail[entry];
-	debugC(1, kDebugScript, "Castle: trail back to '%s' page %u popup %u", e.title.c_str(), e.page, e.popup);
+	debugC(1, kDebugScript, "DKPenge: trail back to '%s' page %u popup %u", e.title.c_str(), e.page, e.popup);
 	closeAllPopups();
 	_trailNavigating = true;
 	if (!_basePage || _basePage->getIndex() != e.page) {
@@ -3038,14 +3038,14 @@ void CastleEngine::goToTrailEntry(int entry) {
 
 // ---- Chest scrolls ---------------------------------------------------------
 
-void CastleEngine::focusEditBox(LiveObject *lo, LivePage *page) {
+void DKPengeEngine::focusEditBox(LiveObject *lo, LivePage *page) {
 	_editFocus = lo;
 	_editFocusPage = page;
 }
 
 // A page is about to close: the chest scroll popup saves its answers and,
 // after its OK was pressed, marks the right ones
-void CastleEngine::pageClosing(LivePage *page) {
+void DKPengeEngine::pageClosing(LivePage *page) {
 	if (_editFocusPage == page) {
 		_editFocus = nullptr;
 		_editFocusPage = nullptr;
@@ -3054,7 +3054,7 @@ void CastleEngine::pageClosing(LivePage *page) {
 }
 
 // The answer of a chest scroll against the scenario's answer lists
-bool CastleEngine::scrollAnswerMatches(int i, const Common::String &text, bool misspelled) const {
+bool DKPengeEngine::scrollAnswerMatches(int i, const Common::String &text, bool misspelled) const {
 	int scenario = _quest->getScenario();
 	int index = (scenario - 1) * 4 + i;
 	if (scenario < 1 || scenario > 3 || i < 0 || i >= 4 || index >= 12)
@@ -3071,7 +3071,7 @@ bool CastleEngine::scrollAnswerMatches(int i, const Common::String &text, bool m
 // The OK of a scroll (ScrollQuestAnswerHtsp): recognised misspellings are
 // shown in red with the spelling popup; otherwise the scroll is judged when
 // it closes
-void CastleEngine::checkScrollAnswers(LiveObject *lo, LivePage *page) {
+void DKPengeEngine::checkScrollAnswers(LiveObject *lo, LivePage *page) {
 	const Common::Array<LivePanel *> &panels = page->getPanels();
 	bool misspelt = false;
 	for (uint i = 0; i < panels.size(); i++)
@@ -3094,7 +3094,7 @@ void CastleEngine::checkScrollAnswers(LiveObject *lo, LivePage *page) {
 	}
 }
 
-void CastleEngine::scrollPageClosing(LivePage *page) {
+void DKPengeEngine::scrollPageClosing(LivePage *page) {
 	LiveObject *ok = page->findObjectOfClass(kObjScrollQuestAnswerHtsp);
 	if (!ok)
 		return;
@@ -3108,7 +3108,7 @@ void CastleEngine::scrollPageClosing(LivePage *page) {
 			if (idx >= 0 && idx < Quest::kScrolls && box.text != _quest->getScrollText(idx))
 				_quest->setScroll(idx, box.text, _quest->getScrollFlag(idx));
 		}
-	debugC(2, kDebugScript, "Castle: scroll closing, OK %d, answers '%s' '%s' '%s' '%s'", ok->value, _quest->getScrollText(0).c_str(),
+	debugC(2, kDebugScript, "DKPenge: scroll closing, OK %d, answers '%s' '%s' '%s' '%s'", ok->value, _quest->getScrollText(0).c_str(),
 	       _quest->getScrollText(1).c_str(), _quest->getScrollText(2).c_str(), _quest->getScrollText(3).c_str());
 	if (ok->value != 1)
 		return;
@@ -3122,7 +3122,7 @@ void CastleEngine::scrollPageClosing(LivePage *page) {
 		_quest->setScroll(i, _quest->getScrollText(i), good ? 1 : 0);
 		all = all && good;
 	}
-	debugC(1, kDebugScript, "Castle: scroll judged: %s", all ? "all right" : "some wrong");
+	debugC(1, kDebugScript, "DKPenge: scroll judged: %s", all ? "all right" : "some wrong");
 	Common::String dir = "\\chest\\";
 	queueWave(dir, "con02");
 	queueWave(dir, "conrustl");
@@ -3141,12 +3141,12 @@ void CastleEngine::scrollPageClosing(LivePage *page) {
 }
 
 // Waves played one after the other (the original waits for each to end)
-void CastleEngine::queueWave(const Common::String &dir, const Common::String &name) {
+void DKPengeEngine::queueWave(const Common::String &dir, const Common::String &name) {
 	_waveQueueDir = dir;
 	_waveQueue.push_back(name);
 }
 
-void CastleEngine::updateWaveQueue() {
+void DKPengeEngine::updateWaveQueue() {
 	if (_waveQueue.empty() || _mixer->isSoundHandleActive(_waveHandle))
 		return;
 	Common::String name = _waveQueue[0];
@@ -3157,7 +3157,7 @@ void CastleEngine::updateWaveQueue() {
 
 // Redraws a part of the screen in a random order of 4x4 blocks, as the
 // cutaway covers do (FUN_00423890 walks the blocks with a shift register)
-void CastleEngine::dissolveRect(const Common::Rect &rIn) {
+void DKPengeEngine::dissolveRect(const Common::Rect &rIn) {
 	Common::Rect r(rIn);
 	r.clip(Common::Rect(0, 0, _screen.w, _screen.h));
 	if (r.isEmpty() || _noScreenUpdate) {
@@ -3200,7 +3200,7 @@ void CastleEngine::dissolveRect(const Common::Rect &rIn) {
 
 // Wipes the new page (in _screen) over the old one: code 5 sweeps from the
 // left edge, code 4 from the right
-void CastleEngine::wipeTransition(const Graphics::Surface &from, int code) {
+void DKPengeEngine::wipeTransition(const Graphics::Surface &from, int code) {
 	Graphics::Surface frame;
 	frame.copyFrom(from);
 	const int duration = 350;
@@ -3229,4 +3229,4 @@ void CastleEngine::wipeTransition(const Graphics::Surface &from, int code) {
 	frame.free();
 }
 
-} // End of namespace Castle
+} // End of namespace DKPenge
