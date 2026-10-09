@@ -258,6 +258,13 @@ bool LivePage::open(Database &db, Resources &res, uint index, const Common::Poin
 	createCollages(db, res);
 	debugC(1, kDebugGeneral, "Castle: opened page %u type %d template %d dir '%s' panels %u bounds %d,%d,%d,%d",
 	       index, _rec->type, _rec->id, _dir.c_str(), _panels.size(), _bounds.left, _bounds.top, _bounds.right, _bounds.bottom);
+	// Edit boxes draw with their text style (size and alignment)
+	for (uint pi = 0; pi < _panels.size(); pi++)
+		for (uint k = 0; k < _panels[pi]->objects.size(); k++) {
+			LiveObject &lo = _panels[pi]->objects[k];
+			if ((lo.obj->cls == kObjEditBox || lo.obj->cls == kObjRoomEditBox || lo.obj->cls == kObjScrollEditBox) && lo.obj->ints.size() > 1)
+				lo.style = db.findStyle(lo.obj->ints[1]);
+		}
 	return true;
 }
 
@@ -420,10 +427,19 @@ void LivePage::draw(Graphics::Surface &screen, Resources &res) const {
 			debugC(4, kDebugGraphics, "Castle: draw %s %d visible=%d image=%p z=%d rect=%d,%d,%d,%d", objectClassName(lo.obj->cls), lo.obj->id, lo.visible ? 1 : 0, (const void *)lo.image, lo.zOrder, lo.rect.left, lo.rect.top, lo.rect.right, lo.rect.bottom);
 			if (lo.obj->cls == kObjEditBox || lo.obj->cls == kObjRoomEditBox || lo.obj->cls == kObjScrollEditBox) {
 				// The typed text, vertically centred in the box
-				const Graphics::Font *font = lo.visible && !lo.text.empty() ? res.getTextFont() : nullptr;
+				const Graphics::Font *font = nullptr;
+				Common::Rect r = lo.rect;
+				r.clip(lp->rect);
+				bool centred = false;
+				if (lo.visible && !lo.text.empty()) {
+					// The style's size is in tenths of a point; the box must fit it
+					int px = 16;
+					if (lo.style && lo.style->size > 0)
+						px = CLIP<int>(lo.style->size * 96 / 720, 12, MAX<int>(12, r.height() - 2));
+					centred = lo.style && lo.style->flags[0] != 0;
+					font = res.getTextFont(px);
+				}
 				if (font) {
-					Common::Rect r = lo.rect;
-					r.clip(lp->rect);
 					int y = r.top + (r.height() - font->getFontHeight()) / 2;
 					if (lo.selStart >= 0 && lo.selStart < (int)lo.text.size()) {
 						// The auto-completed part of an index entry is selected
@@ -436,7 +452,7 @@ void LivePage::draw(Graphics::Surface &screen, Resources &res) const {
 					}
 					// Misspelt chest scroll answers are shown in red
 					byte colour = lo.value == 1 ? res.findPaletteColor(0xc9, 0x0a, 0x0a) : res.findPaletteColor(0, 0, 0);
-					font->drawString(&screen, lo.text, r.left + 2, y, r.width() - 4, colour);
+					font->drawString(&screen, lo.text, r.left + 2, y, r.width() - 4, colour, centred ? Graphics::kTextAlignCenter : Graphics::kTextAlignLeft);
 				}
 				continue;
 			}

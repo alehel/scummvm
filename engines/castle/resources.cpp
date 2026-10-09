@@ -73,6 +73,8 @@ void Resources::buildHighlightTable(const byte *palette) {
 
 Resources::~Resources() {
 	delete _textFont;
+	for (Common::HashMap<int, Graphics::Font *>::iterator it = _sizedFonts.begin(); it != _sizedFonts.end(); ++it)
+		delete it->_value;
 	for (Common::HashMap<Common::String, Image *>::iterator it = _imageCache.begin(); it != _imageCache.end(); ++it)
 		delete it->_value;
 	for (uint i = 0; i < _cursorGroups.size(); i++)
@@ -597,6 +599,16 @@ Graphics::Cursor *Resources::getCursor(const Common::String &nameIn) {
 	}
 	_cursorCache[name] = cursor;
 	return cursor;
+}
+
+const Graphics::Font *Resources::getTextFont(int pixelSize) {
+	if (pixelSize <= 0 || pixelSize == 16)
+		return getTextFont();
+	if (_sizedFonts.contains(pixelSize))
+		return _sizedFonts[pixelSize] ? _sizedFonts[pixelSize] : getTextFont();
+	Graphics::Font *f = Graphics::loadTTFFontFromArchive("LiberationSerif-Regular.ttf", pixelSize, Graphics::kTTFSizeModeCell);
+	_sizedFonts[pixelSize] = f;
+	return f ? f : getTextFont();
 }
 
 const Graphics::Font *Resources::getTextFont() {

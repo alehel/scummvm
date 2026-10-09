@@ -1069,8 +1069,8 @@ bool Database::readDocumentTail(Common::SeekableReadStream &s, uint32 end) {
 	int n = readCount(s);
 	for (int i = 0; i < n; i++) {
 		TextStyle st;
-		st.fontId = s.readSint16BE();
-		st.id = s.readSint16BE();
+		st.id = s.readSint16BE();      // the style id the objects refer to
+		st.fontId = s.readSint16BE();  // the font record (3324 Times New Roman)
 		for (int k = 0; k < 4; k++)
 			readRGB(s, st.rgb[k]);
 		st.size = s.readSint16BE();
@@ -1078,6 +1078,7 @@ bool Database::readDocumentTail(Common::SeekableReadStream &s, uint32 end) {
 			st.flags[k] = s.readSint16BE();
 		st.fontName = readInlineString(s);
 		s.skip(2);
+		debugC(2, kDebugDatabase, "Castle: text style id %d font %d size %d flags %d %d %d %d '%s'", st.id, st.fontId, st.size, st.flags[0], st.flags[1], st.flags[2], st.flags[3], st.fontName.c_str());
 		_tail.styles.push_back(st);
 	}
 	n = readCount(s);

@@ -90,6 +90,8 @@ public:
 
 	// The serif font the edit boxes are typed in (Times New Roman in the original)
 	const Graphics::Font *getTextFont();
+	// The same face at another pixel size (cached)
+	const Graphics::Font *getTextFont(int pixelSize);
 	// Index of the closest colour in the current screen palette
 	byte findPaletteColor(byte r, byte g, byte b) const;
 
@@ -106,6 +108,7 @@ private:
 	Common::PEResources *_exe;
 	Graphics::Font *_textFont;
 	bool _textFontTried;
+	Common::HashMap<int, Graphics::Font *> _sizedFonts;
 	byte _highlight[256];
 	Common::HashMap<Common::String, Image *> _imageCache;
 	Common::HashMap<Common::String, Graphics::Cursor *> _cursorCache;
