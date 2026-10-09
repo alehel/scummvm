@@ -69,9 +69,7 @@ bool Collage::select(int item, int dir) {
 void Collage::moveSelection(int delta, int dir) {
 	int item = selected < 0 ? (delta < 0 ? count() - 1 : 0) : selected + delta;
 	item = CLIP(item, 0, count() - 1);
-	if (!select(item, dir) && selected >= 0 && item != selected) {
-		// Blocked by a heading at the edge: stay put
-	}
+	select(item, dir); // a heading at the edge leaves the selection alone
 	ensureVisible(selected);
 }
 
