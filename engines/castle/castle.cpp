@@ -27,6 +27,7 @@
 #include "engines/util.h"
 #include "audio/audiostream.h"
 #include "audio/decoders/wave.h"
+#include "graphics/cursor.h"
 #include "graphics/cursorman.h"
 #include "graphics/palette.h"
 #include "graphics/paletteman.h"
@@ -100,6 +101,7 @@ Common::Error CastleEngine::run() {
 		start = ConfMan.getInt("boot_param");
 	openBasePage(start);
 
+	setCursor(_db->getDefaultCursor());
 	CursorMan.showMouse(true);
 
 	// Debug harness: CASTLE_DUMP=<dir> writes a PNG of the screen after each
@@ -652,6 +654,16 @@ void CastleEngine::updateSprites(uint32 now) {
 	}
 }
 
+void CastleEngine::setCursor(const Common::String &name) {
+	if (name == _cursorName)
+		return;
+	Graphics::Cursor *cursor = _res->getCursor(name);
+	if (!cursor)
+		return;
+	CursorMan.replaceCursor(cursor);
+	_cursorName = name;
+}
+
 void CastleEngine::handleMouseMove(const Common::Point &p) {
 	LivePage *page = nullptr;
 	LiveObject *lo = nullptr;
@@ -675,6 +687,7 @@ void CastleEngine::handleMouseMove(const Common::Point &p) {
 	}
 	_hoverObject = lo;
 	_hoverPage = page;
+	setCursor(lo && !lo->obj->cursor.empty() ? lo->obj->cursor : _db->getDefaultCursor());
 	if (lo) {
 		const Event *ev = lo->obj->findEvent(kEventRollOn);
 		if (ev)

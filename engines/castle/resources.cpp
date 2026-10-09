@@ -24,6 +24,7 @@
 #include "common/formats/winexe_pe.h"
 #include "common/memstream.h"
 #include "common/textconsole.h"
+#include "graphics/wincursor.h"
 #include "image/bmp.h"
 #include "image/png.h"
 
@@ -63,6 +64,10 @@ void Resources::buildHighlightTable(const byte *palette) {
 Resources::~Resources() {
 	for (Common::HashMap<Common::String, Image *>::iterator it = _imageCache.begin(); it != _imageCache.end(); ++it)
 		delete it->_value;
+	for (uint i = 0; i < _cursorGroups.size(); i++)
+		delete _cursorGroups[i];
+	for (uint i = 0; i < _ownedCursors.size(); i++)
+		delete _ownedCursors[i];
 	delete _exe;
 }
 
@@ -297,6 +302,58 @@ Image *Resources::loadImage(const Common::String &dir, const Common::String &nam
 		debugC(1, kDebugGraphics, "Castle: image '%s' (dir '%s') not found or undecodable", name.c_str(), dir.c_str());
 	_imageCache[key] = img;
 	return img;
+}
+
+// Cursor names registered by the original executable and their resource ids
+// (ids >= 32512 are standard Windows cursors).
+static const struct { const char *name; uint16 id; } kCursorTable[] = {
+	{ "Arrow", 32512 }, { "Normal", 32512 }, { "Watch", 32514 }, { "Wait", 32514 },
+	{ "Hand", 4000 }, { "Up", 4001 }, { "Down", 4002 }, { "Left", 4003 }, { "Right", 4004 },
+	{ "UpLeft", 4005 }, { "UpRight", 4006 }, { "DownLeft", 4007 }, { "DownRight", 4008 },
+	{ "Magnify", 4009 }, { "Magnifier", 4009 }, { "Demagnify", 4010 }, { "Point", 4014 },
+	{ "Grab", 4013 }, { "Palm", 4012 }, { "3DForward", 126 }, { "3DRight", 128 }, { "3DLeft", 127 },
+	{ "3DBack", 125 }, { "3DHand", 4000 }, { "3DDrag", 4013 }, { "3DUp", 4001 }, { "3DDown", 4002 },
+	{ "PageTurn1", 134 }, { "PageTurn2", 133 }, { "PageTurn3", 132 }, { "IBeam", 32513 },
+	{ nullptr, 0 }
+};
+
+Graphics::Cursor *Resources::getCursor(const Common::String &nameIn) {
+	Common::String name = nameIn;
+	name.toLowercase();
+	if (name.empty())
+		name = "arrow";
+	if (_cursorCache.contains(name))
+		return _cursorCache[name];
+	uint16 id = 0;
+	for (int i = 0; kCursorTable[i].name; i++) {
+		Common::String n = kCursorTable[i].name;
+		n.toLowercase();
+		if (n == name) {
+			id = kCursorTable[i].id;
+			break;
+		}
+	}
+	Graphics::Cursor *cursor = nullptr;
+	if (id == 32514) {
+		cursor = Graphics::makeBusyWinCursor();
+		_ownedCursors.push_back(cursor);
+	} else if (id >= 32512 || id == 0 || !_exe) {
+		cursor = Graphics::makeDefaultWinCursor();
+		_ownedCursors.push_back(cursor);
+	} else {
+		Graphics::WinCursorGroup *group = Graphics::WinCursorGroup::createCursorGroup(_exe, Common::WinResourceID(id));
+		if (group && !group->cursors.empty()) {
+			_cursorGroups.push_back(group);
+			cursor = group->cursors[0].cursor;
+		} else {
+			delete group;
+			debugC(1, kDebugGraphics, "Castle: cursor '%s' (id %d) not found", nameIn.c_str(), id);
+			cursor = Graphics::makeDefaultWinCursor();
+			_ownedCursors.push_back(cursor);
+		}
+	}
+	_cursorCache[name] = cursor;
+	return cursor;
 }
 
 Common::SeekableReadStream *Resources::openWave(const Common::String &dir, const Common::String &name) {

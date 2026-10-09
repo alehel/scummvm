@@ -67,6 +67,7 @@ public:
 	void runSpriteFrameScripts(LivePage *page, LiveObject *lo, int event, int frame);
 	void handleMouseMove(const Common::Point &p);
 	LiveObject *findHighlightObject(LivePage *page);
+	void setCursor(const Common::String &name);
 
 private:
 	void handleEvents();
@@ -106,6 +107,7 @@ private:
 	bool _pendingBase;
 	Common::Point _pendingScroll;
 
+	Common::String _cursorName;
 	Common::String _dumpDir;
 	int _dumpCount;
 	Audio::SoundHandle _waveHandle;

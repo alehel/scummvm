@@ -33,6 +33,11 @@ namespace Common {
 class PEResources;
 }
 
+namespace Graphics {
+class Cursor;
+struct WinCursorGroup;
+}
+
 namespace Castle {
 
 // A decoded 8-bit image with its palette
@@ -69,6 +74,10 @@ public:
 	// Loads a bitmap (cached). Returns nullptr if missing.
 	Image *loadImage(const Common::String &dir, const Common::String &name);
 
+	// Returns the cursor registered under a game cursor name ("Arrow",
+	// "Hand", "3DBack", ...). The resources keep ownership.
+	Graphics::Cursor *getCursor(const Common::String &name);
+
 	Common::SeekableReadStream *openWave(const Common::String &dir, const Common::String &name);
 	Common::SeekableReadStream *openAnimation(const Common::String &dir, const Common::String &name);
 	Common::SeekableReadStream *openVideo(const Common::String &dir, const Common::String &name);
@@ -88,6 +97,9 @@ private:
 	Common::PEResources *_exe;
 	byte _highlight[256];
 	Common::HashMap<Common::String, Image *> _imageCache;
+	Common::HashMap<Common::String, Graphics::Cursor *> _cursorCache;
+	Common::Array<Graphics::WinCursorGroup *> _cursorGroups;
+	Common::Array<Graphics::Cursor *> _ownedCursors;
 };
 
 } // End of namespace Castle
