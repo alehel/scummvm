@@ -148,7 +148,9 @@ Common::Error CastleEngine::run() {
 	// Each entry is "x,y" for a click, "m:x,y" for a mouse move, "p:x,y"
 	// for a button press, "r:x,y" for a release, "s:slot,0" saves and
 	// "l:slot,0" loads a game, "t:code,0" types the character code
-	// (13 = Enter, 8 = Backspace, 9 = Tab), "o:page,0" opens a popup page.
+	// (13 = Enter, 8 = Backspace, 9 = Tab), "o:page,0" opens a popup page,
+	// "g:id,0" presses the centre of object id, "d:dx,dy" moves the mouse by
+	// a delta (dragging when a button is held), "u:0,0" releases in place.
 	Common::Array<Common::Point> clicks;
 	Common::Array<char> clickKind;
 	if (ConfMan.hasKey("castle_clicks")) {
@@ -170,6 +172,7 @@ Common::Error CastleEngine::run() {
 	// castle_clickdelay: milliseconds between scripted clicks (default 1500)
 	uint32 clickDelay = ConfMan.hasKey("castle_clickdelay") ? ConfMan.getInt("castle_clickdelay") : 1500;
 	uint32 nextClick = _system->getMillis() + clickDelay;
+	Common::Point lastPt(0, 0);
 	_dumpDir = dumpDirStr;
 
 	while (!shouldQuit()) {
@@ -181,7 +184,24 @@ Common::Error CastleEngine::run() {
 				Common::Point pt = clicks[clickIdx];
 				char kind = clickKind[clickIdx++];
 				LivePage *page = nullptr;
-				LiveObject *lo = (kind == 'c' || kind == 'p') ? hitTest(pt, &page) : nullptr;
+				LiveObject *lo = nullptr;
+				if (kind == 'g') {
+					lo = findLiveObject(pt.x, nullptr);
+					if (lo) {
+						pt = Common::Point((lo->rect.left + lo->rect.right) / 2, (lo->rect.top + lo->rect.bottom) / 2);
+						page = lo->panel->page;
+					}
+					kind = 'p';
+				} else if (kind == 'd') {
+					pt = lastPt + pt;
+					kind = 'm';
+				} else if (kind == 'u') {
+					pt = lastPt;
+					kind = 'r';
+				}
+				if ((kind == 'c' || kind == 'p') && !lo)
+					lo = hitTest(pt, &page);
+				lastPt = pt;
 				debugC(1, kDebugScript, "Castle: scripted %c %d,%d -> %s", kind, pt.x, pt.y, lo ? objectClassName(lo->obj->cls) : "nothing");
 				if (kind == 'm') {
 					if (_dragging || _dragPage || _scrollBarDrag || (_pressedObject && _pressedObject->obj->cls == kObjCollage))
