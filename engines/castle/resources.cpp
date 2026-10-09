@@ -159,6 +159,19 @@ Common::SeekableReadStream *Resources::openExeWave(const Common::String &name) {
 
 // Decodes an 8-bit Windows bitmap, including the RLE8 compressed ones that
 // the generic decoder does not handle.
+// The original draws rollover artwork with pure green as the colour key
+static void findKeyIndex(Image *img) {
+	img->keyIndex = -1;
+	for (uint i = 0; i < img->palette.size(); i++) {
+		byte r, g, b;
+		img->palette.get(i, r, g, b);
+		if (r == 0 && g == 255 && b == 0) {
+			img->keyIndex = i;
+			return;
+		}
+	}
+}
+
 static Image *decodeBitmap8(Common::SeekableReadStream *stream) {
 	stream->seek(0);
 	if (stream->readByte() != 'B' || stream->readByte() != 'M')
@@ -194,6 +207,7 @@ static Image *decodeBitmap8(Common::SeekableReadStream *stream) {
 		stream->readByte();
 		img->palette.set(i, r, g, b);
 	}
+	findKeyIndex(img);
 	img->surface.create(width, height, Graphics::PixelFormat::createFormatCLUT8());
 	memset(img->surface.getPixels(), 0, img->surface.pitch * height);
 	stream->seek(dataOffset);
@@ -273,6 +287,7 @@ Image *Resources::decodeImage(Common::SeekableReadStream *stream) {
 	img->palette = decoder->getPalette();
 	img->hasTransparentColor = decoder->hasTransparentColor();
 	img->transparentColor = decoder->getTransparentColor();
+	findKeyIndex(img);
 	delete decoder;
 	return img;
 }

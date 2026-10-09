@@ -46,7 +46,8 @@ struct Image {
 	Graphics::Palette palette;
 	bool hasTransparentColor;
 	uint32 transparentColor;
-	Image() : palette(0), hasTransparentColor(false), transparentColor(0) {}
+	int keyIndex;               // palette index of pure green (0,255,0), the colour key, or -1
+	Image() : palette(0), hasTransparentColor(false), transparentColor(0), keyIndex(-1) {}
 	~Image() { surface.free(); }
 };
 

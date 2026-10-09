@@ -108,14 +108,20 @@ Common::Error CastleEngine::run() {
 	// render, CASTLE_CLICKS="x,y;x,y;..." performs scripted clicks and quits.
 	Common::String dumpDirStr = ConfMan.hasKey("castle_dump") ? ConfMan.get("castle_dump") : Common::String();
 	const char *dumpDir = dumpDirStr.empty() ? nullptr : dumpDirStr.c_str();
+	// Each entry is "x,y" for a click or "m:x,y" for a mouse move.
 	Common::Array<Common::Point> clicks;
+	Common::Array<bool> clickIsMove;
 	if (ConfMan.hasKey("castle_clicks")) {
 		Common::StringTokenizer tok(ConfMan.get("castle_clicks"), ";");
 		while (!tok.empty()) {
 			Common::String t = tok.nextToken();
+			bool move = t.hasPrefix("m:");
+			if (move)
+				t = t.substr(2);
 			int x = 0, y = 0;
 			sscanf(t.c_str(), "%d,%d", &x, &y);
 			clicks.push_back(Common::Point(x, y));
+			clickIsMove.push_back(move);
 		}
 	}
 	uint clickIdx = 0;
@@ -128,11 +134,14 @@ Common::Error CastleEngine::run() {
 			if (clickIdx >= clicks.size()) {
 				quitGame();
 			} else {
-				Common::Point pt = clicks[clickIdx++];
+				Common::Point pt = clicks[clickIdx];
+				bool move = clickIsMove[clickIdx++];
 				LivePage *page = nullptr;
-				LiveObject *lo = hitTest(pt, &page);
-				debugC(1, kDebugScript, "Castle: scripted click %d,%d -> %s", pt.x, pt.y, lo ? objectClassName(lo->obj->cls) : "nothing");
-				if (lo) {
+				LiveObject *lo = move ? nullptr : hitTest(pt, &page);
+				debugC(1, kDebugScript, "Castle: scripted %s %d,%d -> %s", move ? "move" : "click", pt.x, pt.y, lo ? objectClassName(lo->obj->cls) : "nothing");
+				if (move) {
+					handleMouseMove(pt);
+				} else if (lo) {
 					const Event *ev = lo->obj->findEvent(kEventClick);
 					if (ev)
 						runEvent(ev, page, lo);
@@ -682,15 +691,42 @@ void CastleEngine::handleMouseMove(const Common::Point &p) {
 		lo = _basePage->objectAt(p, false);
 		page = _basePage;
 	}
+	// Roll-off-close pages (the drop-down navigation bar): in the original
+	// each page is a child window, and this page type closes itself when the
+	// mouse leaves its window for another page's window, provided it is still
+	// the topmost page. The pointer therefore has to enter the page first.
+	for (int i = (int)_popups.size() - 1; i >= 0; i--) {
+		LivePage *pop = _popups[i];
+		if (pop->getType() != kPageRolloffClose)
+			continue;
+		if (pop->getBounds().contains(p)) {
+			pop->setMouseEntered(true);
+		} else if (pop->mouseEntered() && i == (int)_popups.size() - 1) {
+			if (lo && page == pop) {
+				lo = nullptr;
+				page = nullptr;
+			}
+			closePopup(pop->getIndex());
+		}
+	}
+	debugC(2, kDebugScript, "Castle: mouse %d,%d over %s%s", p.x, p.y, lo ? objectClassName(lo->obj->cls) : "nothing", lo == _hoverObject ? " (unchanged)" : "");
 	if (lo == _hoverObject)
 		return;
 	if (_hoverObject) {
+		if (_hoverObject->obj->cls == kObjNavRollOverButton) {
+			_hoverObject->hovered = false;
+			_dirty = true;
+		}
 		const Event *ev = _hoverObject->obj->findEvent(kEventRollOff);
 		if (ev)
 			runEvent(ev, _hoverPage, _hoverObject);
 	}
 	_hoverObject = lo;
 	_hoverPage = page;
+	if (lo && lo->obj->cls == kObjNavRollOverButton) {
+		lo->hovered = true;
+		_dirty = true;
+	}
 	setCursor(lo && !lo->obj->cursor.empty() ? lo->obj->cursor : _db->getDefaultCursor());
 	if (lo) {
 		const Event *ev = lo->obj->findEvent(kEventRollOn);

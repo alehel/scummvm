@@ -52,6 +52,7 @@ struct LiveObject {
 	bool playing;
 	bool visible;
 	bool disabled;
+	bool hovered;           // mouse is over the object (rollover buttons)
 	int zOrder;
 	int value;
 	int counters[5];
@@ -62,7 +63,7 @@ struct LiveObject {
 	uint32 spriteStartTime;
 	bool spriteStarted;
 	LiveObject() : obj(nullptr), panel(nullptr), image(nullptr), frame(0), frameCount(0), frameDelay(100), nextFrameTime(0),
-			playing(false), visible(true), disabled(false), zOrder(0), value(0), spriteFlags(0), spriteState(0), spriteLoops(-1), spriteStartTime(0), spriteStarted(false) {
+			playing(false), visible(true), disabled(false), hovered(false), zOrder(0), value(0), spriteFlags(0), spriteState(0), spriteLoops(-1), spriteStartTime(0), spriteStarted(false) {
 		memset(counters, 0, sizeof(counters));
 		memset(extra, 0, sizeof(extra));
 	}
@@ -107,6 +108,8 @@ public:
 	bool isPopup() const { return getType() == kPagePopup || getType() == kPageDragPopup || getType() == kPageRolloffClose; }
 	const Common::String &getDir() const { return _dir; }
 	Common::Rect getBounds() const { return _bounds; }
+	bool mouseEntered() const { return _mouseEntered; }
+	void setMouseEntered(bool b) { _mouseEntered = b; }
 	const Common::Array<LivePanel *> &getPanels() const { return _panels; }
 	const Image *getPaletteImage() const { return _paletteImage; }
 	PageRecord *getRecord() const { return _rec; }
@@ -124,6 +127,7 @@ private:
 	Common::String _dir;
 	Common::Point _origin;
 	Common::Rect _bounds;
+	bool _mouseEntered;     // roll-off-close pages: the pointer has been inside the page
 	Common::Array<LivePanel *> _panels;
 	Image *_paletteImage;
 	Scope _scope;

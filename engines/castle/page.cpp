@@ -30,7 +30,7 @@
 
 namespace Castle {
 
-LivePage::LivePage() : _index(0), _rec(nullptr), _tmpl(nullptr), _paletteImage(nullptr) {
+LivePage::LivePage() : _index(0), _rec(nullptr), _tmpl(nullptr), _mouseEntered(false), _paletteImage(nullptr) {
 }
 
 LivePage::~LivePage() {
@@ -216,7 +216,7 @@ bool LivePage::open(Database &db, Resources &res, uint index, const Common::Poin
 	return true;
 }
 
-static void blitImage(Graphics::Surface &screen, const Image *img, const Common::Rect &dst, const Common::Rect &clipTo) {
+static void blitImage(Graphics::Surface &screen, const Image *img, const Common::Rect &dst, const Common::Rect &clipTo, int keyIndex = -1) {
 	Common::Rect r = dst;
 	Common::Rect clip(0, 0, screen.w, screen.h);
 	clip.clip(clipTo);
@@ -235,6 +235,10 @@ static void blitImage(Graphics::Surface &screen, const Image *img, const Common:
 		if (img->hasTransparentColor) {
 			for (int x = 0; x < w; x++)
 				if (src[x] != img->transparentColor)
+					d[x] = src[x];
+		} else if (keyIndex >= 0) {
+			for (int x = 0; x < w; x++)
+				if (src[x] != keyIndex)
 					d[x] = src[x];
 		} else {
 			memcpy(d, src, w);
@@ -286,6 +290,12 @@ void LivePage::draw(Graphics::Surface &screen, Resources &res) const {
 			r.translate(-lp->scroll.x, -lp->scroll.y);
 			if (lo.obj->cls == kObjHighlightingCastle) {
 				highlightSection(screen, lo.image, r, lo.value, res);
+				continue;
+			}
+			if (lo.obj->cls == kObjNavRollOverButton) {
+				// The highlighted artwork only shows while the mouse is over the button
+				if (lo.hovered)
+					blitImage(screen, lo.image, r, lp->rect, lo.image->keyIndex);
 				continue;
 			}
 			blitImage(screen, lo.image, r, lp->rect);
