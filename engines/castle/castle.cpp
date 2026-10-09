@@ -125,9 +125,17 @@ Common::Error CastleEngine::run() {
 		if (loadGameState(ConfMan.getInt("save_slot")).getCode() == Common::kNoError && _savedPage)
 			start = _savedPage;
 	}
-	// Debug harness: castle_spy presets the chosen spy
+	// Debug harness: castle_spy presets the chosen spy, castle_questdone
+	// completes every chest task and the stage (the state after the scrolls)
 	if (ConfMan.hasKey("castle_spy"))
 		setSpy(ConfMan.getInt("castle_spy"), false);
+	if (ConfMan.hasKey("castle_questdone") && ConfMan.getBool("castle_questdone")) {
+		for (int t = 0; t < Quest::kTasks; t++)
+			for (int ch = 0; ch < Quest::kTaskChoices; ch++)
+				if (_quest->getTask(t, ch) == 1)
+					_quest->completeTask(t, ch);
+		_quest->finishStage();
+	}
 	openBasePage(start);
 
 	setCursor(_db->getDefaultCursor());

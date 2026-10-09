@@ -989,6 +989,7 @@ bool Database::readDocument(Common::SeekableReadStream &s, uint32 end) {
 	for (int i = 0; i < n; i++) {
 		_builtinIds.push_back(s.readSint16BE());
 		_builtinNums.push_back(s.readSint16BE());
+		debugC(2, kDebugDatabase, "Castle: built-in function id %d = number %d", _builtinIds.back(), _builtinNums.back());
 	}
 
 	s.readSint16BE();
