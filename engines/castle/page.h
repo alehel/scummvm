@@ -27,6 +27,7 @@
 #include "common/str.h"
 
 #include "castle/database.h"
+#include "castle/vm.h"
 
 namespace Graphics {
 struct Surface;
@@ -46,13 +47,33 @@ struct LiveObject {
 	Image *image;
 	int frame;              // current animation frame (1-based), 0 = none
 	int frameCount;
+	int frameDelay;         // ms between frames
 	uint32 nextFrameTime;
+	bool playing;
 	bool visible;
-	LiveObject() : obj(nullptr), panel(nullptr), image(nullptr), frame(0), frameCount(0), nextFrameTime(0), visible(true) {}
+	bool disabled;
+	int zOrder;
+	int value;
+	int counters[5];
+	int extra[9];
+	int spriteFlags;        // sprite boolean properties (+0x11c)
+	int spriteState;        // sprite state bits (+0x138)
+	LiveObject() : obj(nullptr), panel(nullptr), image(nullptr), frame(0), frameCount(0), frameDelay(100), nextFrameTime(0),
+			playing(false), visible(true), disabled(false), zOrder(0), value(0), spriteFlags(0), spriteState(0) {
+		memset(counters, 0, sizeof(counters));
+		memset(extra, 0, sizeof(extra));
+	}
+};
+
+struct Overlay {
+	Image *image;
+	Common::Point pos;
 };
 
 struct LivePanel {
 	Panel *panel;
+	Scope scope;
+	Common::Array<Overlay> overlays;
 	Common::Rect rect;      // screen rectangle
 	Common::String dir;
 	byte rgb[3];
@@ -81,6 +102,8 @@ public:
 	const Common::Array<LivePanel *> &getPanels() const { return _panels; }
 	const Image *getPaletteImage() const { return _paletteImage; }
 	PageRecord *getRecord() const { return _rec; }
+	Scope &getScope() { return _scope; }
+	LiveObject *findObject(int id);
 
 private:
 	LivePanel *addPanel(Panel *panel, const Common::Rect &rect, const Common::String &dir, Resources &res);
@@ -95,6 +118,7 @@ private:
 	Common::Rect _bounds;
 	Common::Array<LivePanel *> _panels;
 	Image *_paletteImage;
+	Scope _scope;
 };
 
 } // End of namespace Castle

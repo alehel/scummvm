@@ -930,6 +930,13 @@ PageRecord *Database::getRecord(uint index) {
 	return rec;
 }
 
+int Database::getBuiltinNumber(int id) const {
+	for (uint i = 0; i < _builtinIds.size(); i++)
+		if (_builtinIds[i] == id)
+			return _builtinNums[i];
+	return 0;
+}
+
 const PageTemplate *Database::findTemplate(int16 id) const {
 	for (uint i = 0; i < _templates.size(); i++)
 		if (_templates[i]->id == id)
@@ -962,8 +969,8 @@ bool Database::readDocument(Common::SeekableReadStream &s, uint32 end) {
 		_docExt->objs.push_back(readObjectRef(s));
 	n = readCount(s);
 	for (int i = 0; i < n; i++) {
-		s.readSint16BE();
-		s.readSint16BE();
+		_builtinIds.push_back(s.readSint16BE());
+		_builtinNums.push_back(s.readSint16BE());
 	}
 
 	s.readSint16BE();

@@ -27,6 +27,7 @@
 #include "common/str.h"
 #include "engines/engine.h"
 #include "audio/mixer.h"
+#include "common/random.h"
 #include "graphics/surface.h"
 
 struct ADGameDescription;
@@ -40,6 +41,8 @@ class AniDecoder;
 struct LiveObject;
 struct Action;
 struct Event;
+class ScriptVM;
+struct Context;
 
 class CastleEngine : public Engine {
 public:
@@ -51,6 +54,17 @@ public:
 
 	Database *getDatabase() { return _db; }
 	Resources *getResources() { return _res; }
+	Common::RandomSource &getRandom() { return _rnd; }
+	LiveObject *findLiveObject(int id, LivePage *page);
+	void runScriptAction(const Action *a, Context &ctx);
+	bool scriptShouldStop() const;
+	void setSpriteFrame(LiveObject *lo, int frame);
+	void markDirty() { _dirty = true; }
+	int getBuiltinNumber(int id) const;
+	void runCommand(const Action *a, LivePage *page, LiveObject *obj);
+	void updateSprites(uint32 now);
+	void runSpriteFrameScripts(LivePage *page, LiveObject *lo, int frame);
+	void handleMouseMove(const Common::Point &p);
 
 private:
 	void handleEvents();
@@ -75,6 +89,10 @@ private:
 	void updateAnimation();
 
 	const ADGameDescription *_gameDescription;
+	Common::RandomSource _rnd;
+	ScriptVM *_script;
+	LiveObject *_hoverObject;
+	LivePage *_hoverPage;
 	Database *_db;
 	Resources *_res;
 	Graphics::Surface _screen;
@@ -85,6 +103,8 @@ private:
 	uint _pendingBasePage;
 	bool _pendingBase;
 
+	Common::String _dumpDir;
+	int _dumpCount;
 	Audio::SoundHandle _waveHandle;
 	Audio::SoundHandle _aniAudioHandle;
 	AniDecoder *_ani;

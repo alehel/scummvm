@@ -425,6 +425,8 @@ public:
 	uint32 getStartPage() const { return _startPages.size() > 0 ? _startPages[0] : 0; }
 	uint32 getMainPage() const { return _startPages.size() > 1 ? _startPages[1] : 0; }
 	const Common::String &getDefaultCursor() const { return _defaultCursor; }
+	const Extension *getDocExtension() const { return _docExt; }
+	int getBuiltinNumber(int id) const;
 
 private:
 	// low level readers (big endian)
@@ -465,6 +467,7 @@ private:
 	Common::Array<uint32> _startPages;
 	Common::String _title, _version, _defaultCursor;
 	Extension *_docExt;
+	Common::Array<int16> _builtinIds, _builtinNums;
 	Common::Array<Event *> _docEvents;
 	Common::HashMap<uint, PageRecord *> _records;
 	Common::String _empty;

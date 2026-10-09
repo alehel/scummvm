@@ -25,6 +25,7 @@
 #include "common/system.h"
 #include "common/textconsole.h"
 #include "engines/util.h"
+#include "audio/audiostream.h"
 #include "audio/decoders/wave.h"
 #include "graphics/cursorman.h"
 #include "graphics/palette.h"
@@ -42,12 +43,13 @@
 #include "castle/detection.h"
 #include "castle/page.h"
 #include "castle/resources.h"
+#include "castle/vm.h"
 
 namespace Castle {
 
 CastleEngine::CastleEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst), _gameDescription(gameDesc),
-		_db(nullptr), _res(nullptr), _basePage(nullptr), _dirty(true), _paletteDirty(true), _pendingBasePage(0),
-		_pendingBase(false), _ani(nullptr), _aniNextFrame(0) {
+		_rnd("castle"), _script(nullptr), _hoverObject(nullptr), _hoverPage(nullptr), _db(nullptr), _res(nullptr), _basePage(nullptr), _dirty(true), _paletteDirty(true), _pendingBasePage(0),
+		_pendingBase(false), _dumpCount(0), _ani(nullptr), _aniNextFrame(0) {
 	const Common::FSNode gameDataDir(ConfMan.getPath("path"));
 	SearchMan.addSubDirectoryMatching(gameDataDir, "dkcode");
 	SearchMan.addSubDirectoryMatching(gameDataDir, "3drooms", 0, 3);
@@ -72,6 +74,7 @@ CastleEngine::~CastleEngine() {
 	delete _ani;
 	_screen.free();
 	_aniBackground.free();
+	delete _script;
 	delete _res;
 	delete _db;
 }
@@ -89,6 +92,8 @@ Common::Error CastleEngine::run() {
 		return Common::kNoGameDataFoundError;
 	_res = new Resources();
 	_res->init();
+	_script = new ScriptVM(this);
+	_script->initDocScope(_db->getDocExtension());
 
 	uint start = _db->getStartPage();
 	if (ConfMan.hasKey("boot_param"))
@@ -113,7 +118,7 @@ Common::Error CastleEngine::run() {
 	}
 	uint clickIdx = 0;
 	uint32 nextClick = _system->getMillis() + 1500;
-	int dumpCount = 0;
+	_dumpDir = dumpDirStr;
 
 	while (!shouldQuit()) {
 		handleEvents();
@@ -140,19 +145,9 @@ Common::Error CastleEngine::run() {
 		uint32 now = _system->getMillis();
 		if (_basePage)
 			_basePage->update(now, *_res);
+		updateSprites(now);
 		updateAnimation();
-		bool wasDirty = _dirty || _paletteDirty;
 		render();
-		if (dumpDir && wasDirty && !_ani) {
-			Common::DumpFile f;
-			Common::Path path(Common::String::format("%s/castle%03d.png", dumpDir, dumpCount++), '/');
-			if (f.open(path)) {
-				byte pal[768];
-				_system->getPaletteManager()->grabPalette(pal, 0, 256);
-				::Image::writePNG(f, _screen, pal, 256);
-				f.close();
-			}
-		}
 		_system->delayMillis(10);
 	}
 	return Common::kNoError;
@@ -179,6 +174,9 @@ void CastleEngine::handleEvents() {
 			}
 			break;
 		}
+		case Common::EVENT_MOUSEMOVE:
+			handleMouseMove(event.mouse);
+			break;
 		case Common::EVENT_KEYDOWN:
 			if (event.kbd.keycode == Common::KEYCODE_ESCAPE && _ani) {
 				delete _ani;
@@ -239,9 +237,21 @@ void CastleEngine::render() {
 	_system->copyRectToScreen(_screen.getPixels(), _screen.pitch, 0, 0, _screen.w, _screen.h);
 	_system->updateScreen();
 	_dirty = false;
+	if (!_dumpDir.empty() && !_ani) {
+		Common::DumpFile f;
+		Common::Path path(Common::String::format("%s/castle%03d.png", _dumpDir.c_str(), _dumpCount++), '/');
+		if (f.open(path)) {
+			byte pal[768];
+			_system->getPaletteManager()->grabPalette(pal, 0, 256);
+			::Image::writePNG(f, _screen, pal, 256);
+			f.close();
+		}
+	}
 }
 
 void CastleEngine::openBasePage(uint index) {
+	_hoverObject = nullptr;
+	_hoverPage = nullptr;
 	closeAllPopups();
 	delete _basePage;
 	_basePage = new LivePage();
@@ -298,6 +308,10 @@ void CastleEngine::openPopup(uint index) {
 void CastleEngine::closePopup(uint index) {
 	for (int i = (int)_popups.size() - 1; i >= 0; i--) {
 		if (_popups[i]->getIndex() == index || index == 0xffffffff) {
+			if (_hoverPage == _popups[i]) {
+				_hoverObject = nullptr;
+				_hoverPage = nullptr;
+			}
 			delete _popups[i];
 			_popups.remove_at(i);
 			_dirty = true;
@@ -307,6 +321,10 @@ void CastleEngine::closePopup(uint index) {
 }
 
 void CastleEngine::closeAllPopups() {
+	if (_hoverPage && _hoverPage != _basePage) {
+		_hoverObject = nullptr;
+		_hoverPage = nullptr;
+	}
 	for (uint i = 0; i < _popups.size(); i++)
 		delete _popups[i];
 	_popups.clear();
@@ -391,15 +409,205 @@ void CastleEngine::runAction(const Action *a, LivePage *page, LiveObject *obj) {
 		_dirty = true;
 		break;
 	case kActCommand:
-		// The script logic is not interpreted yet; run unconditional scripts only.
-		if (a->script && a->script->ops.empty())
-			runActions(a->script->actions, page, obj);
-		else
-			debugC(1, kDebugScript, "Castle: skipping scripted Command with %u ops", a->script ? a->script->ops.size() : 0);
+		runCommand(a, page, obj);
 		break;
+	case kActPaintBitmap: {
+		LivePanel *lp = obj ? obj->panel : (page && !page->getPanels().empty() ? page->getPanels()[0] : nullptr);
+		if (lp) {
+			Overlay ov;
+			ov.image = _res->loadImage(page ? page->getDir() : Common::String(), a->name);
+			ov.pos = Common::Point(lp->rect.left + a->pt.x, lp->rect.top + a->pt.y);
+			if (ov.image)
+				lp->overlays.push_back(ov);
+			_dirty = true;
+		}
+		break;
+	}
+	case kActClearBitmap: {
+		LivePanel *lp = obj ? obj->panel : (page && !page->getPanels().empty() ? page->getPanels()[0] : nullptr);
+		if (lp) {
+			lp->overlays.clear();
+			_dirty = true;
+		}
+		break;
+	}
+	case kActGeneralPurpose:
+		switch (a->x) {
+		case 1:
+			playWave(Common::String(), "@rot1s", true);
+			break;
+		case 2:
+		case 0x10:
+			stopWave();
+			break;
+		default:
+			debugC(1, kDebugScript, "Castle: GeneralPurposeAction %d not implemented", a->x);
+			break;
+		}
+		break;
+	case kActSetSpriteFrame: {
+		LiveObject *lo = findLiveObject(a->p[0], page);
+		if (lo)
+			setSpriteFrame(lo, a->p[1]);
+		break;
+	}
 	default:
 		debugC(1, kDebugScript, "Castle: unimplemented action %s", actionName(a->type));
 		break;
+	}
+}
+
+int CastleEngine::getBuiltinNumber(int id) const {
+	return _db->getBuiltinNumber(id);
+}
+
+LiveObject *CastleEngine::findLiveObject(int id, LivePage *page) {
+	LiveObject *lo = page ? page->findObject(id) : nullptr;
+	if (lo)
+		return lo;
+	for (int i = (int)_popups.size() - 1; i >= 0; i--) {
+		lo = _popups[i]->findObject(id);
+		if (lo)
+			return lo;
+	}
+	if (_basePage)
+		return _basePage->findObject(id);
+	return nullptr;
+}
+
+bool CastleEngine::scriptShouldStop() const {
+	return shouldQuit() || _pendingBase;
+}
+
+void CastleEngine::runScriptAction(const Action *a, Context &ctx) {
+	runAction(a, ctx.page, ctx.object);
+}
+
+void CastleEngine::runCommand(const Action *a, LivePage *page, LiveObject *obj) {
+	if (!a->script)
+		return;
+	Context ctx;
+	ctx.page = page;
+	ctx.object = obj;
+	ctx.panel = obj ? obj->panel : (page && !page->getPanels().empty() ? page->getPanels()[0] : nullptr);
+	Scope local;
+	local.init(a->script->ext);
+	ctx.scopes.push_back(&local);
+	if (ctx.panel)
+		ctx.scopes.push_back(&ctx.panel->scope);
+	if (page)
+		ctx.scopes.push_back(&page->getScope());
+	for (int i = (int)_popups.size() - 1; i >= 0; i--)
+		if (_popups[i] != page)
+			ctx.scopes.push_back(&_popups[i]->getScope());
+	if (_basePage && _basePage != page)
+		ctx.scopes.push_back(&_basePage->getScope());
+	_script->runScript(a->script, ctx);
+}
+
+void CastleEngine::setSpriteFrame(LiveObject *lo, int frame) {
+	if (lo->obj->cls != kObjSprite && lo->obj->cls != kObjAmbientAnimation)
+		return;
+	if (frame < 1)
+		frame = 1;
+	if (lo->frameCount > 0 && frame > lo->frameCount)
+		frame = lo->frameCount;
+	lo->frame = frame;
+	if (!lo->obj->file.empty()) {
+		Common::String name = lo->obj->cls == kObjSprite ? Common::String::format("%s%04d", lo->obj->file.c_str(), frame) : lo->obj->strs[MIN<uint>(frame - 1, lo->obj->strs.size() - 1)];
+		Image *img = _res->loadImage(lo->panel->dir, name);
+		if (img)
+			lo->image = img;
+	}
+	_dirty = true;
+}
+
+void CastleEngine::runSpriteFrameScripts(LivePage *page, LiveObject *lo, int frame) {
+	const GameObject *obj = lo->obj;
+	for (uint i = 0; i < obj->scripts.size(); i++) {
+		if (obj->scripts[i]->a != frame)
+			continue;
+		Context ctx;
+		ctx.page = page;
+		ctx.object = lo;
+		ctx.panel = lo->panel;
+		Scope local;
+		local.init(obj->scripts[i]->ext);
+		ctx.scopes.push_back(&local);
+		ctx.scopes.push_back(&lo->panel->scope);
+		ctx.scopes.push_back(&page->getScope());
+		if (_basePage && _basePage != page)
+			ctx.scopes.push_back(&_basePage->getScope());
+		debugC(2, kDebugScript, "Castle: sprite %d frame %d script", obj->id, frame);
+		_script->runScript(obj->scripts[i], ctx);
+		if (scriptShouldStop())
+			return;
+	}
+}
+
+void CastleEngine::updateSprites(uint32 now) {
+	Common::Array<LivePage *> pages;
+	if (_basePage)
+		pages.push_back(_basePage);
+	for (uint i = 0; i < _popups.size(); i++)
+		pages.push_back(_popups[i]);
+	for (uint p = 0; p < pages.size(); p++) {
+		LivePage *page = pages[p];
+		const Common::Array<LivePanel *> &panels = page->getPanels();
+		for (uint i = 0; i < panels.size(); i++) {
+			for (uint k = 0; k < panels[i]->objects.size(); k++) {
+				LiveObject &lo = panels[i]->objects[k];
+				if (lo.obj->cls != kObjSprite || !lo.playing || now < lo.nextFrameTime)
+					continue;
+				lo.nextFrameTime = now + lo.frameDelay;
+				int next = lo.frame + 1;
+				if (next > lo.frameCount) {
+					// past the last frame: run the end script, then loop or stop
+					runSpriteFrameScripts(page, &lo, lo.frameCount + 1);
+					if (scriptShouldStop())
+						return;
+					if (lo.obj->flags & 0x40)
+						setSpriteFrame(&lo, 1);
+					else
+						lo.playing = false;
+					continue;
+				}
+				setSpriteFrame(&lo, next);
+				runSpriteFrameScripts(page, &lo, next);
+				if (scriptShouldStop())
+					return;
+			}
+		}
+	}
+}
+
+void CastleEngine::handleMouseMove(const Common::Point &p) {
+	LivePage *page = nullptr;
+	LiveObject *lo = nullptr;
+	for (int i = (int)_popups.size() - 1; i >= 0 && !lo; i--) {
+		lo = _popups[i]->objectAt(p, false);
+		if (lo)
+			page = _popups[i];
+		else if (_popups[i]->getBounds().contains(p))
+			break;
+	}
+	if (!lo && _basePage) {
+		lo = _basePage->objectAt(p, false);
+		page = _basePage;
+	}
+	if (lo == _hoverObject)
+		return;
+	if (_hoverObject) {
+		const Event *ev = _hoverObject->obj->findEvent(kEventRollOff);
+		if (ev)
+			runEvent(ev, _hoverPage, _hoverObject);
+	}
+	_hoverObject = lo;
+	_hoverPage = page;
+	if (lo) {
+		const Event *ev = lo->obj->findEvent(kEventRollOn);
+		if (ev)
+			runEvent(ev, page, lo);
 	}
 }
 
@@ -413,10 +621,17 @@ void CastleEngine::playWave(const Common::String &dir, const Common::String &nam
 	if (!stream)
 		return;
 	_mixer->stopHandle(_waveHandle);
-	_mixer->playStream(Audio::Mixer::kSFXSoundType, &_waveHandle, stream);
+	if (loop)
+		_mixer->playStream(Audio::Mixer::kSFXSoundType, &_waveHandle, Audio::makeLoopingAudioStream(stream, 0));
+	else
+		_mixer->playStream(Audio::Mixer::kSFXSoundType, &_waveHandle, stream);
 }
 
 void CastleEngine::playVideo(const Common::String &dir, const Common::String &name, const Common::Rect &destIn) {
+	if (ConfMan.hasKey("castle_skipvideo") && ConfMan.getBool("castle_skipvideo")) {
+		debugC(1, kDebugGraphics, "Castle: skipping video '%s'", name.c_str());
+		return;
+	}
 	Common::SeekableReadStream *s = _res->openVideo(dir, name);
 	if (!s) {
 		debugC(1, kDebugGraphics, "Castle: video '%s' not found", name.c_str());

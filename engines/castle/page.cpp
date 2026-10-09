@@ -58,12 +58,23 @@ void LivePage::layoutObjects(LivePanel *lp, Resources &res) {
 		lo.rect = obj->rect;
 		lo.rect.translate(lp->rect.left, lp->rect.top);
 
+		lo.zOrder = obj->d;
+		lo.visible = obj->c != 0;
 		if (obj->cls == kObjSprite) {
 			lo.frameCount = obj->spriteFrames;
-			lo.frame = 1;
-			lo.image = res.loadImage(lp->dir, frameName(obj, 1));
-			if (!lo.image && !obj->file.empty())
-				lo.image = res.loadImage(lp->dir, obj->file);
+			lo.frame = obj->ints.size() > 1 ? obj->ints[1] + 1 : 1;
+			lo.frameDelay = obj->ints.size() > 2 ? MAX(25, (int)obj->ints[2]) : 100;
+			for (int k = 0; k < 5; k++)
+				lo.counters[k] = obj->ints.size() > 5 + (uint)k ? obj->ints[5 + k] : 0;
+			lo.spriteFlags = obj->ints.size() > 4 ? obj->ints[4] : 0;
+			lo.spriteState = obj->ints.size() > 11 ? obj->ints[11] : 0;
+			lo.playing = (obj->flags & 0x20) != 0 && lo.frameCount > 0;
+			lo.nextFrameTime = g_system->getMillis() + lo.frameDelay;
+			if (!obj->file.empty()) {
+				lo.image = res.loadImage(lp->dir, frameName(obj, lo.frame));
+				if (!lo.image)
+					lo.image = res.loadImage(lp->dir, obj->file);
+			}
 		} else if (obj->cls == kObjAmbientAnimation) {
 			lo.frameCount = obj->strs.size();
 			lo.frame = 1;
@@ -95,6 +106,7 @@ LivePanel *LivePage::addPanel(Panel *panel, const Common::Rect &rect, const Comm
 	lp->panel = panel;
 	lp->rect = rect;
 	lp->dir = dir;
+	lp->scope.init(panel->ext);
 	layoutObjects(lp, res);
 
 	// Panels without a size (popups) grow to fit their contents
@@ -130,6 +142,7 @@ bool LivePage::open(Database &db, Resources &res, uint index, const Common::Poin
 	}
 	_origin = origin;
 	_dir = _rec->dir;
+	_scope.init(_rec->ext);
 	_tmpl = _rec->isPage ? db.findTemplate(_rec->id) : nullptr;
 	if (_rec->isPage && !_tmpl)
 		debugC(1, kDebugGeneral, "Castle: page %u (type %d) has no template with id %d", index, _rec->type, _rec->id);
@@ -222,7 +235,20 @@ void LivePage::draw(Graphics::Surface &screen, Resources &res) const {
 				continue;
 			blitImage(screen, lo.image, lo.rect);
 		}
+		for (uint k = 0; k < lp->overlays.size(); k++) {
+			const Overlay &ov = lp->overlays[k];
+			if (ov.image)
+				blitImage(screen, ov.image, Common::Rect(ov.pos.x, ov.pos.y, ov.pos.x + ov.image->surface.w, ov.pos.y + ov.image->surface.h));
+		}
 	}
+}
+
+LiveObject *LivePage::findObject(int id) {
+	for (uint i = 0; i < _panels.size(); i++)
+		for (uint k = 0; k < _panels[i]->objects.size(); k++)
+			if (_panels[i]->objects[k].obj->id == id)
+				return &_panels[i]->objects[k];
+	return nullptr;
 }
 
 LiveObject *LivePage::objectAt(const Common::Point &p, bool hotspotsOnly) {
@@ -232,7 +258,7 @@ LiveObject *LivePage::objectAt(const Common::Point &p, bool hotspotsOnly) {
 			LiveObject &lo = lp->objects[k];
 			if (!lo.visible)
 				continue;
-			if (hotspotsOnly && !lo.obj->findEvent(kEventClick))
+			if (hotspotsOnly && (lo.disabled || !lo.obj->findEvent(kEventClick)))
 				continue;
 			if (lo.rect.contains(p))
 				return &lo;

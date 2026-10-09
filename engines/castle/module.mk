@@ -6,7 +6,8 @@ MODULE_OBJS = \
 	database.o \
 	metaengine.o \
 	page.o \
-	resources.o
+	resources.o \
+	vm.o
 
 # This module can be built as a plugin
 ifeq ($(ENABLE_CASTLE), DYNAMIC_PLUGIN)
