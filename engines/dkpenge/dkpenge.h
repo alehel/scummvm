@@ -50,6 +50,16 @@ class Quiz;
 struct Value;
 struct Collage;
 
+// Effect codes of the page transitions (the original's table at 0x4a7558)
+enum TransitionCode {
+	kTransNone = 0,
+	kTransWipeLeft = 4,
+	kTransWipeRight = 5,
+	kTransDissolve = 10,
+	kTransWhiteFade = 15,
+	kTransBlackFade = 16
+};
+
 class DKPengeEngine : public Engine {
 public:
 	DKPengeEngine(OSystem *syst, const ADGameDescription *gameDesc);
@@ -179,8 +189,14 @@ private:
 	void focusEditBox(LiveObject *lo, LivePage *page);
 	void pageClosing(LivePage *page);
 
-	// Page-turn wipes between base pages, screen dumps of the test harness
+	// Page transitions, screen dumps of the test harness
+	static int transitionCode(int index);
+	bool beginTransition(int code, Graphics::Surface &old);
+	void endTransition(int code, Graphics::Surface &old);
 	void wipeTransition(const Graphics::Surface &from, int code);
+	void dissolveTransition(const Graphics::Surface &from);
+	void fadePalette(const byte *from, const byte *to);
+	static bool clicksOnRelease(const LiveObject *lo);
 	void composeScreen();
 	void dissolveRect(const Common::Rect &r);
 	void dumpSurface(const Graphics::Surface &surf);
@@ -272,6 +288,7 @@ private:
 	LiveObject *_editFocus;      // edit box receiving the keyboard
 	LivePage *_editFocusPage;
 	int _pendingTransition;      // transition code of the pending page change
+	byte _fadeSource[768];       // palette before a fade transition
 	bool _noScreenUpdate;        // render() leaves the screen alone (wipes)
 	uint32 _repeatNext;          // RepeatingHotspot held: next click
 };

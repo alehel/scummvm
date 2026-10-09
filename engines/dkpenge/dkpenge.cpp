@@ -568,28 +568,20 @@ void DKPengeEngine::runAction(const Action *a, LivePage *page, LiveObject *obj) 
 		PageRecord *target = _db->getRecord(a->page);
 		if (!target)
 			return;
+		// The action stores its transition as an index into the name table
+		int code = transitionCode(a->x);
 		if (target->isPage && (target->type == kPagePopup || target->type == kPageDragPopup || target->type == kPageRolloffClose)) {
-			// Turning the page of a book wipes the new page over the old one
-			bool wipe = (a->x == 4 || a->x == 5) && toggleState(18) && !_noScreenUpdate;
 			Graphics::Surface old;
-			if (wipe) {
-				old.copyFrom(_screen);
-				_noScreenUpdate = true;
-			}
+			bool transition = beginTransition(code, old);
 			if (page && page->isPopup())
 				closePopup(page->getIndex());
 			openPopup(a->page);
-			if (wipe) {
-				render();
-				_noScreenUpdate = false;
-				wipeTransition(old, a->x);
-				old.free();
-				_dirty = true;
-			}
+			if (transition)
+				endTransition(code, old);
 		} else {
 			_pendingBasePage = a->page;
 			_pendingBase = true;
-			_pendingTransition = a->x;
+			_pendingTransition = code;
 		}
 		break;
 	}
@@ -983,9 +975,12 @@ LiveObject *DKPengeEngine::findZoomCaption(int id, LivePage *page) {
 	return nullptr;
 }
 
-// Mouse button down on an object. Hotspots run their on_click event right
-// away (as the original does); sprites run their press scripts (event 4)
-// and, when draggable (flag 0x10), start following the mouse.
+// Mouse button down on an object. Sprites run their press scripts (event 4)
+// and, when draggable (flag 0x10), start following the mouse; buttons show
+// their pressed artwork. Hotspots and buttons fire their click when the
+// button comes up over them (releaseMouse), as in the original, where the
+// press slot of the hotspot classes is empty and the release slot runs the
+// event (vt+0x88 FUN_00456d00, vt+0x8c FUN_00456d10).
 void DKPengeEngine::pressObject(LiveObject *lo, LivePage *page, const Common::Point &p) {
 	setMouseVar(p, lo->panel);
 	_pressedObject = lo;
@@ -1018,12 +1013,46 @@ void DKPengeEngine::pressObject(LiveObject *lo, LivePage *page, const Common::Po
 		lo->pressed = true;
 		_dirty = true;
 	}
-	if (lo->obj->cls == kObjRepeatingHotspot) {
-		// Clicks again on a timer while the button is held (ints[2] ms)
+	switch (lo->obj->cls) {
+	case kObjRepeatingHotspot:
+	case kObjRollRepeatHotspot: {
+		// Fires on the press (FUN_0042c900) and again on a timer while the
+		// button is held (ints[2] ms)
 		int interval = lo->obj->ints.size() > 2 ? lo->obj->ints[2] : 0;
 		_repeatNext = _system->getMillis() + MAX(interval, 100);
+		clickObject(lo, page);
+		break;
 	}
-	clickObject(lo, page);
+	case kObjDitherBitmap:
+	case kObjSpyDitherBitmap:
+		// The cutaway covers dissolve on the press (FUN_00423260)
+		clickObject(lo, page);
+		break;
+	default:
+		break;
+	}
+}
+
+// Whether a class fires its click from the release slot rather than the
+// press slot, or has press handling of its own
+bool DKPengeEngine::clicksOnRelease(const LiveObject *lo) {
+	switch (lo->obj->cls) {
+	case kObjSprite:
+	case kObjScrollObject:
+	case kObjWrapScrollObject:
+	case kObjCollage:
+	case kObjEditBox:
+	case kObjRoomEditBox:
+	case kObjScrollEditBox:
+	case kObjScrollBar:
+	case kObjRepeatingHotspot:
+	case kObjRollRepeatHotspot:
+	case kObjDitherBitmap:
+	case kObjSpyDitherBitmap:
+		return false;
+	default:
+		return true;
+	}
 }
 
 void DKPengeEngine::updateRepeat(uint32 now) {
@@ -1034,7 +1063,10 @@ void DKPengeEngine::updateRepeat(uint32 now) {
 	clickObject(_pressedObject, _pressedPage);
 }
 
-// Mouse button up: ends a drag and runs the sprite's release scripts (5)
+// Mouse button up: ends a drag and runs the sprite's release scripts (5).
+// Otherwise the release goes to the object under the pointer, whether or
+// not the press was on it (FUN_0044f2c0), and hotspots and buttons fire
+// their click from it.
 void DKPengeEngine::releaseMouse(const Common::Point &p) {
 	setMouseVar(p, _pressedObject ? _pressedObject->panel : nullptr);
 	LiveObject *lo = _pressedObject;
@@ -1042,25 +1074,36 @@ void DKPengeEngine::releaseMouse(const Common::Point &p) {
 	_pressedObject = nullptr;
 	_pressedPage = nullptr;
 	_dragPage = nullptr;
-	if (!lo)
-		return;
-	if (lo->pressed) {
-		lo->pressed = false;
-		_dirty = true;
+	if (lo) {
+		if (lo->pressed) {
+			lo->pressed = false;
+			_dirty = true;
+		}
+		if (_dragging) {
+			_dragging = false;
+			lo->spriteState &= ~0x20;
+		}
+		if (lo->obj->cls == kObjSprite) {
+			runSpriteFrameScripts(page, lo, 5, lo->frame);
+			return;
+		}
+		if (lo->obj->cls == kObjCollage) {
+			collageRelease(lo, page, p);
+			return;
+		}
+		if (lo->obj->cls == kObjScrollBar) {
+			lo->value = 0;
+			_scrollBarDrag = false;
+			_dirty = true;
+			return;
+		}
+		if (!clicksOnRelease(lo))
+			return;
 	}
-	if (_dragging) {
-		_dragging = false;
-		lo->spriteState &= ~0x20;
-	}
-	if (lo->obj->cls == kObjSprite)
-		runSpriteFrameScripts(page, lo, 5, lo->frame);
-	else if (lo->obj->cls == kObjCollage)
-		collageRelease(lo, page, p);
-	else if (lo->obj->cls == kObjScrollBar) {
-		lo->value = 0;
-		_scrollBarDrag = false;
-		_dirty = true;
-	}
+	LivePage *hitPage = nullptr;
+	LiveObject *hit = hitTest(p, &hitPage);
+	if (hit && clicksOnRelease(hit))
+		clickObject(hit, hitPage);
 }
 
 // Moves a dragged sprite with the mouse, kept inside its limit rectangle
@@ -1268,7 +1311,8 @@ void DKPengeEngine::clickObject(LiveObject *lo, LivePage *page) {
 		Action a;
 		a.type = kActChangePage;
 		a.page = lo->obj->u32s[0];
-		a.x = (lo->obj->ints.size() > 2 && lo->obj->ints[2] == 1) ? 5 : 4;
+		// Index of wiperight (5) or wipeleft (6) in the transition table
+		a.x = (lo->obj->ints.size() > 2 && lo->obj->ints[2] == 1) ? 5 : 6;
 		runAction(&a, page, lo);
 	}
 }
@@ -2477,23 +2521,13 @@ void DKPengeEngine::flushPendingPage() {
 	_pendingScroll = Common::Point(0, 0);
 	int transition = _pendingTransition;
 	_pendingTransition = 0;
-	// Page turns wipe the new page over the old one (option 18 switches it off)
-	bool wipe = (transition == 4 || transition == 5) && toggleState(18) && _basePage && !_noScreenUpdate;
 	Graphics::Surface old;
-	if (wipe) {
-		old.copyFrom(_screen);
-		_noScreenUpdate = true;
-	}
+	bool play = _basePage && beginTransition(transition, old);
 	openBasePage(_pendingBasePage, scroll);
 	if (_basePage && (scroll.x || scroll.y))
 		updateTrailScroll();
-	if (wipe) {
-		render();
-		_noScreenUpdate = false;
-		wipeTransition(old, transition);
-		old.free();
-		_dirty = true;
-	}
+	if (play)
+		endTransition(transition, old);
 	if (_pendingPopup) {
 		uint popup = _pendingPopup;
 		_pendingPopup = 0;
@@ -3198,8 +3232,144 @@ void DKPengeEngine::dissolveRect(const Common::Rect &rIn) {
 	dumpSurface(_screen);
 }
 
+// CHANGEPAGE stores its transition as an index into the name table (none
+// zoom dissolve whitefade blackfade wiperight wipeleft bookright bookleft);
+// the original maps the index to an effect code through this table
+// (FUN_00451110, codes at 0x4a7558). The data only uses dissolve and the
+// fade through black; the page-turn corners add the two wipes.
+static const int kTransitionCodes[] = { 0, 1, 10, 15, 16, 5, 4, 5, 4 };
+
+int DKPengeEngine::transitionCode(int index) {
+	return index >= 0 && index < (int)ARRAYSIZE(kTransitionCodes) ? kTransitionCodes[index] : kTransNone;
+}
+
+// Starts a page transition before the new page opens: the wipes and the
+// dissolve keep a copy of the old screen, the fades take the palette down
+// to their colour. Option 18 switches the transitions off, except the fade
+// through black which the original always plays (FUN_0044fe00). Returns
+// whether endTransition must follow the page change.
+bool DKPengeEngine::beginTransition(int code, Graphics::Surface &old) {
+	debugC(1, kDebugGraphics, "DKPenge: page transition code %d%s", code, _noScreenUpdate ? " (skipped)" : "");
+	if (_noScreenUpdate)
+		return false;
+	if (code != kTransBlackFade && !toggleState(18))
+		return false;
+	switch (code) {
+	case kTransWipeLeft:
+	case kTransWipeRight:
+	case kTransDissolve:
+		old.copyFrom(_screen);
+		break;
+	case kTransWhiteFade:
+	case kTransBlackFade: {
+		byte solid[768];
+		memset(solid, code == kTransWhiteFade ? 255 : 0, sizeof(solid));
+		_system->getPaletteManager()->grabPalette(_fadeSource, 0, 256);
+		fadePalette(_fadeSource, solid);
+		break;
+	}
+	default:
+		return false;
+	}
+	_noScreenUpdate = true;
+	return true;
+}
+
+// Draws the new page and plays the transition towards it
+void DKPengeEngine::endTransition(int code, Graphics::Surface &old) {
+	render();
+	_noScreenUpdate = false;
+	switch (code) {
+	case kTransWipeLeft:
+	case kTransWipeRight:
+		wipeTransition(old, code);
+		break;
+	case kTransDissolve:
+		dissolveTransition(old);
+		break;
+	default: {
+		// The new page comes up from the solid colour into its own palette;
+		// a page without a palette of its own keeps the previous one
+		byte solid[768], target[768];
+		memset(solid, code == kTransWhiteFade ? 255 : 0, sizeof(solid));
+		_system->getPaletteManager()->grabPalette(target, 0, 256);
+		if (!memcmp(target, solid, sizeof(target)))
+			memcpy(target, _fadeSource, sizeof(target));
+		_system->getPaletteManager()->setPalette(solid, 0, 256);
+		_system->copyRectToScreen(_screen.getPixels(), _screen.pitch, 0, 0, _screen.w, _screen.h);
+		fadePalette(solid, target);
+		dumpSurface(_screen);
+		break;
+	}
+	}
+	old.free();
+	_dirty = true;
+}
+
+// Steps the hardware palette from one set of colours to another
+void DKPengeEngine::fadePalette(const byte *from, const byte *to) {
+	const int duration = 350;
+	uint32 start = _system->getMillis();
+	byte pal[768];
+	for (;;) {
+		int t = MIN<int>(_system->getMillis() - start, duration);
+		for (int i = 0; i < 768; i++)
+			pal[i] = from[i] + ((int)to[i] - (int)from[i]) * t / duration;
+		_system->getPaletteManager()->setPalette(pal, 0, 256);
+		_system->updateScreen();
+		if (t >= duration)
+			break;
+		Common::Event event;
+		while (_eventMan->pollEvent(event))
+			;
+		_system->delayMillis(10);
+	}
+}
+
+// Replaces the old page with the new one (in _screen) pixel by pixel in a
+// random order, as the original does with a shift register over the frame
+// buffer in ten steps (FUN_004513a0)
+void DKPengeEngine::dissolveTransition(const Graphics::Surface &from) {
+	Graphics::Surface frame;
+	frame.copyFrom(from);
+	const uint count = _screen.w * _screen.h;
+	Common::Array<uint32> order;
+	order.resize(count);
+	for (uint i = 0; i < count; i++)
+		order[i] = i;
+	for (uint i = count - 1; i > 0; i--)
+		SWAP(order[i], order[_rnd.getRandomNumber(i)]);
+	const int duration = 400;
+	uint32 start = _system->getMillis();
+	uint done = 0;
+	bool dumped = false;
+	for (;;) {
+		int t = MIN<int>(_system->getMillis() - start, duration);
+		uint target = (uint)((uint64)count * t / duration);
+		const byte *src = (const byte *)_screen.getPixels();
+		byte *dst = (byte *)frame.getPixels();
+		for (; done < target; done++) {
+			uint y = order[done] / _screen.w, x = order[done] % _screen.w;
+			dst[y * frame.pitch + x] = src[y * _screen.pitch + x];
+		}
+		_system->copyRectToScreen(frame.getPixels(), frame.pitch, 0, 0, frame.w, frame.h);
+		_system->updateScreen();
+		if (!dumped && t >= duration / 2) {
+			dumped = true;
+			dumpSurface(frame);
+		}
+		if (t >= duration)
+			break;
+		Common::Event event;
+		while (_eventMan->pollEvent(event))
+			;
+		_system->delayMillis(10);
+	}
+	frame.free();
+}
+
 // Wipes the new page (in _screen) over the old one: code 5 sweeps from the
-// left edge, code 4 from the right
+// left edge, code 4 from the right (FUN_0044fe00 cases 4 and 5)
 void DKPengeEngine::wipeTransition(const Graphics::Surface &from, int code) {
 	Graphics::Surface frame;
 	frame.copyFrom(from);
