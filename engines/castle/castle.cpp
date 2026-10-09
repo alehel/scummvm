@@ -575,6 +575,17 @@ void CastleEngine::setSpriteFrame(LiveObject *lo, int frame) {
 // Runs the sprite scripts registered for a sprite event:
 //   5 click, 9 frame reached (script->b is the 1-based frame),
 //   0xd last frame reached, 0x10 loop restarted, 10 timer
+// Jumping to a frame from a script also fires that frame's scripts
+void CastleEngine::spriteGotoFrame(LiveObject *lo, int frame) {
+	setSpriteFrame(lo, frame);
+	LivePage *page = lo->panel ? lo->panel->page : nullptr;
+	if (!page)
+		return;
+	runSpriteFrameScripts(page, lo, 9, lo->frame);
+	if (lo->frame == lo->frameCount)
+		runSpriteFrameScripts(page, lo, 0xd, lo->frame);
+}
+
 void CastleEngine::runSpriteFrameScripts(LivePage *page, LiveObject *lo, int event, int frame) {
 	const GameObject *obj = lo->obj;
 	for (uint i = 0; i < obj->scripts.size(); i++) {

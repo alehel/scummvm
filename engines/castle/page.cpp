@@ -118,6 +118,7 @@ void LivePage::layoutObjects(LivePanel *lp, Resources &res) {
 LivePanel *LivePage::addPanel(Panel *panel, const Common::Rect &rect, const Common::String &dir, Resources &res) {
 	LivePanel *lp = new LivePanel();
 	lp->panel = panel;
+	lp->page = this;
 	lp->rect = rect;
 	lp->dir = dir;
 	lp->scope.init(panel->ext);

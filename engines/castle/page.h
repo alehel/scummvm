@@ -73,8 +73,11 @@ struct Overlay {
 	Common::Point pos;
 };
 
+class LivePage;
+
 struct LivePanel {
 	Panel *panel;
+	LivePage *page;
 	Scope scope;
 	Common::Array<Overlay> overlays;
 	Common::Point scroll;   // content offset (zoom panels)
@@ -83,7 +86,7 @@ struct LivePanel {
 	byte rgb[3];
 	bool fill;
 	Common::Array<LiveObject> objects;
-	LivePanel() : panel(nullptr), fill(false) { rgb[0] = rgb[1] = rgb[2] = 0; }
+	LivePanel() : panel(nullptr), page(nullptr), fill(false) { rgb[0] = rgb[1] = rgb[2] = 0; }
 };
 
 // A page opened on screen: a record laid out through its template

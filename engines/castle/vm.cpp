@@ -691,7 +691,7 @@ void ScriptVM::setPropertyOf(LiveObject *lo, int prop, const Value &v) {
 	case kPropValue: lo->value = n; break;
 	case kPropSpriteFrame:
 	case kPropSpriteFrameB:
-		_vm->setSpriteFrame(lo, n);
+		_vm->spriteGotoFrame(lo, n);
 		break;
 	case kPropSpriteFrameCount: lo->frameCount = n; break;
 	case kPropSpriteDelay: lo->frameDelay = MAX(25, n); break;
