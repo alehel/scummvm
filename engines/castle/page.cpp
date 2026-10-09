@@ -69,9 +69,10 @@ void LivePage::layoutObjects(LivePanel *lp, Resources &res) {
 			lo.spriteFlags = obj->ints.size() > 3 ? obj->ints[3] : 0;
 			lo.spriteState = obj->ints.size() > 10 ? obj->ints[10] : 0;
 			lo.spriteLoops = obj->ints.size() > 14 ? obj->ints[14] : -1;
-			// AutoPlay sprites become active and shown when the page opens
+			// Object flag 0x20 activates and starts the sprite when its panel
+			// opens (state bits 1 and 4); whether it shows is bit 0x10 alone.
 			if (obj->flags & 0x20)
-				lo.spriteState |= 0x15;
+				lo.spriteState |= 5;
 			lo.visible = (lo.spriteState & 0x10) != 0 && obj->c != 0;
 			lo.playing = (lo.spriteFlags & 8) != 0 && lo.frameDelay != 0;
 			lo.spriteStartTime = g_system->getMillis();
@@ -284,6 +285,7 @@ void LivePage::draw(Graphics::Surface &screen, Resources &res) const {
 		}
 		for (uint k = 0; k < order.size(); k++) {
 			const LiveObject &lo = *order[k];
+			debugC(4, kDebugGraphics, "Castle: draw %s %d visible=%d image=%p z=%d rect=%d,%d,%d,%d", objectClassName(lo.obj->cls), lo.obj->id, lo.visible ? 1 : 0, (const void *)lo.image, lo.zOrder, lo.rect.left, lo.rect.top, lo.rect.right, lo.rect.bottom);
 			if (!lo.visible || !lo.image)
 				continue;
 			// Ambient animations of other room nodes are switched off

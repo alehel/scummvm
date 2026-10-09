@@ -740,7 +740,8 @@ void CastleEngine::updateSprites(uint32 now) {
 				LiveObject &lo = panels[i]->objects[k];
 				if (lo.obj->cls != kObjSprite || lo.frameCount <= 0)
 					continue;
-				if (!lo.playing || now < lo.nextFrameTime)
+				// Only active (1), loaded (2) and running (4) sprites animate
+				if (!lo.playing || (lo.spriteState & 7) != 7 || now < lo.nextFrameTime)
 					continue;
 				lo.nextFrameTime = now + lo.frameDelay;
 				if (!advanceSprite(page, &lo))
@@ -753,7 +754,7 @@ void CastleEngine::updateSprites(uint32 now) {
 // One step of the sprite state machine (FUN_0040c370 in the original): the
 // state bit 0x40 selects the direction and the loop mode decides what happens
 // at either end: 1 loops, 2 bounces, 3 stops on the last frame, anything else
-// ends the animation and fires the sprite's "finished" scripts.
+// ends the animation (running bit cleared, bit 8 set).
 // Returns false when a script changed the page.
 bool CastleEngine::advanceSprite(LivePage *page, LiveObject *lo) {
 	const GameObject *obj = lo->obj;
@@ -804,9 +805,7 @@ bool CastleEngine::spriteLoopDone(LivePage *page, LiveObject *lo) {
 
 void CastleEngine::spriteFinished(LivePage *page, LiveObject *lo) {
 	lo->playing = false;
-	lo->spriteFlags &= ~8;
 	lo->spriteState = (lo->spriteState & ~4) | 8;
-	runSpriteFrameScripts(page, lo, 4, lo->frame);
 }
 
 void CastleEngine::setCursor(const Common::String &name) {

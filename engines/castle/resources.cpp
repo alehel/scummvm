@@ -297,6 +297,7 @@ Image *Resources::loadImage(const Common::String &dir, const Common::String &nam
 		return nullptr;
 	Common::String key = name.hasPrefix("@") ? name : makePath(dir, name);
 	key.toLowercase();
+	debugC(3, kDebugGraphics, "Castle: loadImage '%s' key '%s' cached=%d", name.c_str(), key.c_str(), _imageCache.contains(key) ? 1 : 0);
 	if (_imageCache.contains(key))
 		return _imageCache[key];
 

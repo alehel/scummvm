@@ -21,6 +21,7 @@
 
 #include "common/debug.h"
 #include "common/random.h"
+#include "common/system.h"
 #include "common/textconsole.h"
 
 #include "castle/castle.h"
@@ -659,10 +660,25 @@ void ScriptVM::setPropertyOf(LiveObject *lo, int prop, const Value &v) {
 			return;
 		}
 		if (spriteStateBit(prop)) {
+			int bit = spriteStateBit(prop);
+			bool was = (lo->spriteState & bit) != 0;
 			if (v.toBool())
-				lo->spriteState |= spriteStateBit(prop);
+				lo->spriteState |= bit;
 			else
-				lo->spriteState &= ~spriteStateBit(prop);
+				lo->spriteState &= ~bit;
+			if (prop == kPropVisible)
+				lo->visible = v.toBool();
+			// Activating a sprite (bit 1) also starts it: running bit set,
+			// position reset to its origin, loop counter restarted.
+			if (bit == 1 && was != v.toBool()) {
+				if (v.toBool()) {
+					lo->spriteState = (lo->spriteState | 4) & ~8;
+					lo->spriteLoops = lo->obj->ints.size() > 14 ? lo->obj->ints[14] : -1;
+					lo->nextFrameTime = g_system->getMillis() + lo->frameDelay;
+				} else {
+					lo->spriteState &= ~4;
+				}
+			}
 			_vm->markDirty();
 			return;
 		}
