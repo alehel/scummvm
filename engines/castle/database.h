@@ -212,7 +212,7 @@ enum ObjectClass {
 // Object flags (+0x44 in the original object)
 enum ObjectFlags {
 	kObjFlagNoRect = 0x100,     // no rectangle stored in the record
-	kObjFlagCopyRect = 0x200,
+	kObjFlagCopyRect = 0x200,   // keeps a copy of its rect: fixed on screen, not scrolled with the panel
 	kObjFlagHasMask = 0x800     // a scanline mask follows the base fields
 };
 

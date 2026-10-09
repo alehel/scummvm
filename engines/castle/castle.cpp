@@ -50,7 +50,7 @@ namespace Castle {
 
 CastleEngine::CastleEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst), _gameDescription(gameDesc),
 		_rnd("castle"), _script(nullptr), _hoverObject(nullptr), _hoverPage(nullptr), _db(nullptr), _res(nullptr), _basePage(nullptr), _dirty(true), _paletteDirty(true), _pendingBasePage(0),
-		_pendingBase(false), _dumpCount(0), _ani(nullptr), _aniNextFrame(0), _spyType(0) {
+		_pendingBase(false), _dumpCount(0), _ani(nullptr), _aniNextFrame(0), _spyType(0), _scrollObject(nullptr), _scrollPage(nullptr), _scrollNext(0), _scrollStep(1) {
 	const Common::FSNode gameDataDir(ConfMan.getPath("path"));
 	SearchMan.addSubDirectoryMatching(gameDataDir, "dkcode");
 	SearchMan.addSubDirectoryMatching(gameDataDir, "3drooms", 0, 3);
@@ -99,6 +99,8 @@ Common::Error CastleEngine::run() {
 	uint start = _db->getStartPage();
 	if (ConfMan.hasKey("boot_param"))
 		start = ConfMan.getInt("boot_param");
+	if (ConfMan.hasKey("castle_dump"))
+		_dumpDir = ConfMan.get("castle_dump");
 	openBasePage(start);
 
 	setCursor(_db->getDefaultCursor());
@@ -139,15 +141,10 @@ Common::Error CastleEngine::run() {
 				LivePage *page = nullptr;
 				LiveObject *lo = move ? nullptr : hitTest(pt, &page);
 				debugC(1, kDebugScript, "Castle: scripted %s %d,%d -> %s", move ? "move" : "click", pt.x, pt.y, lo ? objectClassName(lo->obj->cls) : "nothing");
-				if (move) {
+				if (move)
 					handleMouseMove(pt);
-				} else if (lo) {
-					const Event *ev = lo->obj->findEvent(kEventClick);
-					if (ev)
-						runEvent(ev, page, lo);
-					else if (lo->obj->cls == kObjSprite)
-						runSpriteFrameScripts(page, lo, 5, lo->frame);
-				}
+				else if (lo)
+					clickObject(lo, page);
 				nextClick = _system->getMillis() + 1500;
 			}
 		}
@@ -165,6 +162,7 @@ Common::Error CastleEngine::run() {
 		if (_basePage)
 			_basePage->update(now, *_res);
 		updateSprites(now);
+		updateScrolling(now);
 		updateAnimation();
 		render();
 		_system->delayMillis(10);
@@ -180,13 +178,9 @@ void CastleEngine::handleEvents() {
 			LivePage *page = nullptr;
 			LiveObject *lo = hitTest(event.mouse, &page);
 			if (lo) {
-				const Event *ev = lo->obj->findEvent(kEventClick);
 				debugC(1, kDebugScript, "Castle: click on %s '%s' (id %d) at %d,%d", objectClassName(lo->obj->cls),
 				       lo->obj->file.c_str(), lo->obj->id, event.mouse.x, event.mouse.y);
-				if (ev)
-					runEvent(ev, page, lo);
-				else if (lo->obj->cls == kObjSprite)
-					runSpriteFrameScripts(page, lo, 5, lo->frame);
+				clickObject(lo, page);
 			} else if (_ani) {
 				// Clicking skips a running animation
 				delete _ani;
@@ -269,6 +263,7 @@ void CastleEngine::render() {
 	if (!_dumpDir.empty() && !_ani) {
 		Common::DumpFile f;
 		Common::Path path(Common::String::format("%s/castle%03d.png", _dumpDir.c_str(), _dumpCount++), '/');
+		debugC(1, kDebugGraphics, "Castle: dump %s", path.toString().c_str());
 		if (f.open(path)) {
 			byte pal[768];
 			_system->getPaletteManager()->grabPalette(pal, 0, 256);
@@ -280,6 +275,7 @@ void CastleEngine::render() {
 
 void CastleEngine::openBasePage(uint index) {
 	_hoverObject = nullptr;
+	_scrollObject = nullptr;
 	_hoverPage = nullptr;
 	closeAllPopups();
 	delete _basePage;
@@ -339,6 +335,7 @@ void CastleEngine::closePopup(uint index) {
 		if (_popups[i]->getIndex() == index || index == 0xffffffff) {
 			if (_hoverPage == _popups[i]) {
 				_hoverObject = nullptr;
+				_scrollObject = nullptr;
 				_hoverPage = nullptr;
 			}
 			delete _popups[i];
@@ -352,6 +349,7 @@ void CastleEngine::closePopup(uint index) {
 void CastleEngine::closeAllPopups() {
 	if (_hoverPage && _hoverPage != _basePage) {
 		_hoverObject = nullptr;
+		_scrollObject = nullptr;
 		_hoverPage = nullptr;
 	}
 	for (uint i = 0; i < _popups.size(); i++)
@@ -530,6 +528,23 @@ void CastleEngine::runAction(const Action *a, LivePage *page, LiveObject *obj) {
 	case kActUpdateNodeHtsp:
 		updateNodeHotspots(page, a->x);
 		break;
+	case kActPaintZoomArea:
+	case kActPaintZoomObject:
+	case kActClearZoomObject: {
+		LiveObject *cap = findZoomCaption(a->x, page);
+		if (!cap)
+			break;
+		Image *img = a->type == kActClearZoomObject || a->name.empty() ? nullptr : _res->loadImage(page ? page->getDir() : Common::String(), a->name);
+		if (a->type == kActPaintZoomArea) {
+			cap->overlayA = img;
+			if (!img)
+				cap->overlayB = nullptr;
+		} else {
+			cap->overlayB = img;
+		}
+		_dirty = true;
+		break;
+	}
 	case kActDoTransition:
 		doTransition(page, a->p[0], a->p[1], a->p[2]);
 		break;
@@ -606,6 +621,74 @@ void CastleEngine::doTransition(LivePage *page, int mode, int spriteId, int asyn
 		if (scriptShouldStop())
 			return;
 	}
+}
+
+// The zoom caption object (by id, else the first one on the base page)
+LiveObject *CastleEngine::findZoomCaption(int id, LivePage *page) {
+	LiveObject *lo = findLiveObject(id, page);
+	if (lo && lo->obj->cls == kObjZoomCaption)
+		return lo;
+	Common::Array<LivePage *> pages;
+	if (page)
+		pages.push_back(page);
+	if (_basePage && _basePage != page)
+		pages.push_back(_basePage);
+	for (uint p = 0; p < pages.size(); p++) {
+		const Common::Array<LivePanel *> &panels = pages[p]->getPanels();
+		for (uint i = 0; i < panels.size(); i++)
+			for (uint k = 0; k < panels[i]->objects.size(); k++)
+				if (panels[i]->objects[k].obj->cls == kObjZoomCaption)
+					return &panels[i]->objects[k];
+	}
+	return nullptr;
+}
+
+// A click on an object: its on_click event, a sprite's click scripts, or
+// the built-in behaviour of a page-turn corner (sound and a page change
+// with the curl transition towards the stored page).
+void CastleEngine::clickObject(LiveObject *lo, LivePage *page) {
+	const Event *ev = lo->obj->findEvent(kEventClick);
+	if (ev) {
+		runEvent(ev, page, lo);
+		return;
+	}
+	if (lo->obj->cls == kObjSprite) {
+		runSpriteFrameScripts(page, lo, 5, lo->frame);
+		return;
+	}
+	if (lo->obj->cls == kObjPageTurn && !lo->obj->u32s.empty()) {
+		playWave(Common::String(), "@page1s", false);
+		Action a;
+		a.type = kActChangePage;
+		a.page = lo->obj->u32s[0];
+		a.x = (lo->obj->ints.size() > 2 && lo->obj->ints[2] == 1) ? 5 : 4;
+		runAction(&a, page, lo);
+	}
+}
+
+// Scroll-edge objects of the zoom pages scroll their panel while the mouse
+// rests on them, speeding up from 1 to 8 pixels per tick.
+void CastleEngine::updateScrolling(uint32 now) {
+	if (!_scrollObject || !_scrollPage || now < _scrollNext)
+		return;
+	_scrollNext = now + 40;
+	int dir = _scrollObject->obj->ints.empty() ? -1 : _scrollObject->obj->ints[0];
+	int dx = 0, dy = 0, st = _scrollStep;
+	switch (dir) {
+	case 0: dy = -st; break;
+	case 1: dy = st; break;
+	case 2: dx = -st; break;
+	case 3: dx = st; break;
+	case 4: dx = -st; dy = -st; break;
+	case 5: dx = st; dy = -st; break;
+	case 6: dx = -st; dy = st; break;
+	case 7: dx = st; dy = st; break;
+	default: return;
+	}
+	if (_scrollPage->scrollBy(dx, dy))
+		_dirty = true;
+	if (_scrollStep < 8)
+		_scrollStep *= 2;
 }
 
 LiveObject *CastleEngine::findHighlightObject(LivePage *page) {
@@ -864,6 +947,15 @@ void CastleEngine::handleMouseMove(const Common::Point &p) {
 	}
 	_hoverObject = lo;
 	_hoverPage = page;
+	if (lo && (lo->obj->cls == kObjScrollObject || lo->obj->cls == kObjWrapScrollObject)) {
+		_scrollObject = lo;
+		_scrollPage = page;
+		_scrollStep = 1;
+		_scrollNext = 0;
+	} else {
+		_scrollObject = nullptr;
+		_scrollPage = nullptr;
+	}
 	if (lo && lo->obj->cls == kObjNavRollOverButton) {
 		lo->hovered = true;
 		_dirty = true;

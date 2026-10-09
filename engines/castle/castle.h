@@ -73,6 +73,9 @@ public:
 	void updateNodeHotspots(LivePage *page, int node);
 	void doTransition(LivePage *page, int mode, int spriteId, int async);
 	void setCursor(const Common::String &name);
+	void clickObject(LiveObject *lo, LivePage *page);
+	void updateScrolling(uint32 now);
+	LiveObject *findZoomCaption(int id, LivePage *page);
 
 private:
 	void handleEvents();
@@ -126,6 +129,10 @@ private:
 	};
 	Common::Array<WaveChannel> _channels;
 	int _spyType;
+	LiveObject *_scrollObject;   // scroll-edge object under the mouse
+	LivePage *_scrollPage;
+	uint32 _scrollNext;
+	int _scrollStep;
 	Audio::SoundHandle _aniAudioHandle;
 	AniDecoder *_ani;
 	Common::Point _aniPos;

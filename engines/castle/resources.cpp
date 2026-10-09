@@ -19,6 +19,7 @@
  *
  */
 
+#include "common/config-manager.h"
 #include "common/debug.h"
 #include "common/file.h"
 #include "common/formats/winexe_pe.h"
@@ -316,6 +317,14 @@ Image *Resources::loadImage(const Common::String &dir, const Common::String &nam
 	}
 	if (!img)
 		debugC(1, kDebugGraphics, "Castle: image '%s' (dir '%s') not found or undecodable", name.c_str(), dir.c_str());
+	if (img && ConfMan.hasKey("castle_dumpimage") && name.equalsIgnoreCase(ConfMan.get("castle_dumpimage"))) {
+		Common::DumpFile f;
+		if (f.open(Common::Path(ConfMan.get("castle_dump") + "/image.png", '/'))) {
+			byte pal[768];
+			img->palette.grab(pal, 0, 256);
+			::Image::writePNG(f, img->surface, pal, 256);
+		}
+	}
 	_imageCache[key] = img;
 	return img;
 }

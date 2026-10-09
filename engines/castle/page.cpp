@@ -113,6 +113,10 @@ void LivePage::layoutObjects(LivePanel *lp, Resources &res) {
 				_paletteImage = lo.image;
 		}
 		lp->objects.push_back(lo);
+		if (!(obj->flags & kObjFlagCopyRect)) {
+			lp->contentSize.x = MAX<int16>(lp->contentSize.x, obj->rect.right);
+			lp->contentSize.y = MAX<int16>(lp->contentSize.y, obj->rect.bottom);
+		}
 	}
 }
 
@@ -286,13 +290,22 @@ void LivePage::draw(Graphics::Surface &screen, Resources &res) const {
 		for (uint k = 0; k < order.size(); k++) {
 			const LiveObject &lo = *order[k];
 			debugC(4, kDebugGraphics, "Castle: draw %s %d visible=%d image=%p z=%d rect=%d,%d,%d,%d", objectClassName(lo.obj->cls), lo.obj->id, lo.visible ? 1 : 0, (const void *)lo.image, lo.zOrder, lo.rect.left, lo.rect.top, lo.rect.right, lo.rect.bottom);
-			if (!lo.visible || !lo.image)
+			if (!lo.visible || (!lo.image && lo.obj->cls != kObjZoomCaption))
 				continue;
 			// Ambient animations of other room nodes are switched off
 			if (lo.obj->cls == kObjAmbientAnimation && lo.disabled)
 				continue;
 			Common::Rect r = lo.rect;
-			r.translate(-lp->scroll.x, -lp->scroll.y);
+			if (!(lo.obj->flags & kObjFlagCopyRect))
+				r.translate(-lp->scroll.x, -lp->scroll.y);
+			if (lo.obj->cls == kObjZoomCaption) {
+				// The caption shows the artwork painted by PaintZoomArea/Object
+				if (lo.overlayA)
+					blitImage(screen, lo.overlayA, Common::Rect(r.left, r.top, r.left + lo.overlayA->surface.w, r.top + lo.overlayA->surface.h), lp->rect);
+				if (lo.overlayB)
+					blitImage(screen, lo.overlayB, Common::Rect(r.left, r.top, r.left + lo.overlayB->surface.w, r.top + lo.overlayB->surface.h), lp->rect);
+				continue;
+			}
 			if (lo.obj->cls == kObjHighlightingCastle) {
 				highlightSection(screen, lo.image, r, lo.value, res);
 				continue;
@@ -303,7 +316,14 @@ void LivePage::draw(Graphics::Surface &screen, Resources &res) const {
 					blitImage(screen, lo.image, r, lp->rect, lo.image->keyIndex);
 				continue;
 			}
-			blitImage(screen, lo.image, r, lp->rect);
+			// Sprites, masks and the artwork of transparent panels are keyed
+			// on pure green; plain bitmaps of opaque panels are copied as is.
+			int key = -1;
+			int pt = lp->panel->type;
+			bool transparentPanel = pt == kPanelTransparent || pt == kPanelTransparentSprite || pt == kPanelTransparentText;
+			if (lo.obj->cls != kObjBitmap || transparentPanel)
+				key = lo.image->keyIndex;
+			blitImage(screen, lo.image, r, lp->rect, key);
 		}
 		for (uint k = 0; k < lp->overlays.size(); k++) {
 			const Overlay &ov = lp->overlays[k];
@@ -311,6 +331,23 @@ void LivePage::draw(Graphics::Surface &screen, Resources &res) const {
 				blitImage(screen, ov.image, Common::Rect(ov.pos.x, ov.pos.y, ov.pos.x + ov.image->surface.w, ov.pos.y + ov.image->surface.h), lp->rect);
 		}
 	}
+}
+
+bool LivePage::scrollBy(int dx, int dy) {
+	bool moved = false;
+	for (uint i = 0; i < _panels.size(); i++) {
+		LivePanel *lp = _panels[i];
+		if (lp->panel->type != kPanelZoomSprite && lp->panel->type != kPanelScroll)
+			continue;
+		Common::Point np(lp->scroll.x + dx, lp->scroll.y + dy);
+		np.x = CLIP<int16>(np.x, 0, MAX<int16>(0, lp->contentSize.x - lp->rect.width()));
+		np.y = CLIP<int16>(np.y, 0, MAX<int16>(0, lp->contentSize.y - lp->rect.height()));
+		if (np != lp->scroll) {
+			lp->scroll = np;
+			moved = true;
+		}
+	}
+	return moved;
 }
 
 void LivePage::setScroll(const Common::Point &p) {
@@ -345,7 +382,8 @@ LiveObject *LivePage::objectAt(const Common::Point &p, bool hotspotsOnly) {
 					continue;
 			}
 			Common::Point q = p;
-			q += lp->scroll;
+			if (!(lo.obj->flags & kObjFlagCopyRect))
+				q += lp->scroll;
 			if (lo.rect.contains(q))
 				return &lo;
 		}

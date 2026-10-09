@@ -62,8 +62,10 @@ struct LiveObject {
 	int spriteLoops;        // remaining loops (-1 = forever)
 	uint32 spriteStartTime;
 	bool spriteStarted;
+	Image *overlayA;        // zoom caption: painted zoom area artwork
+	Image *overlayB;        // zoom caption: painted zoom object artwork
 	LiveObject() : obj(nullptr), panel(nullptr), image(nullptr), frame(0), frameCount(0), frameDelay(100), nextFrameTime(0),
-			playing(false), visible(true), disabled(false), hovered(false), zOrder(0), value(0), spriteFlags(0), spriteState(0), spriteLoops(-1), spriteStartTime(0), spriteStarted(false) {
+			playing(false), visible(true), disabled(false), hovered(false), zOrder(0), value(0), spriteFlags(0), spriteState(0), spriteLoops(-1), spriteStartTime(0), spriteStarted(false), overlayA(nullptr), overlayB(nullptr) {
 		memset(counters, 0, sizeof(counters));
 		memset(extra, 0, sizeof(extra));
 	}
@@ -82,6 +84,7 @@ struct LivePanel {
 	Scope scope;
 	Common::Array<Overlay> overlays;
 	Common::Point scroll;   // content offset (zoom panels)
+	Common::Point contentSize; // extent of the scrollable content
 	Common::Rect rect;      // screen rectangle
 	Common::String dir;
 	byte rgb[3];
@@ -98,6 +101,8 @@ public:
 
 	bool open(Database &db, Resources &res, uint index, const Common::Point &origin);
 	void setScroll(const Common::Point &p);
+	// Scrolls the zoom panels by a delta, clamped to their content
+	bool scrollBy(int dx, int dy);
 	void draw(Graphics::Surface &screen, Resources &res) const;
 	LiveObject *hitTest(const Common::Point &p);
 	LiveObject *objectAt(const Common::Point &p, bool hotspotsOnly);
