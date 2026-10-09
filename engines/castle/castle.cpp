@@ -42,6 +42,7 @@
 
 #include "castle/ani.h"
 #include "castle/castle.h"
+#include "castle/collage.h"
 #include "castle/database.h"
 #include "castle/detection.h"
 #include "castle/page.h"
@@ -54,7 +55,8 @@ namespace Castle {
 
 CastleEngine::CastleEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst), _gameDescription(gameDesc),
 		_rnd("castle"), _script(nullptr), _hoverObject(nullptr), _hoverPage(nullptr), _db(nullptr), _res(nullptr), _basePage(nullptr), _dirty(true), _paletteDirty(true), _pendingBasePage(0),
-		_pendingBase(false), _dumpCount(0), _ani(nullptr), _aniNextFrame(0), _quest(nullptr), _quiz(nullptr), _activityCompleted(false), _spyChangedFlag(false), _saveSlot(-1), _savedPage(0), _pressedObject(nullptr), _pressedPage(nullptr), _dragging(false), _dragPage(nullptr), _dungeonTimerEnd(0), _scrollObject(nullptr), _scrollPage(nullptr), _scrollNext(0), _scrollStep(1), _ambientNext(0) {
+		_pendingBase(false), _dumpCount(0), _ani(nullptr), _aniNextFrame(0), _quest(nullptr), _quiz(nullptr), _activityCompleted(false), _spyChangedFlag(false), _saveSlot(-1), _savedPage(0), _pressedObject(nullptr), _pressedPage(nullptr), _dragging(false), _dragPage(nullptr), _dungeonTimerEnd(0), _scrollObject(nullptr), _scrollPage(nullptr), _scrollNext(0), _scrollStep(1), _ambientNext(0),
+		_trailNavigating(false), _pendingPopup(0), _scrollBarDrag(false), _scrollBarGrab(0) {
 	const Common::FSNode gameDataDir(ConfMan.getPath("path"));
 	SearchMan.addSubDirectoryMatching(gameDataDir, "dkcode");
 	SearchMan.addSubDirectoryMatching(gameDataDir, "3drooms", 0, 3);
@@ -247,7 +249,7 @@ void CastleEngine::handleEvents() {
 			releaseMouse(event.mouse);
 			break;
 		case Common::EVENT_MOUSEMOVE:
-			if (_dragging || _dragPage)
+			if (_dragging || _dragPage || _scrollBarDrag || (_pressedObject && _pressedObject->obj->cls == kObjCollage))
 				dragTo(event.mouse);
 			else
 				handleMouseMove(event.mouse);
@@ -337,6 +339,7 @@ void CastleEngine::render() {
 }
 
 void CastleEngine::openBasePage(uint index) {
+	updateTrailScroll();
 	_hoverObject = nullptr;
 	_scrollObject = nullptr;
 	_pressedObject = nullptr;
@@ -352,6 +355,8 @@ void CastleEngine::openBasePage(uint index) {
 		return;
 	}
 	applyQuestObjects(_basePage, true);
+	setupCollages(_basePage);
+	recordTrail(_basePage, false);
 	_dirty = true;
 	_paletteDirty = true;
 	render();
@@ -396,6 +401,8 @@ void CastleEngine::openPopup(uint index) {
 	_popups.push_back(page);
 	debugC(2, kDebugGraphics, "Castle: popup %u at %d,%d %dx%d", index, page->getBounds().left, page->getBounds().top, page->getBounds().width(), page->getBounds().height());
 	applyQuestObjects(page, true);
+	setupCollages(page);
+	recordTrail(page, true);
 	_dirty = true;
 	render();
 	runPageEvents(page, kEventOpen);
@@ -415,6 +422,7 @@ void CastleEngine::closePopup(uint index) {
 			if (_pressedPage == _popups[i]) {
 				_pressedObject = nullptr;
 				_pressedPage = nullptr;
+				_scrollBarDrag = false;
 			}
 			delete _popups[i];
 			_popups.remove_at(i);
@@ -435,6 +443,7 @@ void CastleEngine::closeAllPopups() {
 	}
 	_pressedObject = nullptr;
 	_pressedPage = nullptr;
+	_scrollBarDrag = false;
 	for (uint i = 0; i < _popups.size(); i++)
 		delete _popups[i];
 	_popups.clear();
@@ -479,6 +488,10 @@ void CastleEngine::runAction(const Action *a, LivePage *page, LiveObject *obj) {
 		_pendingBasePage = a->page;
 		_pendingBase = true;
 		_pendingScroll = a->pt;
+		break;
+	case kActScrollListBox:
+		// p[0]: 0 scrolls the page's list down a line, otherwise up
+		scrollCollage(page, a->p[0] ? -1 : 1);
 		break;
 	case kActClosePage:
 		if (page && page->isPopup())
@@ -858,6 +871,14 @@ void CastleEngine::pressObject(LiveObject *lo, LivePage *page, const Common::Poi
 		_scrollStep = 8;
 		return;
 	}
+	if (lo->obj->cls == kObjCollage) {
+		collagePress(lo, page, p);
+		return;
+	}
+	if (lo->obj->cls == kObjScrollBar) {
+		scrollBarPress(lo, page, p);
+		return;
+	}
 	clickObject(lo, page);
 }
 
@@ -876,6 +897,13 @@ void CastleEngine::releaseMouse(const Common::Point &p) {
 	}
 	if (lo->obj->cls == kObjSprite)
 		runSpriteFrameScripts(page, lo, 5, lo->frame);
+	else if (lo->obj->cls == kObjCollage)
+		collageRelease(lo, page, p);
+	else if (lo->obj->cls == kObjScrollBar) {
+		lo->value = 0;
+		_scrollBarDrag = false;
+		_dirty = true;
+	}
 }
 
 // Moves a dragged sprite with the mouse, kept inside its limit rectangle
@@ -891,6 +919,19 @@ void CastleEngine::dragTo(const Common::Point &p) {
 		return;
 	}
 	LiveObject *lo = _pressedObject;
+	if (lo && lo->obj->cls == kObjScrollBar) {
+		if (_scrollBarDrag)
+			scrollBarDrag(lo, _pressedPage, p);
+		return;
+	}
+	if (lo && lo->obj->cls == kObjCollage) {
+		// Dragging over the list moves the selection with the mouse
+		Collage *c = lo->collage;
+		int item = c ? c->itemAt(lo->rect, p) : -1;
+		if (item >= 0 && c->select(item, 1))
+			collageSelected(_pressedPage, lo);
+		return;
+	}
 	if (!lo || !_dragging)
 		return;
 	int w = lo->rect.width(), h = lo->rect.height();
@@ -1014,6 +1055,13 @@ void CastleEngine::clickObject(LiveObject *lo, LivePage *page) {
 	case kObjQuestionOKButton:
 		answerClicked(lo, page);
 		return;
+	case kObjCollageButton: {
+		// The OK button of the Index: goes to the selected entry
+		LiveObject *list = page->findCollage();
+		if (list)
+			activateCollageItem(page, list);
+		return;
+	}
 	case kObjPageTurn:
 		// Seeing the zoom page lets the map item complete its task directly
 		_quiz->setFlag(true);
@@ -1919,6 +1967,12 @@ void CastleEngine::flushPendingPage() {
 	if (_basePage && (scroll.x || scroll.y)) {
 		_basePage->setScroll(scroll);
 		_dirty = true;
+		updateTrailScroll();
+	}
+	if (_pendingPopup) {
+		uint popup = _pendingPopup;
+		_pendingPopup = 0;
+		openPopup(popup);
 	}
 }
 
@@ -1978,6 +2032,8 @@ LiveObject *CastleEngine::findEditBox(LivePage **pageOut) {
 }
 
 void CastleEngine::typeKey(int ascii, int keycode) {
+	if (collageKey(ascii, keycode))
+		return;
 	LivePage *page = nullptr;
 	LiveObject *edit = findEditBox(&page);
 	if (!edit)
@@ -2063,6 +2119,375 @@ void CastleEngine::quizSendMessage(int objectId, int msg) {
 void CastleEngine::quizSetState(int state) {
 	_script->setDocVariable(_db->getTail().vars[0], Value::number(state));
 	_quest->setExtra(state);
+}
+
+
+// ---- Index and Trail lists ------------------------------------------------
+
+// Fills the Trail list with the navigation history (the Index list is built
+// from its record when the page opens)
+void CastleEngine::setupCollages(LivePage *page) {
+	LiveObject *lo = page->findCollage();
+	if (!lo || !lo->collage || !lo->collage->tracker)
+		return;
+	Collage *c = lo->collage;
+	c->items.clear();
+	for (uint i = 0; i < _trail.size(); i++) {
+		CollageItem it;
+		it.text = _trail[i].title;
+		it.full = it.text;
+		it.icon = _trail[i].icon;
+		it.entry = i;
+		c->items.push_back(it);
+	}
+	c->selected = -1;
+	c->scrollTo(c->maxScroll());
+}
+
+// The list that receives the keyboard: the topmost page with one
+LiveObject *CastleEngine::findCollage(LivePage **pageOut) {
+	for (int i = (int)_popups.size() - 1; i >= 0; i--) {
+		LiveObject *lo = _popups[i]->findCollage();
+		if (lo) {
+			*pageOut = _popups[i];
+			return lo;
+		}
+	}
+	if (_basePage) {
+		LiveObject *lo = _basePage->findCollage();
+		if (lo) {
+			*pageOut = _basePage;
+			return lo;
+		}
+	}
+	return nullptr;
+}
+
+// A click on the list selects the entry under the mouse; a double click
+// goes to it
+void CastleEngine::collagePress(LiveObject *lo, LivePage *page, const Common::Point &p) {
+	Collage *c = lo->collage;
+	if (!c)
+		return;
+	int item = c->itemAt(lo->rect, p);
+	if (item < 0)
+		return;
+	uint32 now = _system->getMillis();
+	bool doubleClick = !c->tracker && item == c->lastClickItem && now - c->lastClickTime < 400;
+	c->lastClickTime = now;
+	c->lastClickItem = item;
+	if (c->select(item, 1))
+		collageSelected(page, lo);
+	if (doubleClick)
+		activateCollageItem(page, lo);
+}
+
+// Releasing the mouse on a Trail entry goes back to it (the Tracker's
+// event handler of the original activates on event 4)
+void CastleEngine::collageRelease(LiveObject *lo, LivePage *page, const Common::Point &p) {
+	Collage *c = lo->collage;
+	if (!c || !c->tracker)
+		return;
+	int item = c->itemAt(lo->rect, p);
+	if (item >= 0 && item == c->selected)
+		goToTrailEntry(c->items[item].entry);
+}
+
+// The selection changed: the Index's edit box shows the entry's full text
+void CastleEngine::collageSelected(LivePage *page, LiveObject *lo) {
+	Collage *c = lo->collage;
+	_dirty = true;
+	if (c->tracker || c->selected < 0)
+		return;
+	c->typed.clear();
+	LiveObject *edit = page->findObjectOfClass(kObjEditBox);
+	if (edit) {
+		edit->text = c->items[c->selected].full;
+		edit->selStart = 0;
+	}
+}
+
+// Text typed into the Index's edit box: the first entry sorting at or after
+// it is selected and completed in the box, the completion selected so that
+// the next key replaces it
+void CastleEngine::collageTyped(LivePage *page, LiveObject *lo) {
+	Collage *c = lo->collage;
+	LiveObject *edit = page->findObjectOfClass(kObjEditBox);
+	_dirty = true;
+	if (c->typed.empty()) {
+		if (edit) {
+			edit->text.clear();
+			edit->selStart = -1;
+		}
+		return;
+	}
+	int item = c->findPrefix(c->typed);
+	if (item >= 0)
+		c->select(item, 1);
+	c->ensureVisible(c->selected);
+	if (edit && c->selected >= 0) {
+		edit->text = c->items[c->selected].full;
+		edit->selStart = MIN<int>(c->typed.size(), edit->text.size());
+	}
+}
+
+void CastleEngine::scrollCollage(LivePage *page, int delta) {
+	LiveObject *lo = page ? page->findCollage() : nullptr;
+	if (!lo)
+		lo = findCollage(&page);
+	if (!lo || !lo->collage)
+		return;
+	lo->collage->scrollBy(delta);
+	_dirty = true;
+}
+
+// Goes to the selected entry: Index entries change the page (scrolling a
+// zoom page to the entry's position) and open a popup (a library book, a
+// glossary entry); Trail entries return to the recorded location
+void CastleEngine::activateCollageItem(LivePage *page, LiveObject *lo) {
+	Collage *c = lo->collage;
+	if (!c || c->selected < 0 || c->selected >= c->count())
+		return;
+	CollageItem it = c->items[c->selected];
+	if (c->tracker) {
+		goToTrailEntry(it.entry);
+		return;
+	}
+	debugC(1, kDebugScript, "Castle: index entry '%s' page %u popup %u at %d,%d", it.full.c_str(), it.page, it.popup, it.pt.x, it.pt.y);
+	if (page->isPopup())
+		closePopup(page->getIndex());
+	// lo and c are gone with the popup
+	if (it.page != 0xffffffff) {
+		if (it.pt.x == 0 && it.pt.y == 0) {
+			Action a;
+			a.type = kActChangePage;
+			a.page = it.page;
+			runAction(&a, nullptr, nullptr);
+		} else if (_basePage && _basePage->getIndex() == it.page) {
+			_basePage->setScroll(it.pt);
+			_dirty = true;
+			updateTrailScroll();
+		} else {
+			_pendingBasePage = it.page;
+			_pendingBase = true;
+			_pendingScroll = it.pt;
+		}
+	}
+	if (it.popup != 0xffffffff) {
+		if (_pendingBase)
+			_pendingPopup = it.popup;
+		else
+			openPopup(it.popup);
+	}
+}
+
+// Geometry of the Index's scroll bar: the arrow buttons at both ends and
+// the coin travelling along the bar between them
+static void scrollBarGeometry(Resources &res, const LiveObject &lo, int &barTop, int &barBottom, int &coinH) {
+	const GameObject *o = lo.obj;
+	Image *up = o->strs.size() > 0 ? res.loadImage(Common::String(), o->strs[0]) : nullptr;
+	Image *down = o->strs.size() > 1 ? res.loadImage(Common::String(), o->strs[1]) : nullptr;
+	Image *coin = o->strs.size() > 2 ? res.loadImage(Common::String(), o->strs[2]) : nullptr;
+	barTop = lo.rect.top + (up ? up->surface.h : 18);
+	barBottom = lo.rect.bottom - (down ? down->surface.h : 18);
+	coinH = coin ? coin->surface.h : 16;
+}
+
+void CastleEngine::scrollBarPress(LiveObject *lo, LivePage *page, const Common::Point &p) {
+	LiveObject *list = page->findCollage();
+	if (!list || !list->collage)
+		return;
+	Collage *c = list->collage;
+	int barTop, barBottom, coinH;
+	scrollBarGeometry(*_res, *lo, barTop, barBottom, coinH);
+	if (p.y < barTop) {
+		c->scrollBy(-1);
+		lo->value = 1;
+	} else if (p.y >= barBottom) {
+		c->scrollBy(1);
+		lo->value = 2;
+	} else {
+		int travel = barBottom - barTop - coinH;
+		int pos = (c->maxScroll() > 0 && travel > 0) ? travel * c->scrollTop / c->maxScroll() : 0;
+		int coinY = barTop + pos;
+		if (p.y >= coinY && p.y < coinY + coinH) {
+			_scrollBarDrag = true;
+			_scrollBarGrab = p.y - coinY;
+		} else if (p.y < coinY) {
+			c->scrollBy(-c->pageSize);
+		} else {
+			c->scrollBy(c->pageSize);
+		}
+	}
+	_dirty = true;
+}
+
+void CastleEngine::scrollBarDrag(LiveObject *lo, LivePage *page, const Common::Point &p) {
+	LiveObject *list = page ? page->findCollage() : nullptr;
+	if (!list || !list->collage)
+		return;
+	Collage *c = list->collage;
+	int barTop, barBottom, coinH;
+	scrollBarGeometry(*_res, *lo, barTop, barBottom, coinH);
+	int travel = barBottom - barTop - coinH;
+	if (travel <= 0)
+		return;
+	int pos = CLIP(p.y - _scrollBarGrab - barTop, 0, travel);
+	int top = (pos * c->maxScroll() + travel / 2) / travel;
+	if (top != c->scrollTop) {
+		c->scrollTo(top);
+		_dirty = true;
+	}
+}
+
+// Keys on a page with a list (the GroupCollage of the original): Enter
+// goes to the selection, the cursor keys move it, characters search
+bool CastleEngine::collageKey(int ascii, int keycode) {
+	LivePage *page = nullptr;
+	LiveObject *lo = findCollage(&page);
+	if (!lo || !lo->collage)
+		return false;
+	Collage *c = lo->collage;
+	switch (keycode) {
+	case Common::KEYCODE_RETURN:
+	case Common::KEYCODE_KP_ENTER:
+		activateCollageItem(page, lo);
+		return true;
+	case Common::KEYCODE_UP:
+		c->moveSelection(-1, -1);
+		collageSelected(page, lo);
+		return true;
+	case Common::KEYCODE_DOWN:
+		c->moveSelection(1, 1);
+		collageSelected(page, lo);
+		return true;
+	case Common::KEYCODE_PAGEUP:
+		c->moveSelection(-c->pageSize, -1);
+		collageSelected(page, lo);
+		return true;
+	case Common::KEYCODE_PAGEDOWN:
+		c->moveSelection(c->pageSize, 1);
+		collageSelected(page, lo);
+		return true;
+	case Common::KEYCODE_HOME:
+		c->moveSelection(-c->count(), 1);
+		collageSelected(page, lo);
+		return true;
+	case Common::KEYCODE_END:
+		c->moveSelection(c->count(), -1);
+		collageSelected(page, lo);
+		return true;
+	case Common::KEYCODE_BACKSPACE:
+		if (!c->tracker) {
+			if (!c->typed.empty())
+				c->typed.deleteLastChar();
+			collageTyped(page, lo);
+		}
+		return true;
+	default:
+		break;
+	}
+	if (!c->tracker && ascii >= 32 && ascii < 127 && c->typed.size() < 80) {
+		c->typed += (char)ascii;
+		collageTyped(page, lo);
+	}
+	return true;
+}
+
+// Describes a page as a Trail location: the library books, the rooms and
+// the Castle Guide carry their titles in the document; other pages carry
+// theirs in their record. Pages without a title (the title page, the
+// options) are not recorded.
+bool CastleEngine::describeLocation(LivePage *page, bool popup, TrailEntry &e) {
+	const DocumentTail &t = _db->getTail();
+	PageRecord *rec = page->getRecord();
+	if (!rec)
+		return false;
+	if (popup) {
+		// The six library books, by the id of their popup page
+		static const int kStrIndex[6] = { 0, 2, 1, 3, 5, 4 };
+		static const int kIcons[6] = { 23, 25, 26, 21, 22, 24 };
+		for (int k = 0; k < 6; k++) {
+			if (rec->id == t.ints[1 + k]) {
+				e.title = _db->getString(t.titleStrs[kStrIndex[k]]);
+				e.icon = kIcons[k];
+				e.page = _basePage ? _basePage->getIndex() : 0;
+				e.popup = page->getIndex();
+				return true;
+			}
+		}
+		return false;
+	}
+	e.page = page->getIndex();
+	e.popup = 0xffffffff;
+	e.scroll = page->getScroll();
+	for (int i = 0; i < 4; i++) {
+		if (e.page == t.pages2[i]) {
+			e.title = _db->getString(t.titleStrs[6 + i]);
+			e.icon = 31 + i;
+			return true;
+		}
+	}
+	if (rec->id == t.ints[9]) {
+		e.title = _db->getString(t.titleStrs[10]);
+		e.icon = 30;
+		return true;
+	}
+	e.title = rec->title;
+	e.icon = rec->icon;
+	return !e.title.empty() && e.icon > 0;
+}
+
+void CastleEngine::recordTrail(LivePage *page, bool popup) {
+	if (_trailNavigating) {
+		// Returning to an entry: the pages opened on the way are not new
+		if (popup || !_pendingPopup)
+			_trailNavigating = false;
+		return;
+	}
+	TrailEntry e;
+	if (!describeLocation(page, popup, e))
+		return;
+	if (!_trail.empty()) {
+		const TrailEntry &last = _trail.back();
+		if (last.page == e.page && last.popup == e.popup)
+			return;
+	}
+	if (_trail.size() >= 60)
+		_trail.remove_at(0);
+	_trail.push_back(e);
+	debugC(1, kDebugScript, "Castle: trail %u: '%s' icon %d page %u popup %u", _trail.size(), e.title.c_str(), e.icon, e.page, e.popup);
+}
+
+// Keeps the latest entry's view position up to date while on a zoom page
+void CastleEngine::updateTrailScroll() {
+	if (!_basePage || _trail.empty())
+		return;
+	TrailEntry &last = _trail.back();
+	if (last.page == _basePage->getIndex() && last.popup == 0xffffffff)
+		last.scroll = _basePage->getScroll();
+}
+
+void CastleEngine::goToTrailEntry(int entry) {
+	if (entry < 0 || entry >= (int)_trail.size())
+		return;
+	TrailEntry e = _trail[entry];
+	debugC(1, kDebugScript, "Castle: trail back to '%s' page %u popup %u", e.title.c_str(), e.page, e.popup);
+	closeAllPopups();
+	_trailNavigating = true;
+	if (!_basePage || _basePage->getIndex() != e.page) {
+		_pendingBasePage = e.page;
+		_pendingBase = true;
+		_pendingScroll = e.scroll;
+		_pendingPopup = e.popup != 0xffffffff ? e.popup : 0;
+	} else {
+		_basePage->setScroll(e.scroll);
+		_dirty = true;
+		if (e.popup != 0xffffffff)
+			openPopup(e.popup);
+		else
+			_trailNavigating = false;
+	}
 }
 
 } // End of namespace Castle

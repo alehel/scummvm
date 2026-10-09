@@ -857,6 +857,7 @@ Panel *Database::readPanelBody(Common::SeekableReadStream &s, int16 type) {
 			o->cursor = readStringRef(s);
 			o->ints.push_back(s.readSint16BE());
 			o->ints.push_back(s.readSint16BE());
+			o->c = 1; // shown like any other object
 			for (int k = 0; k < 3; k++)
 				o->u32s.push_back(s.readUint32BE());
 			if (cls == kObjScrollBar) {
@@ -917,6 +918,10 @@ PageRecord *Database::readRecord(uint index) {
 		rec->panels.push_back(readPanelBody(s, pt));
 	}
 	readEvents(s, rec->events);
+	// The record ends with the page's trail title (string index) and icon
+	uint32 trailer = s.readUint32BE();
+	rec->icon = trailer & 0xffff;
+	rec->title = getString(trailer >> 16);
 	return rec;
 }
 
@@ -935,6 +940,13 @@ int Database::getBuiltinNumber(int id) const {
 		if (_builtinIds[i] == id)
 			return _builtinNums[i];
 	return 0;
+}
+
+const TextStyle *Database::findStyle(int16 id) const {
+	for (uint i = 0; i < _tail.styles.size(); i++)
+		if (_tail.styles[i].id == id)
+			return &_tail.styles[i];
+	return nullptr;
 }
 
 const PageTemplate *Database::findTemplate(int16 id) const {
@@ -1049,9 +1061,17 @@ bool Database::readDocumentTail(Common::SeekableReadStream &s, uint32 end) {
 	// Text styles of the edit boxes: object id, font id, 4 colours, 5 shorts, font name, short
 	int n = readCount(s);
 	for (int i = 0; i < n; i++) {
-		s.skip(4 + 12 + 2 + 8);
-		readInlineString(s);
+		TextStyle st;
+		st.fontId = s.readSint16BE();
+		st.id = s.readSint16BE();
+		for (int k = 0; k < 4; k++)
+			readRGB(s, st.rgb[k]);
+		st.size = s.readSint16BE();
+		for (int k = 0; k < 4; k++)
+			st.flags[k] = s.readSint16BE();
+		st.fontName = readInlineString(s);
 		s.skip(2);
+		_tail.styles.push_back(st);
 	}
 	n = readCount(s);
 	s.skip(n * 15);
@@ -1136,7 +1156,7 @@ bool Database::readDocumentTail(Common::SeekableReadStream &s, uint32 end) {
 	for (int i = 0; i < 3; i++)
 		_tail.ints3[i] = s.readSint16BE();
 	for (int i = 0; i < 11; i++)
-		s.readSint16BE(); // font ids
+		_tail.titleStrs[i] = s.readSint16BE();
 	n = readCount(s);
 	for (int i = 0; i < n; i++) {
 		ToggleDesc t;

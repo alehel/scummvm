@@ -38,6 +38,7 @@ namespace Castle {
 class Resources;
 struct Image;
 struct LivePanel;
+struct Collage;
 
 // An object instantiated on screen
 struct LiveObject {
@@ -67,8 +68,10 @@ struct LiveObject {
 	Image *altImage;        // second artwork: toggle off, blinking item
 	bool dithered;          // spy pictures of the hut: drawn through a checkerboard
 	Common::String text;    // edit boxes: the typed text
+	int selStart;           // edit boxes: start of the selected (auto-completed) text, -1 = none
+	Collage *collage;       // Collage objects: the list (owned by the page)
 	LiveObject() : obj(nullptr), panel(nullptr), image(nullptr), frame(0), frameCount(0), frameDelay(100), nextFrameTime(0),
-			playing(false), visible(true), disabled(false), hovered(false), zOrder(0), value(0), spriteFlags(0), spriteState(0), spriteLoops(-1), spriteStartTime(0), spriteStarted(false), overlayA(nullptr), overlayB(nullptr), altImage(nullptr), dithered(false) {
+			playing(false), visible(true), disabled(false), hovered(false), zOrder(0), value(0), spriteFlags(0), spriteState(0), spriteLoops(-1), spriteStartTime(0), spriteStarted(false), overlayA(nullptr), overlayB(nullptr), altImage(nullptr), dithered(false), selStart(-1), collage(nullptr) {
 		memset(counters, 0, sizeof(counters));
 		memset(extra, 0, sizeof(extra));
 	}
@@ -127,10 +130,16 @@ public:
 	PageRecord *getRecord() const { return _rec; }
 	Scope &getScope() { return _scope; }
 	LiveObject *findObject(int id);
+	LiveObject *findObjectOfClass(int cls);
+	// The page's list object (Index and Trail popups)
+	LiveObject *findCollage();
+	// Content offset of the zoom panels
+	Common::Point getScroll() const;
 
 private:
 	LivePanel *addPanel(Panel *panel, const Common::Rect &rect, const Common::String &dir, Resources &res);
 	void layoutObjects(LivePanel *lp, Resources &res);
+	void createCollages(Database &db, Resources &res);
 	Common::String frameName(const GameObject *obj, int frame) const;
 
 	uint _index;

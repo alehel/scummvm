@@ -25,6 +25,7 @@
 #include "graphics/font.h"
 #include "graphics/surface.h"
 
+#include "castle/collage.h"
 #include "castle/detection.h"
 #include "castle/page.h"
 #include "castle/resources.h"
@@ -35,8 +36,11 @@ LivePage::LivePage() : _index(0), _rec(nullptr), _tmpl(nullptr), _mouseEntered(f
 }
 
 LivePage::~LivePage() {
-	for (uint i = 0; i < _panels.size(); i++)
+	for (uint i = 0; i < _panels.size(); i++) {
+		for (uint k = 0; k < _panels[i]->objects.size(); k++)
+			delete _panels[i]->objects[k].collage;
 		delete _panels[i];
+	}
 }
 
 Common::String LivePage::frameName(const GameObject *obj, int frame) const {
@@ -236,6 +240,7 @@ bool LivePage::open(Database &db, Resources &res, uint index, const Common::Poin
 	// of their own and open in the middle of the screen
 	if (isPopup() && _tmpl && _tmpl->centred && origin == Common::Point(0, 0) && _rec->pos == Common::Point(0, 0) && !_bounds.isEmpty())
 		moveBy((640 - _bounds.width()) / 2 - _bounds.left, (480 - _bounds.height()) / 2 - _bounds.top);
+	createCollages(db, res);
 	debugC(1, kDebugGeneral, "Castle: opened page %u type %d template %d dir '%s' panels %u bounds %d,%d,%d,%d",
 	       index, _rec->type, _rec->id, _dir.c_str(), _panels.size(), _bounds.left, _bounds.top, _bounds.right, _bounds.bottom);
 	return true;
@@ -300,6 +305,93 @@ static void highlightSection(Graphics::Surface &screen, const Image *mask, const
 	}
 }
 
+static const Collage *pageCollage(const LivePage *page) {
+	if (!page)
+		return nullptr;
+	const Common::Array<LivePanel *> &panels = page->getPanels();
+	for (uint i = 0; i < panels.size(); i++)
+		for (uint k = 0; k < panels[i]->objects.size(); k++)
+			if (panels[i]->objects[k].collage)
+				return panels[i]->objects[k].collage;
+	return nullptr;
+}
+
+// The list of an Index or Trail popup: one row per entry from the first
+// visible one, the selected entry on a highlight bar (Index) or with its
+// highlighted icon (Trail)
+static void drawCollage(Graphics::Surface &screen, Resources &res, const LiveObject &lo, const LivePanel &lp) {
+	const Collage &c = *lo.collage;
+	const Graphics::Font *font = res.getTextFont();
+	if (!font)
+		return;
+	Common::Rect clip = lo.rect;
+	clip.clip(lp.rect);
+	clip.clip(Common::Rect(0, 0, screen.w, screen.h));
+	if (clip.isEmpty())
+		return;
+	byte fg = res.findPaletteColor(c.fg[0], c.fg[1], c.fg[2]);
+	byte hiBg = res.findPaletteColor(c.hiBg[0], c.hiBg[1], c.hiBg[2]);
+	byte hiFg = res.findPaletteColor(c.hiFg[0], c.hiFg[1], c.hiFg[2]);
+	for (int row = 0; row < c.pageSize; row++) {
+		int item = c.scrollTop + row;
+		if (item >= c.count())
+			break;
+		const CollageItem &it = c.items[item];
+		int y = lo.rect.top + row * c.itemHeight;
+		bool sel = item == c.selected;
+		if (c.tracker) {
+			const Common::Array<Common::String> &names = sel ? c.iconsHi : c.icons;
+			int idx = it.icon - 1;
+			if (idx >= 0 && idx < (int)names.size()) {
+				Image *img = res.loadImage(lp.dir, names[idx]);
+				if (img)
+					blitImage(screen, img, Common::Rect(lo.rect.left, y, lo.rect.left + img->surface.w, y + img->surface.h), clip);
+			}
+			font->drawString(&screen, it.text, lo.rect.left + 40, y + 9, lo.rect.width() - 40, sel ? hiFg : fg);
+		} else {
+			if (sel) {
+				Common::Rect bar(lo.rect.left, y, lo.rect.right, y + c.itemHeight);
+				bar.clip(clip);
+				if (!bar.isEmpty())
+					screen.fillRect(bar, hiBg);
+			}
+			int x = lo.rect.left + (it.sub ? c.indent : 0);
+			font->drawString(&screen, it.text, x, y, lo.rect.right - x, sel ? hiFg : fg);
+		}
+	}
+}
+
+// The scroll bar of the Index popup: arrow buttons at both ends (pressed
+// artwork while held), the bar between them and the coin as the thumb
+static void drawScrollBar(Graphics::Surface &screen, Resources &res, const LiveObject &lo, const LivePanel &lp) {
+	const GameObject *o = lo.obj;
+	if (o->strs.size() < 6)
+		return;
+	const Collage *c = pageCollage(lp.page);
+	Common::Rect clip = lp.rect;
+	clip.clip(Common::Rect(0, 0, screen.w, screen.h));
+	Image *up = res.loadImage(lp.dir, o->strs[lo.value == 1 ? 4 : 0]);
+	Image *down = res.loadImage(lp.dir, o->strs[lo.value == 2 ? 5 : 1]);
+	Image *coin = res.loadImage(lp.dir, o->strs[2]);
+	Image *bar = res.loadImage(lp.dir, o->strs[3]);
+	int upH = up ? up->surface.h : 0, downH = down ? down->surface.h : 0;
+	int barTop = lo.rect.top + upH, barBottom = lo.rect.bottom - downH;
+	if (bar) {
+		int x = lo.rect.left + (lo.rect.width() - bar->surface.w) / 2;
+		blitImage(screen, bar, Common::Rect(x, barTop, x + bar->surface.w, barTop + bar->surface.h), clip);
+	}
+	if (coin) {
+		int travel = barBottom - barTop - coin->surface.h;
+		int pos = (c && c->maxScroll() > 0 && travel > 0) ? travel * c->scrollTop / c->maxScroll() : 0;
+		int x = lo.rect.left + (lo.rect.width() - coin->surface.w) / 2;
+		blitImage(screen, coin, Common::Rect(x, barTop + pos, x + coin->surface.w, barTop + pos + coin->surface.h), clip);
+	}
+	if (up)
+		blitImage(screen, up, Common::Rect(lo.rect.left, lo.rect.top, lo.rect.left + up->surface.w, lo.rect.top + upH), clip);
+	if (down)
+		blitImage(screen, down, Common::Rect(lo.rect.left, barBottom, lo.rect.left + down->surface.w, barBottom + downH), clip);
+}
+
 void LivePage::draw(Graphics::Surface &screen, Resources &res) const {
 	for (uint i = 0; i < _panels.size(); i++) {
 		const LivePanel *lp = _panels[i];
@@ -326,8 +418,27 @@ void LivePage::draw(Graphics::Surface &screen, Resources &res) const {
 					Common::Rect r = lo.rect;
 					r.clip(lp->rect);
 					int y = r.top + (r.height() - font->getFontHeight()) / 2;
+					if (lo.selStart >= 0 && lo.selStart < (int)lo.text.size()) {
+						// The auto-completed part of an index entry is selected
+						int pw = font->getStringWidth(lo.text.substr(0, lo.selStart));
+						int fw = font->getStringWidth(lo.text);
+						Common::Rect selr(r.left + 2 + pw, y, MIN(r.left + 2 + fw, (int)r.right - 2), y + font->getFontHeight());
+						selr.clip(r);
+						if (!selr.isEmpty())
+							screen.fillRect(selr, res.findPaletteColor(0x85, 0x86, 0xb2));
+					}
 					font->drawString(&screen, lo.text, r.left + 2, y, r.width() - 4, res.findPaletteColor(0, 0, 0));
 				}
+				continue;
+			}
+			if (lo.obj->cls == kObjCollage && lo.collage) {
+				if (lo.visible)
+					drawCollage(screen, res, lo, *lp);
+				continue;
+			}
+			if (lo.obj->cls == kObjScrollBar) {
+				if (lo.visible)
+					drawScrollBar(screen, res, lo, *lp);
 				continue;
 			}
 			if (!lo.visible || (!lo.image && lo.obj->cls != kObjZoomCaption))
@@ -416,6 +527,88 @@ void LivePage::setScroll(const Common::Point &p) {
 			_panels[i]->scroll = p;
 }
 
+LiveObject *LivePage::findObjectOfClass(int cls) {
+	for (uint i = 0; i < _panels.size(); i++)
+		for (uint k = 0; k < _panels[i]->objects.size(); k++)
+			if (_panels[i]->objects[k].obj->cls == cls)
+				return &_panels[i]->objects[k];
+	return nullptr;
+}
+
+LiveObject *LivePage::findCollage() {
+	for (uint i = 0; i < _panels.size(); i++)
+		for (uint k = 0; k < _panels[i]->objects.size(); k++)
+			if (_panels[i]->objects[k].collage)
+				return &_panels[i]->objects[k];
+	return nullptr;
+}
+
+Common::Point LivePage::getScroll() const {
+	for (uint i = 0; i < _panels.size(); i++)
+		if (_panels[i]->panel->type == kPanelZoomSprite || _panels[i]->panel->type == kPanelScroll)
+			return _panels[i]->scroll;
+	return Common::Point(0, 0);
+}
+
+// Builds the lists of the Collage objects. The Index entries come from the
+// object record; the Trail entries are filled in by the engine from its
+// navigation history.
+void LivePage::createCollages(Database &db, Resources &res) {
+	const Graphics::Font *font = res.getTextFont();
+	int lineHeight = font ? font->getFontHeight() : 16;
+	for (uint i = 0; i < _panels.size(); i++) {
+		LivePanel *lp = _panels[i];
+		for (uint k = 0; k < lp->objects.size(); k++) {
+			LiveObject &lo = lp->objects[k];
+			const GameObject *obj = lo.obj;
+			if (obj->cls != kObjCollage)
+				continue;
+			Common::String cls = obj->collageA;
+			cls.toLowercase();
+			Collage *c = new Collage();
+			lo.collage = c;
+			const TextStyle *style = obj->ints.size() > 3 ? db.findStyle(obj->ints[3]) : nullptr;
+			if (style) {
+				memcpy(c->fg, style->rgb[1], 3);
+				memcpy(c->hiBg, style->rgb[2], 3);
+				memcpy(c->hiFg, style->rgb[3], 3);
+			}
+			if (cls == "tracker") {
+				c->tracker = true;
+				c->itemHeight = MAX(lineHeight, 42);
+				// strs: prefix, 34 icons, 34 highlighted icons
+				for (uint n = 1; n < obj->strs.size() && n <= 34; n++)
+					c->icons.push_back(obj->strs[n]);
+				for (uint n = 35; n < obj->strs.size(); n++)
+					c->iconsHi.push_back(obj->strs[n]);
+			} else {
+				c->itemHeight = lineHeight + 1;
+				c->indent = obj->u32s.size() > 1 ? (int)obj->u32s[1] : 23;
+				// Entries: name, section, page, popup, point
+				uint n = obj->strs.size() / 2;
+				for (uint e = 0; e < n; e++) {
+					CollageItem it;
+					const Common::String &name = obj->strs[e * 2];
+					const Common::String &sub = obj->strs[e * 2 + 1];
+					it.sub = !sub.empty();
+					it.text = it.sub ? sub : name;
+					it.full = it.sub ? name + ", " + sub : name;
+					if (e * 2 + 4 < obj->u32s.size()) {
+						it.page = obj->u32s[e * 2 + 3];
+						it.popup = obj->u32s[e * 2 + 4];
+					}
+					if (e < obj->points.size())
+						it.pt = obj->points[e];
+					it.header = it.page == 0xffffffff && it.popup == 0xffffffff;
+					c->items.push_back(it);
+				}
+			}
+			c->pageSize = MAX(1, lo.rect.height() / c->itemHeight);
+			debugC(2, kDebugGraphics, "Castle: collage %s with %d items, %d rows of %d px", obj->collageA.c_str(), c->count(), c->pageSize, c->itemHeight);
+		}
+	}
+}
+
 LiveObject *LivePage::findObject(int id) {
 	for (uint i = 0; i < _panels.size(); i++)
 		for (uint k = 0; k < _panels[i]->objects.size(); k++)
@@ -435,6 +628,7 @@ LiveObject *LivePage::objectAt(const Common::Point &p, bool hotspotsOnly) {
 				continue;
 			bool builtinClick = lo.obj->cls == kObjCoinBitmap || lo.obj->cls == kObjCollectBitmap || lo.obj->cls == kObjToggleButton ||
 				lo.obj->cls == kObjQuestionOKButton || lo.obj->cls == kObjRandomMapBitmap ||
+				lo.obj->cls == kObjCollage || lo.obj->cls == kObjScrollBar || lo.obj->cls == kObjCollageButton ||
 				(lo.obj->cls == kObjRandomScenarioHotspot && lo.obj->ints.size() > 3 && lo.obj->ints[2] == 0);
 			if (hotspotsOnly && !builtinClick && !lo.obj->findEvent(kEventClick)) {
 				bool clickScript = false;

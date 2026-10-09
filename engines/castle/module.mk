@@ -3,6 +3,7 @@ MODULE := engines/castle
 MODULE_OBJS = \
 	ani.o \
 	castle.o \
+	collage.o \
 	database.o \
 	metaengine.o \
 	page.o \

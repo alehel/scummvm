@@ -47,6 +47,7 @@ struct Context;
 class Quest;
 class Quiz;
 struct Value;
+struct Collage;
 
 class CastleEngine : public Engine {
 public:
@@ -124,6 +125,31 @@ private:
 	void typeKey(int ascii, int keycode);
 	void flushPendingPage();
 
+	// Index and Trail lists (see collage.h) and the navigation history
+	struct TrailEntry {
+		Common::String title;
+		int icon;
+		uint page;            // base page
+		uint popup;           // library book popup, 0xffffffff when none
+		Common::Point scroll; // zoom pages: position in view
+		TrailEntry() : icon(0), page(0), popup(0xffffffff) {}
+	};
+	void setupCollages(LivePage *page);
+	LiveObject *findCollage(LivePage **pageOut);
+	void collagePress(LiveObject *lo, LivePage *page, const Common::Point &p);
+	void collageRelease(LiveObject *lo, LivePage *page, const Common::Point &p);
+	void collageSelected(LivePage *page, LiveObject *lo);
+	void collageTyped(LivePage *page, LiveObject *lo);
+	void scrollCollage(LivePage *page, int delta);
+	void activateCollageItem(LivePage *page, LiveObject *lo);
+	void scrollBarPress(LiveObject *lo, LivePage *page, const Common::Point &p);
+	void scrollBarDrag(LiveObject *lo, LivePage *page, const Common::Point &p);
+	bool collageKey(int ascii, int keycode);
+	bool describeLocation(LivePage *page, bool popup, TrailEntry &e);
+	void recordTrail(LivePage *page, bool popup);
+	void updateTrailScroll();
+	void goToTrailEntry(int entry);
+
 	void handleEvents();
 	void render();
 	void applyPalette();
@@ -198,6 +224,11 @@ private:
 	Common::Point _aniPos;
 	uint32 _aniNextFrame;
 	Graphics::Surface _aniBackground;
+	Common::Array<TrailEntry> _trail;
+	bool _trailNavigating;       // returning to a trail entry: do not record it again
+	uint _pendingPopup;          // popup to open once the pending base page is up
+	bool _scrollBarDrag;         // the scroll bar's coin follows the mouse
+	int _scrollBarGrab;          // offset of the mouse in the coin
 };
 
 } // End of namespace Castle

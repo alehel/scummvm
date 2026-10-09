@@ -381,7 +381,9 @@ struct PageRecord {
 	Extension *ext;
 	Common::Array<Panel *> panels;
 	Common::Array<Event *> events;
-	PageRecord() : isPage(false), type(0), id(0), ext(nullptr) {}
+	Common::String title;   // name shown on the Trail page
+	int16 icon;             // shield icon of the Trail page (1..34, 0 = none)
+	PageRecord() : isPage(false), type(0), id(0), ext(nullptr), icon(0) {}
 	~PageRecord();
 };
 
@@ -443,7 +445,22 @@ struct ToggleDesc {
 };
 
 // Trailing document data: quest tables, variable and page references
+// A text style of the document: colours and font of the edit boxes and lists
+struct TextStyle {
+	int16 fontId;
+	int16 id;                           // style id referenced by the objects
+	byte rgb[4][3];                     // background, text, highlight bar, highlighted text
+	int16 size;                         // tenths of a point
+	int16 flags[4];
+	Common::String fontName;
+	TextStyle() : fontId(0), id(0), size(0) {
+		memset(rgb, 0, sizeof(rgb));
+		memset(flags, 0, sizeof(flags));
+	}
+};
+
 struct DocumentTail {
+	Common::Array<TextStyle> styles;
 	Question questions[3][4];           // [spy][question]
 	Common::Array<AnswerList> scenarios;
 	Common::Array<Common::String> commonWords;
@@ -454,6 +471,7 @@ struct DocumentTail {
 	uint32 pages2[4];                   // +0x128..
 	uint32 page144;
 	int16 ints3[3];
+	int16 titleStrs[11];                // trail titles: 6 library books, 4 rooms, castle guide
 	Common::Array<ToggleDesc> toggles;
 	int16 ints4[4];
 	int16 questId;
@@ -467,6 +485,7 @@ struct DocumentTail {
 		memset(ints, 0, sizeof(ints));
 		memset(pages2, 0, sizeof(pages2));
 		memset(ints3, 0, sizeof(ints3));
+		memset(titleStrs, 0, sizeof(titleStrs));
 		memset(ints4, 0, sizeof(ints4));
 		memset(questMasks, 0, sizeof(questMasks));
 		memset(questPages, 0, sizeof(questPages));
@@ -496,6 +515,7 @@ public:
 	const Extension *getDocExtension() const { return _docExt; }
 	int getBuiltinNumber(int id) const;
 	const DocumentTail &getTail() const { return _tail; }
+	const TextStyle *findStyle(int16 id) const;
 
 private:
 	// low level readers (big endian)
