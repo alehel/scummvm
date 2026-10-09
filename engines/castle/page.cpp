@@ -60,6 +60,7 @@ void LivePage::layoutObjects(LivePanel *lp, Resources &res) {
 		LiveObject lo;
 		lo.obj = obj;
 		lo.panel = lp;
+		lo.cursor = obj->cursor;
 		lo.rect = obj->rect;
 		lo.rect.translate(lp->rect.left, lp->rect.top);
 
@@ -83,6 +84,8 @@ void LivePage::layoutObjects(LivePanel *lp, Resources &res) {
 			lo.visible = (lo.spriteState & 0x10) != 0 && obj->c != 0;
 			lo.playing = (lo.spriteFlags & 8) != 0 && lo.frameDelay > 0;
 			lo.spriteStartTime = g_system->getMillis();
+			// The start point (record points[1]) is where activation puts the sprite
+			lo.origin = obj->points.size() > 1 ? obj->points[1] : Common::Point(obj->rect.left, obj->rect.top);
 			if ((lo.rect.width() <= 0 || lo.rect.height() <= 0) && obj->points.size() > 1) {
 				lo.rect.left = lp->rect.left + obj->points[1].x;
 				lo.rect.top = lp->rect.top + obj->points[1].y;
@@ -446,6 +449,9 @@ void LivePage::draw(Graphics::Surface &screen, Resources &res) const {
 				}
 				continue;
 			}
+			// Sprites show only while active (state bit 1), as the original's draw routine
+			if (lo.obj->cls == kObjSprite && !(lo.spriteState & 1))
+				continue;
 			if (!lo.visible || (!lo.image && lo.obj->cls != kObjZoomCaption))
 				continue;
 			// Ambient animations of other room nodes are switched off
@@ -693,8 +699,11 @@ LiveObject *LivePage::objectAt(const Common::Point &p, bool hotspotsOnly) {
 				q += lp->scroll;
 			if (!lo.rect.contains(q))
 				continue;
-			// Sprites are hit by their opaque pixels only
-			if (lo.obj->cls == kObjSprite && lo.image && lo.image->keyIndex >= 0) {
+			// Sprites are hit only while active (state bits 1 and 2) and when
+			// their hit flag (0x80) is set; flag 1 asks for a pixel precise test
+			if (lo.obj->cls == kObjSprite && ((lo.spriteState & 3) != 3 || !(lo.spriteFlags & 0x80)))
+				continue;
+			if (lo.obj->cls == kObjSprite && (lo.spriteFlags & 1) && lo.image && lo.image->keyIndex >= 0) {
 				int px = q.x - lo.rect.left, py = q.y - lo.rect.top;
 				if (px < lo.image->surface.w && py < lo.image->surface.h) {
 					byte pix = *(const byte *)lo.image->surface.getBasePtr(px, py);

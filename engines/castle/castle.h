@@ -40,6 +40,7 @@ class LivePage;
 class AniDecoder;
 struct LiveObject;
 struct LivePanel;
+struct ScriptObject;
 struct Action;
 struct Event;
 class ScriptVM;
@@ -77,11 +78,20 @@ public:
 	bool spriteLoopDone(LivePage *page, LiveObject *lo);
 	void spriteFinished(LivePage *page, LiveObject *lo);
 	void runSpriteFrameScripts(LivePage *page, LiveObject *lo, int event, int frame);
+	void runSpriteScript(LivePage *page, LiveObject *lo, const ScriptObject *script, int event, int frame);
+	// Region scripts (events 8 then 7) after a user driven move of the sprite
+	void runSpriteRegionEvents(LivePage *page, LiveObject *lo);
+	void spriteMoved(LiveObject *lo);
 	void handleMouseMove(const Common::Point &p);
 	LiveObject *findHighlightObject(LivePage *page);
 	void updateNodeHotspots(LivePage *page, int node);
 	void doTransition(LivePage *page, int mode, int spriteId, int async);
 	void setCursor(const Common::String &name);
+	// Scripts read the mouse position from a document variable
+	void setMouseVar(const Common::Point &p, LivePanel *panel);
+	LivePanel *panelAt(const Common::Point &p);
+	// A script changed an object's cursor: shown at once while the mouse is on it
+	void objectCursorChanged(LiveObject *lo);
 	void clickObject(LiveObject *lo, LivePage *page);
 	void pressObject(LiveObject *lo, LivePage *page, const Common::Point &p);
 	void releaseMouse(const Common::Point &p);
@@ -219,7 +229,6 @@ private:
 	Quest *_quest;
 	Quiz *_quiz;
 	bool _toggles[32];           // option toggles (sounds, transitions) by option code
-	bool _activityCompleted;     // ActivityCompleted action flag
 	bool _spyChangedFlag;        // GeneralPurposeAction 7
 	int _saveSlot;               // slot of the last save/load, -1 when none
 	uint _savedPage;             // base page stored in a loaded savegame
@@ -229,6 +238,7 @@ private:
 	LivePage *_dragPage;         // drag popup being moved
 	uint32 _dungeonTimerEnd;     // 0 when no dungeon timer runs
 	Common::Point _dragOffset;
+	Common::Point _mousePanelPt;  // last mouse position relative to its panel
 	LiveObject *_scrollObject;   // scroll-edge object under the mouse
 	LivePage *_scrollPage;
 	uint32 _scrollNext;

@@ -47,10 +47,12 @@ namespace Castle {
  *
  * Expressions are stack programs:
  *   0x12 push next operand
- *   1..12 binary operators: == < > != <= >= + - ? * / %
+ *   1..12 binary operators: == < > != <= >= + - or * / %
+ *   13 logical and
+ *   16 rectangle contains point
  *   0x0e logical not, 0x0f negate
  *   0x17 call function (next entry of the ints list) with the stacked args
- *   0x19 assignment helper
+ *   0x19 array element: the variable pushed before and the index (1 based)
  */
 
 int32 Value::toInt() const {
@@ -194,12 +196,18 @@ Value ScriptVM::getDocVariable(int id) {
 }
 
 Value ScriptVM::getVariable(const Operand &op, Context &ctx) {
+	return getVariableElement(op, 0, ctx);
+}
+
+Value ScriptVM::getVariableElement(const Operand &op, int index1, Context &ctx) {
 	Variable *var = findVariable(op.b, ctx);
 	if (!var) {
 		debugC(1, kDebugScript, "Castle: variable %d not found", op.b);
 		return Value();
 	}
-	uint index = op.u2 > 0 ? op.u2 - 1 : 0;
+	if (index1 <= 0)
+		index1 = op.u2;
+	uint index = index1 > 0 ? index1 - 1 : 0;
 	if (index >= var->values.size())
 		index = 0;
 	Value v = var->values.size() ? var->values[index] : Value();
@@ -211,6 +219,8 @@ Value ScriptVM::getVariable(const Operand &op, Context &ctx) {
 		case kPropTop: return Value::number(v.type == kTypePoint ? v.pt.y : v.rect.top);
 		case kPropWidth: return Value::number(v.type == kTypePoint ? v.pt.y - v.pt.x : v.rect.width());
 		case kPropHeight: return Value::number(v.rect.height());
+		case kPropSpriteRight: return Value::number(v.rect.right);
+		case kPropSpriteBottom: return Value::number(v.rect.bottom);
 		default: break;
 		}
 	}
@@ -218,13 +228,19 @@ Value ScriptVM::getVariable(const Operand &op, Context &ctx) {
 }
 
 void ScriptVM::setVariable(const Operand &op, const Value &val, Context &ctx) {
-	debugC(3, kDebugScript, "Castle: set var %d%s%s = %s", op.b, op.e ? "." : "", op.e ? Common::String::format("%d", op.e).c_str() : "", val.toString().c_str());
+	setVariableElement(op, 0, val, ctx);
+}
+
+void ScriptVM::setVariableElement(const Operand &op, int index1, const Value &val, Context &ctx) {
+	if (index1 <= 0)
+		index1 = op.u2;
+	debugC(3, kDebugScript, "Castle: set var %d%s%s%s = %s", op.b, index1 > 1 ? Common::String::format("[%d]", index1).c_str() : "", op.e ? "." : "", op.e ? Common::String::format("%d", op.e).c_str() : "", val.toString().c_str());
 	Variable *var = findVariable(op.b, ctx);
 	if (!var) {
 		debugC(1, kDebugScript, "Castle: variable %d not found for assignment", op.b);
 		return;
 	}
-	uint index = op.u2 > 0 ? op.u2 - 1 : 0;
+	uint index = index1 > 0 ? index1 - 1 : 0;
 	if (var->values.empty())
 		var->values.push_back(Value());
 	if (index >= var->values.size())
@@ -241,6 +257,8 @@ void ScriptVM::setVariable(const Operand &op, const Value &val, Context &ctx) {
 		case kPropTop: if (slot.type == kTypePoint) slot.pt.y = n; else slot.rect.top = n; break;
 		case kPropWidth: slot.rect.right = slot.rect.left + n; break;
 		case kPropHeight: slot.rect.bottom = slot.rect.top + n; break;
+		case kPropSpriteRight: slot.rect.right = n; break;
+		case kPropSpriteBottom: slot.rect.bottom = n; break;
 		default: break;
 		}
 		return;
@@ -302,6 +320,10 @@ Value ScriptVM::readOperand(const Operand &op, Context &ctx) {
 Value ScriptVM::binaryOp(int op, const Value &a, const Value &b) {
 	bool numeric = (a.type == kTypeNumber || a.type == kTypeLogical || a.type == kTypeReal || a.type == kTypeNone) &&
 	               (b.type == kTypeNumber || b.type == kTypeLogical || b.type == kTypeReal || b.type == kTypeNone);
+	if (op == 13)
+		return Value::logical(a.toBool() && b.toBool());
+	if (op == 16)
+		return Value::logical(a.type == kTypeRect && b.type == kTypePoint && a.rect.contains(b.pt));
 	if (a.type == kTypeString || b.type == kTypeString) {
 		Common::String x = a.toString(), y = b.toString();
 		switch (op) {
@@ -434,8 +456,13 @@ Value ScriptVM::callFunction(int id, Common::Array<Value> &stack, Context &ctx) 
 		case 3: return Value::point(Common::Point(args[0].toInt(), args[1].toInt()));
 		case 4: return Value::rectangle(Common::Rect(args[0].toInt(), args[1].toInt(), args[2].toInt(), args[3].toInt()));
 		case 5: {
+			// The point is panel relative, like the mouse variable
 			LiveObject *lo = _vm->findLiveObject(args[0].toInt(), ctx.page);
-			return Value::logical(lo && args[1].type == kTypePoint && lo->rect.contains(args[1].pt));
+			if (!lo || args[1].type != kTypePoint)
+				return Value::logical(false);
+			Common::Rect r = lo->rect;
+			r.translate(-lo->panel->rect.left, -lo->panel->rect.top);
+			return Value::logical(r.contains(args[1].pt));
 		}
 		case 6: return args[2];
 		case 7: return args[2];
@@ -455,8 +482,24 @@ Value ScriptVM::callFunction(int id, Common::Array<Value> &stack, Context &ctx) 
 	Scope scriptScope;
 	scriptScope.init(sub->script->ext);
 	sub_ctx.scopes.insert_at(0, &scriptScope);
+	// The stacked arguments go to the sub's c parameter variables (its own
+	// variable list; the script's list holds the true locals)
+	int argc = sub->c;
+	for (int i = argc - 1; i >= 0; i--) {
+		Value v;
+		if (!stack.empty()) {
+			v = stack.back();
+			stack.pop_back();
+		}
+		if (i < (int)local.vars.size() && !local.vars[i].values.empty()) {
+			local.vars[i].values[0] = v;
+			debugC(3, kDebugScript, "Castle: function %d argument %d -> var %d = %s", id, i, local.vars[i].id, v.toString().c_str());
+		} else {
+			debugC(1, kDebugScript, "Castle: function %d has no parameter variable for argument %d", id, i);
+		}
+	}
 	bool r = runScript(sub->script, sub_ctx);
-	return Value::logical(r);
+	return sub_ctx.hasRet ? sub_ctx.retVal : Value::logical(r);
 }
 
 Value ScriptVM::evaluate(const Expression *expr, Context &ctx) {
@@ -470,7 +513,7 @@ Value ScriptVM::evaluate(const Expression *expr, Context &ctx) {
 				stack.push_back(readOperand(expr->operands[operandIdx++], ctx));
 			else
 				stack.push_back(Value());
-		} else if (op >= 1 && op <= 12) {
+		} else if ((op >= 1 && op <= 13) || op == 16) {
 			if (stack.size() < 2) {
 				debugC(1, kDebugScript, "Castle: expression stack underflow");
 				return Value();
@@ -488,7 +531,15 @@ Value ScriptVM::evaluate(const Expression *expr, Context &ctx) {
 			Value r = callFunction(id, stack, ctx);
 			stack.push_back(r);
 		} else if (op == 0x19) {
-			// assignment marker; handled by assign()
+			// Array element: the two entries on top came from the variable
+			// operand and the index operand pushed just before
+			if (stack.size() >= 2 && operandIdx >= 2) {
+				int index1 = stack.back().toInt();
+				stack.pop_back();
+				stack.pop_back();
+				const Operand &var = expr->operands[operandIdx - 2];
+				stack.push_back(resolveKind(var, ctx) == 1 ? getVariableElement(var, index1, ctx) : Value());
+			}
 		} else {
 			debugC(1, kDebugScript, "Castle: unknown expression op %d", op);
 		}
@@ -503,7 +554,12 @@ bool ScriptVM::assign(const Expression *lhs, const Expression *rhs, Context &ctx
 	const Operand &target = lhs->operands[0];
 	int kind = resolveKind(target, ctx);
 	if (kind == 1) {
-		setVariable(target, v, ctx);
+		// "var index []" on the left selects an array element
+		int index1 = 0;
+		for (uint i = 0; i < lhs->ops.size(); i++)
+			if (lhs->ops[i] == 0x19 && lhs->operands.size() > 1)
+				index1 = readOperand(lhs->operands[1], ctx).toInt();
+		setVariableElement(target, index1, v, ctx);
 	} else if (kind == 3) {
 		if (target.b == -1 && ctx.object)
 			setPropertyOf(ctx.object, target.e, v);
@@ -566,8 +622,13 @@ bool ScriptVM::runScript(const ScriptObject *script, Context &ctx) {
 			pc += 2;
 			break;
 		case 8:
-			if (arg >= 0 && arg < (int)script->opA.size() && script->opA[arg])
-				result = evaluate(script->opA[arg], ctx).toBool();
+			// Return: the value is handed to a calling expression, its truth
+			// to a calling event
+			if (arg >= 0 && arg < (int)script->opA.size() && script->opA[arg]) {
+				ctx.retVal = evaluate(script->opA[arg], ctx);
+				ctx.hasRet = true;
+				result = ctx.retVal.toBool();
+			}
 			pc = count;
 			break;
 		case 10:
@@ -662,6 +723,8 @@ Value ScriptVM::getPropertyOf(LiveObject *lo, int prop) {
 	case kPropSpriteCounter1: case kPropSpriteCounter2: case kPropSpriteCounter3:
 	case kPropSpriteCounter4: case kPropSpriteCounter5:
 		return Value::number(lo->counters[prop - kPropSpriteCounter1]);
+	case kPropSpriteSetPos: return Value::point(Common::Point(lo->rect.left - lo->panel->rect.left, lo->rect.top - lo->panel->rect.top));
+	case kPropSpriteStart: return Value::point(lo->origin);
 	case kPropSpriteRight: return Value::number(lo->rect.right - lo->panel->rect.left);
 	case kPropSpriteBottom: return Value::number(lo->rect.bottom - lo->panel->rect.top);
 	default:
@@ -698,10 +761,11 @@ void ScriptVM::setPropertyOf(LiveObject *lo, int prop, const Value &v) {
 			if (prop == kPropVisible)
 				lo->visible = v.toBool();
 			// Activating a sprite (bit 1) also starts it: running bit set,
-			// position reset to its origin, loop counter restarted.
+			// position reset to its start point, loop counter restarted.
 			if (bit == 1 && was != v.toBool()) {
 				if (v.toBool()) {
 					lo->spriteState = (lo->spriteState | 4) & ~8;
+					lo->rect.moveTo(lo->panel->rect.left + lo->origin.x, lo->panel->rect.top + lo->origin.y);
 					lo->spriteLoops = lo->obj->ints.size() > 14 ? lo->obj->ints[14] : -1;
 					lo->nextFrameTime = g_system->getMillis() + lo->frameDelay;
 				} else {
@@ -734,6 +798,10 @@ void ScriptVM::setPropertyOf(LiveObject *lo, int prop, const Value &v) {
 		break;
 	case kPropVisible: lo->visible = v.toBool(); break;
 	case kPropValue: lo->value = n; break;
+	case kPropCursor:
+		lo->cursor = v.toString();
+		_vm->objectCursorChanged(lo);
+		break;
 	case kPropSpriteFrame:
 	case kPropSpriteFrameB:
 		_vm->spriteGotoFrame(lo, n);
@@ -748,6 +816,14 @@ void ScriptVM::setPropertyOf(LiveObject *lo, int prop, const Value &v) {
 	case kPropSpriteCounter4: case kPropSpriteCounter5:
 		lo->counters[prop - kPropSpriteCounter1] = n;
 		break;
+	case kPropSpriteStart:
+		// The start point: an inactive sprite goes there at once
+		if (v.type == kTypePoint) {
+			lo->origin = v.pt;
+			if (!(lo->spriteState & 1))
+				lo->rect.moveTo(lo->panel->rect.left + v.pt.x, lo->panel->rect.top + v.pt.y);
+		}
+		break;
 	case kPropSpriteSetPos:
 	case kPropSpriteMoveTo:
 		if (v.type == kTypePoint) {
@@ -756,6 +832,8 @@ void ScriptVM::setPropertyOf(LiveObject *lo, int prop, const Value &v) {
 			lo->rect.top = lo->panel->rect.top + v.pt.y;
 			lo->rect.right = lo->rect.left + w;
 			lo->rect.bottom = lo->rect.top + h;
+			if (prop == kPropSpriteSetPos)
+				_vm->spriteMoved(lo);
 		}
 		break;
 	default:

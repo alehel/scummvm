@@ -515,6 +515,9 @@ public:
 	const Common::String &getDefaultCursor() const { return _defaultCursor; }
 	const Extension *getDocExtension() const { return _docExt; }
 	int getBuiltinNumber(int id) const;
+	// The document's mouse position variable (the point variable of its
+	// first, system, variable list), -1 when there is none
+	int getMouseVar() const { return _mouseVar; }
 	const DocumentTail &getTail() const { return _tail; }
 	const TextStyle *findStyle(int16 id) const;
 
@@ -560,6 +563,7 @@ private:
 	Common::String _title, _version, _defaultCursor;
 	Extension *_docExt;
 	Common::Array<int16> _builtinIds, _builtinNums;
+	int _mouseVar;
 	Common::Array<Event *> _docEvents;
 	DocumentTail _tail;
 	Common::HashMap<uint, PageRecord *> _records;

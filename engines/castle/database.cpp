@@ -193,7 +193,7 @@ PageTemplate::~PageTemplate() {
 
 // ---------------------------------------------------------------------------
 
-Database::Database() : _data(nullptr), _size(0), _pageDataStart(0), _stringTableSize(0), _pageTableStart(0), _docExt(nullptr) {
+Database::Database() : _data(nullptr), _size(0), _pageDataStart(0), _stringTableSize(0), _pageTableStart(0), _docExt(nullptr), _mouseVar(-1) {
 }
 
 Database::~Database() {
@@ -976,6 +976,12 @@ bool Database::readDocument(Common::SeekableReadStream &s, uint32 end) {
 	_docExt->vars.resize(base + n);
 	for (int i = 0; i < n; i++)
 		readVariableTable(s, _docExt->vars[base + i]);
+	for (uint i = 0; i < _docExt->vars.size(); i++) {
+		const VariableTable &v = _docExt->vars[i];
+		if (i < base && v.type == 4 && _mouseVar < 0)
+			_mouseVar = v.name;
+		debugC(2, kDebugDatabase, "Castle: document variable %d (%s list) type %d dims %d ints %d strs %d pts %d", v.name, i < base ? "first" : "second", v.type, v.dims.size() ? v.dims[0] : 0, v.ints.size(), v.strs.size(), v.pts.size());
+	}
 	n = readCount(s);
 	for (int i = 0; i < n; i++)
 		_docExt->objs.push_back(readObjectRef(s));

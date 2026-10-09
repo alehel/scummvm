@@ -55,7 +55,7 @@ namespace Castle {
 
 CastleEngine::CastleEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst), _gameDescription(gameDesc),
 		_rnd("castle"), _script(nullptr), _hoverObject(nullptr), _hoverPage(nullptr), _db(nullptr), _res(nullptr), _basePage(nullptr), _dirty(true), _paletteDirty(true), _pendingBasePage(0),
-		_pendingBase(false), _dumpCount(0), _ani(nullptr), _aniNextFrame(0), _quest(nullptr), _quiz(nullptr), _activityCompleted(false), _spyChangedFlag(false), _saveSlot(-1), _savedPage(0), _pressedObject(nullptr), _pressedPage(nullptr), _dragging(false), _dragPage(nullptr), _dungeonTimerEnd(0), _scrollObject(nullptr), _scrollPage(nullptr), _scrollNext(0), _scrollStep(1), _ambientNext(0),
+		_pendingBase(false), _dumpCount(0), _ani(nullptr), _aniNextFrame(0), _quest(nullptr), _quiz(nullptr), _spyChangedFlag(false), _saveSlot(-1), _savedPage(0), _pressedObject(nullptr), _pressedPage(nullptr), _dragging(false), _dragPage(nullptr), _dungeonTimerEnd(0), _scrollObject(nullptr), _scrollPage(nullptr), _scrollNext(0), _scrollStep(1), _ambientNext(0),
 		_trailNavigating(false), _pendingPopup(0), _scrollBarDrag(false), _scrollBarGrab(0), _editFocus(nullptr), _editFocusPage(nullptr), _pendingTransition(0), _noScreenUpdate(false), _repeatNext(0) {
 	const Common::FSNode gameDataDir(ConfMan.getPath("path"));
 	SearchMan.addSubDirectoryMatching(gameDataDir, "dkcode");
@@ -569,6 +569,11 @@ void CastleEngine::runAction(const Action *a, LivePage *page, LiveObject *obj) {
 		// p[0]: 0 scrolls the page's list down a line, otherwise up
 		scrollCollage(page, a->p[0] ? -1 : 1);
 		break;
+	case kActFileSaveAs:
+		// The Save As page copies a text file from the CD to disk through a
+		// Windows file dialog; no script ever opens that page
+		debugC(1, kDebugScript, "Castle: FileSaveAs is not supported");
+		break;
 	case kActClosePage:
 		if (page && page->isPopup())
 			closePopup(page->getIndex());
@@ -610,7 +615,10 @@ void CastleEngine::runAction(const Action *a, LivePage *page, LiveObject *obj) {
 		runOptionsAction(a->x, page, obj);
 		break;
 	case kActActivityCompleted:
-		_activityCompleted = true;
+		// A room activity (dragging the evidence into place) was finished:
+		// like the page-turn corners this lets the map item of the
+		// current task complete on its next click
+		_quiz->setFlag(true);
 		break;
 	case kActBribeGuard:
 		_quest->bribe(3);
@@ -940,6 +948,7 @@ LiveObject *CastleEngine::findZoomCaption(int id, LivePage *page) {
 // away (as the original does); sprites run their press scripts (event 4)
 // and, when draggable (flag 0x10), start following the mouse.
 void CastleEngine::pressObject(LiveObject *lo, LivePage *page, const Common::Point &p) {
+	setMouseVar(p, lo->panel);
 	_pressedObject = lo;
 	_pressedPage = page;
 	_dragging = false;
@@ -986,6 +995,7 @@ void CastleEngine::updateRepeat(uint32 now) {
 
 // Mouse button up: ends a drag and runs the sprite's release scripts (5)
 void CastleEngine::releaseMouse(const Common::Point &p) {
+	setMouseVar(p, _pressedObject ? _pressedObject->panel : nullptr);
 	LiveObject *lo = _pressedObject;
 	LivePage *page = _pressedPage;
 	_pressedObject = nullptr;
@@ -1011,6 +1021,7 @@ void CastleEngine::releaseMouse(const Common::Point &p) {
 // Moves a dragged sprite with the mouse, kept inside its limit rectangle
 // when one is stored, then runs its drag scripts (6)
 void CastleEngine::dragTo(const Common::Point &p) {
+	setMouseVar(p, _pressedObject ? _pressedObject->panel : nullptr);
 	if (_dragPage) {
 		int dx = p.x - _dragOffset.x - _dragPage->getBounds().left;
 		int dy = p.y - _dragOffset.y - _dragPage->getBounds().top;
@@ -1044,11 +1055,16 @@ void CastleEngine::dragTo(const Common::Point &p) {
 		nx = CLIP<int>(nx, lim.left, MAX<int>(lim.left, lim.right - w));
 		ny = CLIP<int>(ny, lim.top, MAX<int>(lim.top, lim.bottom - h));
 	}
-	if (nx == lo->rect.left && ny == lo->rect.top)
+	if (nx != lo->rect.left || ny != lo->rect.top) {
+		lo->rect.moveTo(nx, ny);
+		debugC(3, kDebugScript, "Castle: drag sprite %d to %d,%d", lo->obj->id, nx, ny);
+		_dirty = true;
+	}
+	runSpriteRegionEvents(_pressedPage, lo);
+	if (scriptShouldStop() || _pressedObject != lo)
 		return;
-	lo->rect.moveTo(nx, ny);
-	debugC(3, kDebugScript, "Castle: drag sprite %d to %d,%d", lo->obj->id, nx, ny);
-	_dirty = true;
+	// The drag scripts run on every move, even when the limit rectangle
+	// pins the sprite (full panel sprites turn with the mouse this way)
 	runSpriteFrameScripts(_pressedPage, lo, 6, lo->frame);
 }
 
@@ -1367,22 +1383,72 @@ void CastleEngine::runSpriteFrameScripts(LivePage *page, LiveObject *lo, int eve
 			continue;
 		if (event == 9 && obj->scripts[i]->b != frame)
 			continue;
-		Context ctx;
-		ctx.page = page;
-		ctx.object = lo;
-		ctx.panel = lo->panel;
-		Scope local;
-		local.init(obj->scripts[i]->ext);
-		ctx.scopes.push_back(&local);
-		ctx.scopes.push_back(&lo->panel->scope);
-		ctx.scopes.push_back(&page->getScope());
-		if (_basePage && _basePage != page)
-			ctx.scopes.push_back(&_basePage->getScope());
-		debugC(2, kDebugScript, "Castle: sprite %d event %d frame %d script", obj->id, event, frame);
-		_script->runScript(obj->scripts[i], ctx);
+		runSpriteScript(page, lo, obj->scripts[i], event, frame);
 		if (scriptShouldStop())
 			return;
 	}
+}
+
+void CastleEngine::runSpriteScript(LivePage *page, LiveObject *lo, const ScriptObject *script, int event, int frame) {
+	Context ctx;
+	ctx.page = page;
+	ctx.object = lo;
+	ctx.panel = lo->panel;
+	Scope local;
+	local.init(script->ext);
+	ctx.scopes.push_back(&local);
+	ctx.scopes.push_back(&lo->panel->scope);
+	ctx.scopes.push_back(&page->getScope());
+	if (_basePage && _basePage != page)
+		ctx.scopes.push_back(&_basePage->getScope());
+	debugC(2, kDebugScript, "Castle: sprite %d event %d frame %d script", lo->obj->id, event, frame);
+	_script->runScript(script, ctx);
+}
+
+// A sprite moved by the user (drag or a SetPos from a script): its region
+// scripts carry a rectangle; while dragging, the mouse inside it fires the
+// "entered" script (7) once, outside it the "left" script (8) once, as the
+// original's event runner does with two flags per script.
+void CastleEngine::runSpriteRegionEvents(LivePage *page, LiveObject *lo) {
+	const GameObject *obj = lo->obj;
+	bool dragging = (lo->spriteState & 0x20) != 0;
+	static const int order[2] = { 8, 7 };
+	for (int e = 0; e < 2; e++) {
+		int event = order[e];
+		for (uint i = 0; i < obj->scripts.size() && i < 32; i++) {
+			const ScriptObject *sc = obj->scripts[i];
+			if (sc->a != event)
+				continue;
+			bool inside = dragging ? sc->rect.contains(_mousePanelPt) : sc->rect.isEmpty();
+			uint32 bit = 1u << i;
+			bool run = false;
+			if (event == 7) {
+				if (inside && !(lo->regionIn & bit))
+					run = true;
+				else if (!inside)
+					lo->regionIn &= ~bit;
+			} else {
+				if (!inside && !(lo->regionOut & bit))
+					run = true;
+				else if (inside)
+					lo->regionOut &= ~bit;
+			}
+			if (!run)
+				continue;
+			if (event == 7)
+				lo->regionIn |= bit;
+			else
+				lo->regionOut |= bit;
+			runSpriteScript(page, lo, sc, event, lo->frame);
+			if (scriptShouldStop())
+				return;
+		}
+	}
+}
+
+void CastleEngine::spriteMoved(LiveObject *lo) {
+	if (lo->panel && lo->panel->page)
+		runSpriteRegionEvents(lo->panel->page, lo);
 }
 
 void CastleEngine::updateSprites(uint32 now) {
@@ -1467,6 +1533,45 @@ void CastleEngine::spriteFinished(LivePage *page, LiveObject *lo) {
 	lo->spriteState = (lo->spriteState & ~4) | 8;
 }
 
+// The panel under a screen point: the topmost page's panel containing it
+LivePanel *CastleEngine::panelAt(const Common::Point &p) {
+	for (int i = (int)_popups.size() - 1; i >= 0; i--) {
+		const Common::Array<LivePanel *> &panels = _popups[i]->getPanels();
+		for (uint k = 0; k < panels.size(); k++)
+			if (panels[k]->rect.contains(p))
+				return panels[k];
+	}
+	if (_basePage) {
+		const Common::Array<LivePanel *> &panels = _basePage->getPanels();
+		for (uint k = 0; k < panels.size(); k++)
+			if (panels[k]->rect.contains(p))
+				return panels[k];
+		if (!panels.empty())
+			return panels[0];
+	}
+	return nullptr;
+}
+
+// The mouse variable holds the position relative to the panel's window,
+// as the original's panels received their mouse messages
+void CastleEngine::setMouseVar(const Common::Point &p, LivePanel *panel) {
+	int id = _db->getMouseVar();
+	if (id < 0)
+		return;
+	if (!panel)
+		panel = panelAt(p);
+	Common::Point q = p;
+	if (panel)
+		q -= Common::Point(panel->rect.left, panel->rect.top);
+	_mousePanelPt = q;
+	_script->setDocVariable(id, Value::point(q));
+}
+
+void CastleEngine::objectCursorChanged(LiveObject *lo) {
+	if (lo == _hoverObject || (lo == _pressedObject && _dragging))
+		setCursor(lo->cursor.empty() ? _db->getDefaultCursor() : lo->cursor);
+}
+
 void CastleEngine::setCursor(const Common::String &name) {
 	if (name == _cursorName)
 		return;
@@ -1478,6 +1583,7 @@ void CastleEngine::setCursor(const Common::String &name) {
 }
 
 void CastleEngine::handleMouseMove(const Common::Point &p) {
+	setMouseVar(p, nullptr);
 	LivePage *page = nullptr;
 	LiveObject *lo = nullptr;
 	for (int i = (int)_popups.size() - 1; i >= 0 && !lo; i--) {
@@ -1539,7 +1645,7 @@ void CastleEngine::handleMouseMove(const Common::Point &p) {
 		lo->hovered = true;
 		_dirty = true;
 	}
-	setCursor(lo && !lo->obj->cursor.empty() ? lo->obj->cursor : _db->getDefaultCursor());
+	setCursor(lo && !lo->cursor.empty() ? lo->cursor : _db->getDefaultCursor());
 	if (lo) {
 		const Event *ev = lo->obj->findEvent(kEventRollOn);
 		if (ev)

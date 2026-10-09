@@ -61,8 +61,8 @@ enum PropertyId {
 	kPropValue = 0x1c,
 	kPropZOrder = 0x1d,
 	kPropVisible = 0x1e,
-	kPropText = 0x21,
-	kPropCursor = 0x22,
+	kPropText = 0x20,
+	kPropCursor = 0x21,
 	kPropSpriteFrame = 0x23,
 	kPropSpriteFrameCount = 0x24,
 	kPropSpriteFps = 0x25,
@@ -77,6 +77,7 @@ enum PropertyId {
 	kPropSpriteRectA = 0x3e,
 	kPropSpriteRectB = 0x3f,
 	kPropSpriteMoveTo = 0x61,
+	kPropSpriteStart = 0x62,
 	kPropSpriteBottom = 0x65,
 	kPropSpriteDelay = 0x6c
 };
@@ -126,7 +127,9 @@ struct Context {
 	LivePanel *panel;
 	LiveObject *object;
 	Common::Array<Scope *> scopes;    // innermost first
-	Context() : page(nullptr), panel(nullptr), object(nullptr) {}
+	Value retVal;                     // value of the script's return opcode
+	bool hasRet;
+	Context() : page(nullptr), panel(nullptr), object(nullptr), hasRet(false) {}
 };
 
 class ScriptVM {
@@ -154,6 +157,9 @@ private:
 	Variable *findVariable(int id, Context &ctx);
 	ObjectRef *findSub(int id, Context &ctx);
 	Value getVariable(const Operand &op, Context &ctx);
+	// index1: 1 based element index, 0 = the operand's own index
+	Value getVariableElement(const Operand &op, int index1, Context &ctx);
+	void setVariableElement(const Operand &op, int index1, const Value &val, Context &ctx);
 	void setVariable(const Operand &op, const Value &v, Context &ctx);
 	bool assign(const Expression *lhs, const Expression *rhs, Context &ctx);
 	Value binaryOp(int op, const Value &a, const Value &b);
