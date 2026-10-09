@@ -50,7 +50,7 @@ namespace Castle {
 
 CastleEngine::CastleEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst), _gameDescription(gameDesc),
 		_rnd("castle"), _script(nullptr), _hoverObject(nullptr), _hoverPage(nullptr), _db(nullptr), _res(nullptr), _basePage(nullptr), _dirty(true), _paletteDirty(true), _pendingBasePage(0),
-		_pendingBase(false), _dumpCount(0), _ani(nullptr), _aniNextFrame(0), _spyType(0), _scrollObject(nullptr), _scrollPage(nullptr), _scrollNext(0), _scrollStep(1) {
+		_pendingBase(false), _dumpCount(0), _ani(nullptr), _aniNextFrame(0), _spyType(0), _scrollObject(nullptr), _scrollPage(nullptr), _scrollNext(0), _scrollStep(1), _ambientNext(0) {
 	const Common::FSNode gameDataDir(ConfMan.getPath("path"));
 	SearchMan.addSubDirectoryMatching(gameDataDir, "dkcode");
 	SearchMan.addSubDirectoryMatching(gameDataDir, "3drooms", 0, 3);
@@ -163,6 +163,7 @@ Common::Error CastleEngine::run() {
 			_basePage->update(now, *_res);
 		updateSprites(now);
 		updateScrolling(now);
+		updateAmbientSound(now, false);
 		updateAnimation();
 		render();
 		_system->delayMillis(10);
@@ -497,6 +498,9 @@ void CastleEngine::runAction(const Action *a, LivePage *page, LiveObject *obj) {
 		case 0x10:
 			stopWave();
 			break;
+		case 0xc:
+			playWave(Common::String(), "@con01", false);
+			break;
 		default:
 			debugC(1, kDebugScript, "Castle: GeneralPurposeAction %d not implemented", a->x);
 			break;
@@ -528,6 +532,35 @@ void CastleEngine::runAction(const Action *a, LivePage *page, LiveObject *obj) {
 	case kActUpdateNodeHtsp:
 		updateNodeHotspots(page, a->x);
 		break;
+	case kActPaintHelpText:
+	case kActClearHelpText: {
+		// Help pages paint the explanation bitmap into a fixed box of the panel
+		LivePanel *lp = obj ? obj->panel : (page && !page->getPanels().empty() ? page->getPanels()[0] : nullptr);
+		if (!lp)
+			break;
+		lp->overlays.clear();
+		if (a->type == kActPaintHelpText) {
+			Overlay ov;
+			ov.image = _res->loadImage(page ? page->getDir() : Common::String(), a->name);
+			ov.pos = Common::Point(lp->rect.left + 61, lp->rect.top + 281);
+			if (ov.image)
+				lp->overlays.push_back(ov);
+		}
+		_dirty = true;
+		break;
+	}
+	case kActSendMessage: {
+		// Ambient animations answer their enable and disable message numbers
+		LiveObject *lo = findLiveObject(a->p[0], page);
+		if (lo && lo->obj->cls == kObjAmbientAnimation && lo->obj->ints.size() > 2) {
+			if (a->p[1] == lo->obj->ints[1])
+				lo->disabled = false;
+			else if (a->p[1] == lo->obj->ints[2])
+				lo->disabled = true;
+			_dirty = true;
+		}
+		break;
+	}
 	case kActPaintZoomArea:
 	case kActPaintZoomObject:
 	case kActClearZoomObject: {
@@ -685,10 +718,52 @@ void CastleEngine::updateScrolling(uint32 now) {
 	case 7: dx = st; dy = st; break;
 	default: return;
 	}
-	if (_scrollPage->scrollBy(dx, dy))
+	if (_scrollPage->scrollBy(dx, dy)) {
 		_dirty = true;
+		updateAmbientSound(now, true);
+	}
 	if (_scrollStep < 8)
 		_scrollStep *= 2;
+}
+
+// Zoom pages carry a ZoomAmbientSoundObj: every few seconds (and whenever
+// the view scrolls) it loops the wave of the SoundHotspot under the centre
+// of the view, switching when a different region comes into view.
+void CastleEngine::updateAmbientSound(uint32 now, bool force) {
+	if (!force && now < _ambientNext)
+		return;
+	_ambientNext = now + 4000;
+	Common::String name;
+	LivePanel *zoomPanel = nullptr;
+	if (_basePage) {
+		const Common::Array<LivePanel *> &panels = _basePage->getPanels();
+		for (uint i = 0; i < panels.size() && !zoomPanel; i++)
+			for (uint k = 0; k < panels[i]->objects.size(); k++)
+				if (panels[i]->objects[k].obj->cls == kObjZoomAmbientSoundObj) {
+					zoomPanel = panels[i];
+					break;
+				}
+	}
+	if (zoomPanel) {
+		Common::Point centre(zoomPanel->rect.left + zoomPanel->rect.width() / 2 + zoomPanel->scroll.x,
+		                     zoomPanel->rect.top + zoomPanel->rect.height() / 2 + zoomPanel->scroll.y);
+		for (int k = (int)zoomPanel->objects.size() - 1; k >= 0; k--) {
+			const LiveObject &lo = zoomPanel->objects[k];
+			if (lo.obj->cls == kObjSoundHotspot && !lo.obj->strs.empty() && lo.rect.contains(centre)) {
+				name = lo.obj->strs[0];
+				break;
+			}
+		}
+	}
+	if (name.equalsIgnoreCase(_ambientName))
+		return;
+	if (!_ambientName.empty())
+		stopWaveChannel(-2, _ambientName);
+	_ambientName = name;
+	if (name.empty())
+		return;
+	debugC(1, kDebugSound, "Castle: ambient sound '%s'", name.c_str());
+	playWaveChannel(_basePage->getDir(), name, -2, true);
 }
 
 LiveObject *CastleEngine::findHighlightObject(LivePage *page) {
@@ -1047,7 +1122,7 @@ void CastleEngine::stopWave() {
 // Waves started on a numbered channel can be stopped again by channel (and
 // optionally by name); the library pages use channel 0 for the read-aloud
 // narration and restart it on every click.
-void CastleEngine::playWaveChannel(const Common::String &dir, const Common::String &name, int channel) {
+void CastleEngine::playWaveChannel(const Common::String &dir, const Common::String &name, int channel, bool loop) {
 	Common::SeekableReadStream *s = _res->openWave(dir, name);
 	if (!s) {
 		debugC(1, kDebugSound, "Castle: wave '%s' not found", name.c_str());
@@ -1066,7 +1141,10 @@ void CastleEngine::playWaveChannel(const Common::String &dir, const Common::Stri
 	WaveChannel wc;
 	wc.channel = channel;
 	wc.name = name;
-	_mixer->playStream(Audio::Mixer::kSFXSoundType, &wc.handle, stream);
+	if (loop)
+		_mixer->playStream(Audio::Mixer::kSFXSoundType, &wc.handle, Audio::makeLoopingAudioStream(stream, 0));
+	else
+		_mixer->playStream(Audio::Mixer::kSFXSoundType, &wc.handle, stream);
 	_channels.push_back(wc);
 }
 

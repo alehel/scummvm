@@ -107,7 +107,8 @@ void LivePage::layoutObjects(LivePanel *lp, Resources &res) {
 				lo.rect.right = lo.rect.left + lo.image->surface.w;
 				lo.rect.bottom = lo.rect.top + lo.image->surface.h;
 			}
-			if (!_paletteImage && lo.image->palette.size() >= 256)
+			if ((!_paletteImage || _paletteImage->palette.size() < 256) && lo.image->palette.size() > 0 &&
+					(!_paletteImage || lo.image->palette.size() > _paletteImage->palette.size()))
 				_paletteImage = lo.image;
 			if (obj->cls == kObjPaletteBitmap && lo.image->palette.size() >= 256)
 				_paletteImage = lo.image;

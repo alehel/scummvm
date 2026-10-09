@@ -75,6 +75,7 @@ public:
 	void setCursor(const Common::String &name);
 	void clickObject(LiveObject *lo, LivePage *page);
 	void updateScrolling(uint32 now);
+	void updateAmbientSound(uint32 now, bool force);
 	LiveObject *findZoomCaption(int id, LivePage *page);
 
 private:
@@ -96,7 +97,7 @@ private:
 	void playVideo(const Common::String &dir, const Common::String &name, const Common::Rect &dest);
 	void runPageEvents(LivePage *page, int eventType);
 	void stopWave();
-	void playWaveChannel(const Common::String &dir, const Common::String &name, int channel);
+	void playWaveChannel(const Common::String &dir, const Common::String &name, int channel, bool loop = false);
 	void stopWaveChannel(int channel, const Common::String &name);
 	void playAnimation(const Common::String &dir, const Common::String &name, const Common::Point &pos);
 	void updateAnimation();
@@ -133,6 +134,8 @@ private:
 	LivePage *_scrollPage;
 	uint32 _scrollNext;
 	int _scrollStep;
+	Common::String _ambientName;  // looping wave of the zoom page region in view
+	uint32 _ambientNext;
 	Audio::SoundHandle _aniAudioHandle;
 	AniDecoder *_ani;
 	Common::Point _aniPos;
