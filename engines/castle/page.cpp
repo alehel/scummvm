@@ -427,7 +427,9 @@ void LivePage::draw(Graphics::Surface &screen, Resources &res) const {
 						if (!selr.isEmpty())
 							screen.fillRect(selr, res.findPaletteColor(0x85, 0x86, 0xb2));
 					}
-					font->drawString(&screen, lo.text, r.left + 2, y, r.width() - 4, res.findPaletteColor(0, 0, 0));
+					// Misspelt chest scroll answers are shown in red
+					byte colour = lo.value == 1 ? res.findPaletteColor(0xc9, 0x0a, 0x0a) : res.findPaletteColor(0, 0, 0);
+					font->drawString(&screen, lo.text, r.left + 2, y, r.width() - 4, colour);
 				}
 				continue;
 			}
@@ -629,6 +631,7 @@ LiveObject *LivePage::objectAt(const Common::Point &p, bool hotspotsOnly) {
 			bool builtinClick = lo.obj->cls == kObjCoinBitmap || lo.obj->cls == kObjCollectBitmap || lo.obj->cls == kObjToggleButton ||
 				lo.obj->cls == kObjQuestionOKButton || lo.obj->cls == kObjRandomMapBitmap ||
 				lo.obj->cls == kObjCollage || lo.obj->cls == kObjScrollBar || lo.obj->cls == kObjCollageButton ||
+				lo.obj->cls == kObjEditBox || lo.obj->cls == kObjRoomEditBox || lo.obj->cls == kObjScrollEditBox ||
 				(lo.obj->cls == kObjRandomScenarioHotspot && lo.obj->ints.size() > 3 && lo.obj->ints[2] == 0);
 			if (hotspotsOnly && !builtinClick && !lo.obj->findEvent(kEventClick)) {
 				bool clickScript = false;

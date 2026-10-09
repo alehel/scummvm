@@ -1131,7 +1131,7 @@ bool Database::readDocumentTail(Common::SeekableReadStream &s, uint32 end) {
 		}
 	}
 
-	s.readUint32BE();
+	_tail.spellPage = s.readUint32BE();
 	n = readCount(s);
 	for (int i = 0; i < n; i++) {
 		AnswerList a;

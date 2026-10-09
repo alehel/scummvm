@@ -477,9 +477,10 @@ struct DocumentTail {
 	int16 questId;
 	int16 questMasks[10];
 	int16 questId2;
+	uint32 spellPage;                   // "check your spelling" popup of the chest scrolls
 	uint32 questPages[3];               // save-before-load, save-before-new-game, ending
 	uint32 quitPages[3];                // save-before-quit, main, quit confirmation
-	DocumentTail() : page144(0), questId(0), questId2(0) {
+	DocumentTail() : page144(0), spellPage(0), questId(0), questId2(0) {
 		memset(vars, 0, sizeof(vars));
 		memset(pages, 0, sizeof(pages));
 		memset(ints, 0, sizeof(ints));

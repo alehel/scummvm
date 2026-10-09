@@ -56,7 +56,7 @@ namespace Castle {
 CastleEngine::CastleEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst), _gameDescription(gameDesc),
 		_rnd("castle"), _script(nullptr), _hoverObject(nullptr), _hoverPage(nullptr), _db(nullptr), _res(nullptr), _basePage(nullptr), _dirty(true), _paletteDirty(true), _pendingBasePage(0),
 		_pendingBase(false), _dumpCount(0), _ani(nullptr), _aniNextFrame(0), _quest(nullptr), _quiz(nullptr), _activityCompleted(false), _spyChangedFlag(false), _saveSlot(-1), _savedPage(0), _pressedObject(nullptr), _pressedPage(nullptr), _dragging(false), _dragPage(nullptr), _dungeonTimerEnd(0), _scrollObject(nullptr), _scrollPage(nullptr), _scrollNext(0), _scrollStep(1), _ambientNext(0),
-		_trailNavigating(false), _pendingPopup(0), _scrollBarDrag(false), _scrollBarGrab(0) {
+		_trailNavigating(false), _pendingPopup(0), _scrollBarDrag(false), _scrollBarGrab(0), _editFocus(nullptr), _editFocusPage(nullptr) {
 	const Common::FSNode gameDataDir(ConfMan.getPath("path"));
 	SearchMan.addSubDirectoryMatching(gameDataDir, "dkcode");
 	SearchMan.addSubDirectoryMatching(gameDataDir, "3drooms", 0, 3);
@@ -140,7 +140,7 @@ Common::Error CastleEngine::run() {
 	// Each entry is "x,y" for a click, "m:x,y" for a mouse move, "p:x,y"
 	// for a button press, "r:x,y" for a release, "s:slot,0" saves and
 	// "l:slot,0" loads a game, "t:code,0" types the character code
-	// (13 = Enter, 8 = Backspace).
+	// (13 = Enter, 8 = Backspace, 9 = Tab), "o:page,0" opens a popup page.
 	Common::Array<Common::Point> clicks;
 	Common::Array<char> clickKind;
 	if (ConfMan.hasKey("castle_clicks")) {
@@ -185,8 +185,12 @@ Common::Error CastleEngine::run() {
 						afterQuestLoad(true, true);
 				} else if (kind == 'r') {
 					releaseMouse(pt);
+				} else if (kind == 'o') {
+					openPopup(pt.x);
 				} else if (kind == 't') {
-					typeKey(pt.x, pt.x == 13 ? Common::KEYCODE_RETURN : pt.x == 8 ? Common::KEYCODE_BACKSPACE : 0);
+					// Control codes map to their keys (13 Enter, 8 Backspace, 9 Tab);
+					// letters carry their own code
+					typeKey(pt.x, pt.x == 13 ? Common::KEYCODE_RETURN : pt.x == 8 ? Common::KEYCODE_BACKSPACE : pt.x == 9 ? Common::KEYCODE_TAB : (pt.x >= 'a' && pt.x <= 'z') ? pt.x : 0);
 				} else if (lo) {
 					pressObject(lo, page, pt);
 					if (kind == 'c')
@@ -216,6 +220,7 @@ Common::Error CastleEngine::run() {
 			_quiz->fireEvent(Quiz::kEvtTimeout, 0);
 		}
 		updateAnimation();
+		updateWaveQueue();
 		render();
 		_system->delayMillis(10);
 	}
@@ -347,6 +352,8 @@ void CastleEngine::openBasePage(uint index) {
 	_dragPage = nullptr;
 	_hoverPage = nullptr;
 	closeAllPopups();
+	if (_basePage)
+		pageClosing(_basePage);
 	delete _basePage;
 	_basePage = new LivePage();
 	if (!_basePage->open(*_db, *_res, index, Common::Point(0, 0))) {
@@ -424,6 +431,8 @@ void CastleEngine::closePopup(uint index) {
 				_pressedPage = nullptr;
 				_scrollBarDrag = false;
 			}
+			debugC(2, kDebugGraphics, "Castle: closing popup %u", _popups[i]->getIndex());
+			pageClosing(_popups[i]);
 			delete _popups[i];
 			_popups.remove_at(i);
 			_dirty = true;
@@ -444,8 +453,12 @@ void CastleEngine::closeAllPopups() {
 	_pressedObject = nullptr;
 	_pressedPage = nullptr;
 	_scrollBarDrag = false;
-	for (uint i = 0; i < _popups.size(); i++)
+	if (!_popups.empty())
+		debugC(2, kDebugGraphics, "Castle: closing all %u popups", _popups.size());
+	for (uint i = 0; i < _popups.size(); i++) {
+		pageClosing(_popups[i]);
 		delete _popups[i];
+	}
 	_popups.clear();
 	_dirty = true;
 }
@@ -459,6 +472,17 @@ void CastleEngine::runActions(const Common::Array<Action *> &actions, LivePage *
 		runAction(actions[i], page, obj);
 		if (shouldQuit() || _pendingBase)
 			return;
+		// An action may have closed the page (CLOSEPAGE followed by Quit...)
+		if (page) {
+			bool alive = page == _basePage;
+			for (uint k = 0; k < _popups.size() && !alive; k++)
+				if (_popups[k] == page)
+					alive = true;
+			if (!alive) {
+				page = nullptr;
+				obj = nullptr;
+			}
+		}
 	}
 }
 
@@ -502,9 +526,18 @@ void CastleEngine::runAction(const Action *a, LivePage *page, LiveObject *obj) {
 	case kActBack:
 		closePopup(0xffffffff);
 		break;
-	case kActQuit:
+	case kActQuit: {
+		// A game in progress gets a save prompt first (the "save before
+		// quitting" page, or the quit confirmation while a quest is run)
+		const DocumentTail &t = _db->getTail();
+		bool prompt = page && (page->getIndex() == t.quitPages[0] || page->getIndex() == t.quitPages[2]);
+		if (!prompt && _quest->getMode() != 0 && _quest->isDirty()) {
+			openPopup(_quest->getMode() != 2 ? t.quitPages[0] : t.quitPages[2]);
+			break;
+		}
 		quitGame();
 		break;
+	}
 	case kActPlayWave:
 		playWave(page ? page->getDir() : Common::String(), a->name, false);
 		break;
@@ -875,6 +908,10 @@ void CastleEngine::pressObject(LiveObject *lo, LivePage *page, const Common::Poi
 		collagePress(lo, page, p);
 		return;
 	}
+	if (lo->obj->cls == kObjEditBox || lo->obj->cls == kObjRoomEditBox || lo->obj->cls == kObjScrollEditBox) {
+		focusEditBox(lo, page);
+		return;
+	}
 	if (lo->obj->cls == kObjScrollBar) {
 		scrollBarPress(lo, page, p);
 		return;
@@ -1055,6 +1092,12 @@ void CastleEngine::clickObject(LiveObject *lo, LivePage *page) {
 	case kObjQuestionOKButton:
 		answerClicked(lo, page);
 		return;
+	case kObjScrollQuestAnswerHtsp:
+		// The OK of a chest scroll: misspelt answers keep the scroll open
+		checkScrollAnswers(lo, page);
+		if (lo->value != 1)
+			return;
+		break;
 	case kObjCollageButton: {
 		// The OK button of the Index: goes to the selected entry
 		LiveObject *list = page->findCollage();
@@ -1694,6 +1737,13 @@ void CastleEngine::applyQuestObjects(LivePage *page, bool onOpen) {
 			case kObjScrollTickBitmap:
 				lo.visible = !o->ints.empty() && _quest->getScrollFlag(o->ints[0]) == 1;
 				break;
+			case kObjScrollEditBox:
+				// The answer given earlier on this scroll
+				if (o->ints.size() > 2 && o->ints[2] >= 0 && o->ints[2] < Quest::kScrolls)
+					lo.text = _quest->getScrollText(o->ints[2]);
+				lo.value = 0;
+				lo.selStart = -1;
+				break;
 			case kObjToggleButton: {
 				int code = toggleCodeOf(o->id);
 				lo.value = code < 0 || toggleState(code) ? 1 : 0;
@@ -2014,6 +2064,11 @@ static LiveObject *findObjectOfClass(LivePage *page, int cls, bool editBoxes) {
 
 // The edit box that receives the keyboard: the topmost page with one
 LiveObject *CastleEngine::findEditBox(LivePage **pageOut) {
+	// A clicked box keeps the keyboard while its page is on top
+	if (_editFocus && _editFocusPage && (_popups.empty() ? _editFocusPage == _basePage : _editFocusPage == _popups.back())) {
+		*pageOut = _editFocusPage;
+		return _editFocus;
+	}
 	for (int i = (int)_popups.size() - 1; i >= 0; i--) {
 		LiveObject *lo = findObjectOfClass(_popups[i], 0, true);
 		if (lo) {
@@ -2041,8 +2096,25 @@ void CastleEngine::typeKey(int ascii, int keycode) {
 	if (keycode == Common::KEYCODE_RETURN || keycode == Common::KEYCODE_KP_ENTER) {
 		// Enter presses the page's OK button
 		LiveObject *ok = findObjectOfClass(page, kObjQuestionOKButton, false);
+		if (!ok)
+			ok = findObjectOfClass(page, kObjScrollQuestAnswerHtsp, false);
 		if (ok)
 			clickObject(ok, page);
+		return;
+	}
+	if (keycode == Common::KEYCODE_TAB) {
+		// Tab moves to the next edit box of the page
+		const Common::Array<LivePanel *> &panels = page->getPanels();
+		Common::Array<LiveObject *> boxes;
+		for (uint i = 0; i < panels.size(); i++)
+			for (uint k = 0; k < panels[i]->objects.size(); k++)
+				if (panels[i]->objects[k].visible && isEditBox(panels[i]->objects[k].obj))
+					boxes.push_back(&panels[i]->objects[k]);
+		for (uint i = 0; i < boxes.size(); i++)
+			if (boxes[i] == edit) {
+				focusEditBox(boxes[(i + 1) % boxes.size()], page);
+				break;
+			}
 		return;
 	}
 	if (keycode == Common::KEYCODE_BACKSPACE) {
@@ -2488,6 +2560,125 @@ void CastleEngine::goToTrailEntry(int entry) {
 		else
 			_trailNavigating = false;
 	}
+}
+
+
+// ---- Chest scrolls ---------------------------------------------------------
+
+void CastleEngine::focusEditBox(LiveObject *lo, LivePage *page) {
+	_editFocus = lo;
+	_editFocusPage = page;
+}
+
+// A page is about to close: the chest scroll popup saves its answers and,
+// after its OK was pressed, marks the right ones
+void CastleEngine::pageClosing(LivePage *page) {
+	if (_editFocusPage == page) {
+		_editFocus = nullptr;
+		_editFocusPage = nullptr;
+	}
+	scrollPageClosing(page);
+}
+
+// The answer of a chest scroll against the scenario's answer lists
+bool CastleEngine::scrollAnswerMatches(int i, const Common::String &text, bool misspelled) const {
+	int scenario = _quest->getScenario();
+	int index = (scenario - 1) * 4 + i;
+	if (scenario < 1 || scenario > 3 || i < 0 || i >= 4 || index >= 12)
+		return false;
+	const AnswerList &list = _db->getTail().answers[index];
+	Common::String norm = _quiz->normalize(text);
+	const Common::Array<Common::String> &entries = misspelled ? list.misspelled : list.accepted;
+	for (uint k = 0; k < entries.size(); k++)
+		if (entries[k].equalsIgnoreCase(norm))
+			return true;
+	return false;
+}
+
+// The OK of a scroll (ScrollQuestAnswerHtsp): recognised misspellings are
+// shown in red with the spelling popup; otherwise the scroll is judged when
+// it closes
+void CastleEngine::checkScrollAnswers(LiveObject *lo, LivePage *page) {
+	const Common::Array<LivePanel *> &panels = page->getPanels();
+	bool misspelt = false;
+	for (uint i = 0; i < panels.size(); i++)
+		for (uint k = 0; k < panels[i]->objects.size(); k++) {
+			LiveObject &box = panels[i]->objects[k];
+			if (box.obj->cls != kObjScrollEditBox || box.text.empty() || box.obj->ints.size() < 3)
+				continue;
+			if (scrollAnswerMatches(box.obj->ints[2], box.text, true)) {
+				box.value = 1;
+				misspelt = true;
+			}
+		}
+	_dirty = true;
+	if (misspelt) {
+		lo->value = 0;
+		if (_db->getTail().spellPage)
+			openPopup(_db->getTail().spellPage);
+	} else {
+		lo->value = 1;
+	}
+}
+
+void CastleEngine::scrollPageClosing(LivePage *page) {
+	LiveObject *ok = page->findObjectOfClass(kObjScrollQuestAnswerHtsp);
+	if (!ok)
+		return;
+	const Common::Array<LivePanel *> &panels = page->getPanels();
+	for (uint i = 0; i < panels.size(); i++)
+		for (uint k = 0; k < panels[i]->objects.size(); k++) {
+			const LiveObject &box = panels[i]->objects[k];
+			if (box.obj->cls != kObjScrollEditBox || box.obj->ints.size() < 3)
+				continue;
+			int idx = box.obj->ints[2];
+			if (idx >= 0 && idx < Quest::kScrolls && box.text != _quest->getScrollText(idx))
+				_quest->setScroll(idx, box.text, _quest->getScrollFlag(idx));
+		}
+	debugC(2, kDebugScript, "Castle: scroll closing, OK %d, answers '%s' '%s' '%s' '%s'", ok->value, _quest->getScrollText(0).c_str(),
+	       _quest->getScrollText(1).c_str(), _quest->getScrollText(2).c_str(), _quest->getScrollText(3).c_str());
+	if (ok->value != 1)
+		return;
+	for (int i = 0; i < Quest::kScrolls; i++)
+		if (_quest->getScrollText(i).empty())
+			return;
+	// Every line answered: the spy reads the scroll
+	bool all = true;
+	for (int i = 0; i < Quest::kScrolls; i++) {
+		bool good = scrollAnswerMatches(i, _quest->getScrollText(i), false);
+		_quest->setScroll(i, _quest->getScrollText(i), good ? 1 : 0);
+		all = all && good;
+	}
+	debugC(1, kDebugScript, "Castle: scroll judged: %s", all ? "all right" : "some wrong");
+	Common::String dir = "\\chest\\";
+	queueWave(dir, "con02");
+	queueWave(dir, "conrustl");
+	Action a;
+	a.type = kActGeneralPurpose;
+	a.x = 3;
+	runAction(&a, nullptr, nullptr);
+	if (all) {
+		_quest->finishStage();
+		a.x = 4;
+		runAction(&a, nullptr, nullptr);
+		queueWave(dir, "con04");
+	} else {
+		queueWave(dir, "con03");
+	}
+}
+
+// Waves played one after the other (the original waits for each to end)
+void CastleEngine::queueWave(const Common::String &dir, const Common::String &name) {
+	_waveQueueDir = dir;
+	_waveQueue.push_back(name);
+}
+
+void CastleEngine::updateWaveQueue() {
+	if (_waveQueue.empty() || _mixer->isSoundHandleActive(_waveHandle))
+		return;
+	Common::String name = _waveQueue[0];
+	_waveQueue.remove_at(0);
+	playWave(_waveQueueDir, name, false);
 }
 
 } // End of namespace Castle

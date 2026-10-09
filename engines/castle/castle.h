@@ -150,6 +150,15 @@ private:
 	void updateTrailScroll();
 	void goToTrailEntry(int entry);
 
+	// Chest scrolls: four answers typed on a scroll popup
+	void scrollPageClosing(LivePage *page);
+	void checkScrollAnswers(LiveObject *lo, LivePage *page);
+	bool scrollAnswerMatches(int i, const Common::String &text, bool misspelled) const;
+	void queueWave(const Common::String &dir, const Common::String &name);
+	void updateWaveQueue();
+	void focusEditBox(LiveObject *lo, LivePage *page);
+	void pageClosing(LivePage *page);
+
 	void handleEvents();
 	void render();
 	void applyPalette();
@@ -229,6 +238,10 @@ private:
 	uint _pendingPopup;          // popup to open once the pending base page is up
 	bool _scrollBarDrag;         // the scroll bar's coin follows the mouse
 	int _scrollBarGrab;          // offset of the mouse in the coin
+	Common::Array<Common::String> _waveQueue; // waves to play one after the other
+	Common::String _waveQueueDir;
+	LiveObject *_editFocus;      // edit box receiving the keyboard
+	LivePage *_editFocusPage;
 };
 
 } // End of namespace Castle
