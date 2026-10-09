@@ -101,6 +101,8 @@ public:
 
 	bool open(Database &db, Resources &res, uint index, const Common::Point &origin);
 	void setScroll(const Common::Point &p);
+	// Moves the whole page on screen (drag popups)
+	void moveBy(int dx, int dy);
 	// Scrolls the zoom panels by a delta, clamped to their content
 	bool scrollBy(int dx, int dy);
 	void draw(Graphics::Surface &screen, Resources &res) const;

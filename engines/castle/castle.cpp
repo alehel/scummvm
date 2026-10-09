@@ -50,7 +50,7 @@ namespace Castle {
 
 CastleEngine::CastleEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst), _gameDescription(gameDesc),
 		_rnd("castle"), _script(nullptr), _hoverObject(nullptr), _hoverPage(nullptr), _db(nullptr), _res(nullptr), _basePage(nullptr), _dirty(true), _paletteDirty(true), _pendingBasePage(0),
-		_pendingBase(false), _dumpCount(0), _ani(nullptr), _aniNextFrame(0), _spyType(0), _scrollObject(nullptr), _scrollPage(nullptr), _scrollNext(0), _scrollStep(1), _ambientNext(0) {
+		_pendingBase(false), _dumpCount(0), _ani(nullptr), _aniNextFrame(0), _spyType(0), _pressedObject(nullptr), _pressedPage(nullptr), _dragging(false), _dragPage(nullptr), _dungeonTimerEnd(0), _dungeonState(0), _scrollObject(nullptr), _scrollPage(nullptr), _scrollNext(0), _scrollStep(1), _ambientNext(0) {
 	const Common::FSNode gameDataDir(ConfMan.getPath("path"));
 	SearchMan.addSubDirectoryMatching(gameDataDir, "dkcode");
 	SearchMan.addSubDirectoryMatching(gameDataDir, "3drooms", 0, 3);
@@ -110,20 +110,23 @@ Common::Error CastleEngine::run() {
 	// render, CASTLE_CLICKS="x,y;x,y;..." performs scripted clicks and quits.
 	Common::String dumpDirStr = ConfMan.hasKey("castle_dump") ? ConfMan.get("castle_dump") : Common::String();
 	const char *dumpDir = dumpDirStr.empty() ? nullptr : dumpDirStr.c_str();
-	// Each entry is "x,y" for a click or "m:x,y" for a mouse move.
+	// Each entry is "x,y" for a click, "m:x,y" for a mouse move, "p:x,y"
+	// for a button press and "r:x,y" for a release.
 	Common::Array<Common::Point> clicks;
-	Common::Array<bool> clickIsMove;
+	Common::Array<char> clickKind;
 	if (ConfMan.hasKey("castle_clicks")) {
 		Common::StringTokenizer tok(ConfMan.get("castle_clicks"), ";");
 		while (!tok.empty()) {
 			Common::String t = tok.nextToken();
-			bool move = t.hasPrefix("m:");
-			if (move)
+			char kind = 'c';
+			if (t.size() > 2 && t[1] == ':') {
+				kind = t[0];
 				t = t.substr(2);
+			}
 			int x = 0, y = 0;
 			sscanf(t.c_str(), "%d,%d", &x, &y);
 			clicks.push_back(Common::Point(x, y));
-			clickIsMove.push_back(move);
+			clickKind.push_back(kind);
 		}
 	}
 	uint clickIdx = 0;
@@ -137,14 +140,22 @@ Common::Error CastleEngine::run() {
 				quitGame();
 			} else {
 				Common::Point pt = clicks[clickIdx];
-				bool move = clickIsMove[clickIdx++];
+				char kind = clickKind[clickIdx++];
 				LivePage *page = nullptr;
-				LiveObject *lo = move ? nullptr : hitTest(pt, &page);
-				debugC(1, kDebugScript, "Castle: scripted %s %d,%d -> %s", move ? "move" : "click", pt.x, pt.y, lo ? objectClassName(lo->obj->cls) : "nothing");
-				if (move)
-					handleMouseMove(pt);
-				else if (lo)
-					clickObject(lo, page);
+				LiveObject *lo = (kind == 'c' || kind == 'p') ? hitTest(pt, &page) : nullptr;
+				debugC(1, kDebugScript, "Castle: scripted %c %d,%d -> %s", kind, pt.x, pt.y, lo ? objectClassName(lo->obj->cls) : "nothing");
+				if (kind == 'm') {
+					if (_dragging || _dragPage)
+						dragTo(pt);
+					else
+						handleMouseMove(pt);
+				} else if (kind == 'r') {
+					releaseMouse(pt);
+				} else if (lo) {
+					pressObject(lo, page, pt);
+					if (kind == 'c')
+						releaseMouse(pt);
+				}
 				nextClick = _system->getMillis() + 1500;
 			}
 		}
@@ -164,6 +175,7 @@ Common::Error CastleEngine::run() {
 		updateSprites(now);
 		updateScrolling(now);
 		updateAmbientSound(now, false);
+		updateDungeonTimer(now);
 		updateAnimation();
 		render();
 		_system->delayMillis(10);
@@ -181,7 +193,11 @@ void CastleEngine::handleEvents() {
 			if (lo) {
 				debugC(1, kDebugScript, "Castle: click on %s '%s' (id %d) at %d,%d", objectClassName(lo->obj->cls),
 				       lo->obj->file.c_str(), lo->obj->id, event.mouse.x, event.mouse.y);
-				clickObject(lo, page);
+				pressObject(lo, page, event.mouse);
+			} else if ((page = popupAt(event.mouse)) && page->getType() == kPageDragPopup) {
+				// Drag popups are moved by their background
+				_dragPage = page;
+				_dragOffset = Common::Point(event.mouse.x - page->getBounds().left, event.mouse.y - page->getBounds().top);
 			} else if (_ani) {
 				// Clicking skips a running animation
 				delete _ani;
@@ -190,8 +206,14 @@ void CastleEngine::handleEvents() {
 			}
 			break;
 		}
+		case Common::EVENT_LBUTTONUP:
+			releaseMouse(event.mouse);
+			break;
 		case Common::EVENT_MOUSEMOVE:
-			handleMouseMove(event.mouse);
+			if (_dragging || _dragPage)
+				dragTo(event.mouse);
+			else
+				handleMouseMove(event.mouse);
 			break;
 		case Common::EVENT_KEYDOWN:
 			if (event.kbd.keycode == Common::KEYCODE_ESCAPE && _ani) {
@@ -277,6 +299,9 @@ void CastleEngine::render() {
 void CastleEngine::openBasePage(uint index) {
 	_hoverObject = nullptr;
 	_scrollObject = nullptr;
+	_pressedObject = nullptr;
+	_dragging = false;
+	_dragPage = nullptr;
 	_hoverPage = nullptr;
 	closeAllPopups();
 	delete _basePage;
@@ -337,6 +362,9 @@ void CastleEngine::closePopup(uint index) {
 			if (_hoverPage == _popups[i]) {
 				_hoverObject = nullptr;
 				_scrollObject = nullptr;
+	_pressedObject = nullptr;
+	_dragging = false;
+	_dragPage = nullptr;
 				_hoverPage = nullptr;
 			}
 			delete _popups[i];
@@ -351,6 +379,9 @@ void CastleEngine::closeAllPopups() {
 	if (_hoverPage && _hoverPage != _basePage) {
 		_hoverObject = nullptr;
 		_scrollObject = nullptr;
+	_pressedObject = nullptr;
+	_dragging = false;
+	_dragPage = nullptr;
 		_hoverPage = nullptr;
 	}
 	for (uint i = 0; i < _popups.size(); i++)
@@ -501,6 +532,21 @@ void CastleEngine::runAction(const Action *a, LivePage *page, LiveObject *obj) {
 		case 0xc:
 			playWave(Common::String(), "@con01", false);
 			break;
+		case 5: {
+			// Hide the dungeon's disabling hotspots
+			Common::Array<LivePanel *> panels = page ? page->getPanels() : Common::Array<LivePanel *>();
+			for (uint i = 0; i < panels.size(); i++)
+				for (uint k = 0; k < panels[i]->objects.size(); k++)
+					if (panels[i]->objects[k].obj->cls == kObjDungeonDisableHotspot) {
+						panels[i]->objects[k].zOrder = -30000;
+						panels[i]->objects[k].visible = false;
+					}
+			break;
+		}
+		case 8: _dungeonState = 0; break;
+		case 9: _dungeonState = 1; break;
+		case 10: _dungeonState = 3; break;
+		case 0xb: _dungeonState = 2; break;
 		default:
 			debugC(1, kDebugScript, "Castle: GeneralPurposeAction %d not implemented", a->x);
 			break;
@@ -531,6 +577,12 @@ void CastleEngine::runAction(const Action *a, LivePage *page, LiveObject *obj) {
 	}
 	case kActUpdateNodeHtsp:
 		updateNodeHotspots(page, a->x);
+		break;
+	case kActStartDungeonTimer:
+		_dungeonTimerEnd = _system->getMillis() + MAX<uint32>(1, a->page);
+		break;
+	case kActStopDungeonTimer:
+		_dungeonTimerEnd = 0;
 		break;
 	case kActPaintHelpText:
 	case kActClearHelpText: {
@@ -676,17 +728,118 @@ LiveObject *CastleEngine::findZoomCaption(int id, LivePage *page) {
 	return nullptr;
 }
 
-// A click on an object: its on_click event, a sprite's click scripts, or
-// the built-in behaviour of a page-turn corner (sound and a page change
+// Mouse button down on an object. Hotspots run their on_click event right
+// away (as the original does); sprites run their press scripts (event 4)
+// and, when draggable (flag 0x10), start following the mouse.
+void CastleEngine::pressObject(LiveObject *lo, LivePage *page, const Common::Point &p) {
+	_pressedObject = lo;
+	_pressedPage = page;
+	_dragging = false;
+	if (lo->obj->cls == kObjSprite) {
+		if (lo->spriteFlags & 0x10) {
+			_dragging = true;
+			_dragOffset = Common::Point(p.x - lo->rect.left, p.y - lo->rect.top);
+			lo->spriteState |= 0x20;
+		}
+		runSpriteFrameScripts(page, lo, 4, lo->frame);
+		return;
+	}
+	if (lo->obj->cls == kObjScrollObject || lo->obj->cls == kObjWrapScrollObject) {
+		_scrollStep = 8;
+		return;
+	}
+	clickObject(lo, page);
+}
+
+// Mouse button up: ends a drag and runs the sprite's release scripts (5)
+void CastleEngine::releaseMouse(const Common::Point &p) {
+	LiveObject *lo = _pressedObject;
+	LivePage *page = _pressedPage;
+	_pressedObject = nullptr;
+	_pressedPage = nullptr;
+	_dragPage = nullptr;
+	if (!lo)
+		return;
+	if (_dragging) {
+		_dragging = false;
+		lo->spriteState &= ~0x20;
+	}
+	if (lo->obj->cls == kObjSprite)
+		runSpriteFrameScripts(page, lo, 5, lo->frame);
+}
+
+// Moves a dragged sprite with the mouse, kept inside its limit rectangle
+// when one is stored, then runs its drag scripts (6)
+void CastleEngine::dragTo(const Common::Point &p) {
+	if (_dragPage) {
+		int dx = p.x - _dragOffset.x - _dragPage->getBounds().left;
+		int dy = p.y - _dragOffset.y - _dragPage->getBounds().top;
+		if (dx || dy) {
+			_dragPage->moveBy(dx, dy);
+			_dirty = true;
+		}
+		return;
+	}
+	LiveObject *lo = _pressedObject;
+	if (!lo || !_dragging)
+		return;
+	int w = lo->rect.width(), h = lo->rect.height();
+	int nx = p.x - _dragOffset.x, ny = p.y - _dragOffset.y;
+	if (!lo->obj->rects.empty() && !lo->obj->rects[0].isEmpty()) {
+		Common::Rect lim = lo->obj->rects[0];
+		lim.translate(lo->panel->rect.left, lo->panel->rect.top);
+		nx = CLIP<int>(nx, lim.left, MAX<int>(lim.left, lim.right - w));
+		ny = CLIP<int>(ny, lim.top, MAX<int>(lim.top, lim.bottom - h));
+	}
+	if (nx == lo->rect.left && ny == lo->rect.top)
+		return;
+	lo->rect.moveTo(nx, ny);
+	debugC(3, kDebugScript, "Castle: drag sprite %d to %d,%d", lo->obj->id, nx, ny);
+	_dirty = true;
+	runSpriteFrameScripts(_pressedPage, lo, 6, lo->frame);
+}
+
+// The topmost popup under a point
+LivePage *CastleEngine::popupAt(const Common::Point &p) {
+	for (int i = (int)_popups.size() - 1; i >= 0; i--)
+		if (_popups[i]->getBounds().contains(p))
+			return _popups[i];
+	return nullptr;
+}
+
+// The dungeon's countdown: when it runs out the page's DungeonTimer object
+// gets its timer-end event
+void CastleEngine::updateDungeonTimer(uint32 now) {
+	if (!_dungeonTimerEnd || now < _dungeonTimerEnd)
+		return;
+	_dungeonTimerEnd = 0;
+	Common::Array<LivePage *> pages;
+	for (int i = (int)_popups.size() - 1; i >= 0; i--)
+		pages.push_back(_popups[i]);
+	if (_basePage)
+		pages.push_back(_basePage);
+	for (uint p = 0; p < pages.size(); p++) {
+		const Common::Array<LivePanel *> &panels = pages[p]->getPanels();
+		for (uint i = 0; i < panels.size(); i++)
+			for (uint k = 0; k < panels[i]->objects.size(); k++) {
+				LiveObject &lo = panels[i]->objects[k];
+				if (lo.obj->cls != kObjDungeonTimer)
+					continue;
+				const Event *ev = lo.obj->findEvent(kEventTimerEnd);
+				if (ev)
+					runEvent(ev, pages[p], &lo);
+				return;
+			}
+	}
+}
+
+// A click on an object: its on_click event or the built-in behaviour of a
+// page-turn corner (sound and a page change
 // with the curl transition towards the stored page).
 void CastleEngine::clickObject(LiveObject *lo, LivePage *page) {
 	const Event *ev = lo->obj->findEvent(kEventClick);
 	if (ev) {
 		runEvent(ev, page, lo);
-		return;
-	}
-	if (lo->obj->cls == kObjSprite) {
-		runSpriteFrameScripts(page, lo, 5, lo->frame);
 		return;
 	}
 	if (lo->obj->cls == kObjPageTurn && !lo->obj->u32s.empty()) {
@@ -1029,6 +1182,9 @@ void CastleEngine::handleMouseMove(const Common::Point &p) {
 		_scrollNext = 0;
 	} else {
 		_scrollObject = nullptr;
+	_pressedObject = nullptr;
+	_dragging = false;
+	_dragPage = nullptr;
 		_scrollPage = nullptr;
 	}
 	if (lo && lo->obj->cls == kObjNavRollOverButton) {

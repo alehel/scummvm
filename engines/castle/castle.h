@@ -74,6 +74,11 @@ public:
 	void doTransition(LivePage *page, int mode, int spriteId, int async);
 	void setCursor(const Common::String &name);
 	void clickObject(LiveObject *lo, LivePage *page);
+	void pressObject(LiveObject *lo, LivePage *page, const Common::Point &p);
+	void releaseMouse(const Common::Point &p);
+	void dragTo(const Common::Point &p);
+	LivePage *popupAt(const Common::Point &p);
+	void updateDungeonTimer(uint32 now);
 	void updateScrolling(uint32 now);
 	void updateAmbientSound(uint32 now, bool force);
 	LiveObject *findZoomCaption(int id, LivePage *page);
@@ -130,6 +135,13 @@ private:
 	};
 	Common::Array<WaveChannel> _channels;
 	int _spyType;
+	LiveObject *_pressedObject;  // object under the mouse button
+	LivePage *_pressedPage;
+	bool _dragging;              // the pressed sprite follows the mouse
+	LivePage *_dragPage;         // drag popup being moved
+	uint32 _dungeonTimerEnd;     // 0 when no dungeon timer runs
+	int _dungeonState;
+	Common::Point _dragOffset;
 	LiveObject *_scrollObject;   // scroll-edge object under the mouse
 	LivePage *_scrollPage;
 	uint32 _scrollNext;

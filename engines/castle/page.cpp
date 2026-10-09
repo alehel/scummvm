@@ -334,6 +334,19 @@ void LivePage::draw(Graphics::Surface &screen, Resources &res) const {
 	}
 }
 
+void LivePage::moveBy(int dx, int dy) {
+	_bounds.translate(dx, dy);
+	_origin += Common::Point(dx, dy);
+	for (uint i = 0; i < _panels.size(); i++) {
+		LivePanel *lp = _panels[i];
+		lp->rect.translate(dx, dy);
+		for (uint k = 0; k < lp->objects.size(); k++)
+			lp->objects[k].rect.translate(dx, dy);
+		for (uint k = 0; k < lp->overlays.size(); k++)
+			lp->overlays[k].pos += Common::Point(dx, dy);
+	}
+}
+
 bool LivePage::scrollBy(int dx, int dy) {
 	bool moved = false;
 	for (uint i = 0; i < _panels.size(); i++) {
