@@ -709,12 +709,13 @@ LiveObject *LivePage::objectAt(const Common::Point &p, bool hotspotsOnly) {
 		for (int k = (int)lp->objects.size() - 1; k >= 0; k--) {
 			LiveObject &lo = lp->objects[k];
 			// The castle of the Castle Guide is hit whether or not a section
-			// of it is lit (visible only concerns the highlight)
-			if (!lo.visible && lo.obj->cls != kObjHighlightingCastle)
+			// of it is lit (visible only concerns the highlight), and a
+			// cutaway cover (DitherBitmap) can be clicked back into place
+			if (!lo.visible && lo.obj->cls != kObjHighlightingCastle && lo.obj->cls != kObjDitherBitmap)
 				continue;
 			if (hotspotsOnly && lo.disabled)
 				continue;
-			bool builtinClick = lo.obj->cls == kObjCoinBitmap || lo.obj->cls == kObjHighlightingCastle || lo.obj->cls == kObjCollectBitmap || lo.obj->cls == kObjToggleButton ||
+			bool builtinClick = lo.obj->cls == kObjCoinBitmap || lo.obj->cls == kObjHighlightingCastle || lo.obj->cls == kObjDitherBitmap || lo.obj->cls == kObjCollectBitmap || lo.obj->cls == kObjToggleButton ||
 				lo.obj->cls == kObjQuestionOKButton || lo.obj->cls == kObjRandomMapBitmap ||
 				lo.obj->cls == kObjCollage || lo.obj->cls == kObjScrollBar || lo.obj->cls == kObjCollageButton ||
 				lo.obj->cls == kObjEditBox || lo.obj->cls == kObjRoomEditBox || lo.obj->cls == kObjScrollEditBox || lo.obj->cls == kObjPageTurn ||
@@ -739,7 +740,7 @@ LiveObject *LivePage::objectAt(const Common::Point &p, bool hotspotsOnly) {
 			// their hit flag (0x80) is set; flag 1 asks for a pixel precise test
 			if (lo.obj->cls == kObjSprite && ((lo.spriteState & 3) != 3 || !(lo.spriteFlags & 0x80)))
 				continue;
-			if (lo.obj->cls == kObjSprite && (lo.spriteFlags & 1) && lo.image && lo.image->keyIndex >= 0) {
+			if (((lo.obj->cls == kObjSprite && (lo.spriteFlags & 1)) || lo.obj->cls == kObjDitherBitmap) && lo.image && lo.image->keyIndex >= 0) {
 				int px = q.x - lo.rect.left, py = q.y - lo.rect.top;
 				if (px < lo.image->surface.w && py < lo.image->surface.h) {
 					byte pix = *(const byte *)lo.image->surface.getBasePtr(px, py);

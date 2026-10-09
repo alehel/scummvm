@@ -180,6 +180,8 @@ private:
 
 	// Page-turn wipes between base pages, screen dumps of the test harness
 	void wipeTransition(const Graphics::Surface &from, int code);
+	void composeScreen();
+	void dissolveRect(const Common::Rect &r);
 	void dumpSurface(const Graphics::Surface &surf);
 	void updateRepeat(uint32 now);
 
@@ -187,7 +189,7 @@ private:
 	void render();
 	void applyPalette();
 
-	void openBasePage(uint index);
+	void openBasePage(uint index, const Common::Point &scroll = Common::Point(0, 0));
 	void openPopup(uint index);
 	void closePopup(uint index);
 	void closeAllPopups();

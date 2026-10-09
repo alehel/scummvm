@@ -352,15 +352,8 @@ void CastleEngine::applyPalette() {
 	_paletteDirty = false;
 }
 
-void CastleEngine::render() {
-	if (_paletteDirty)
-		applyPalette();
-	if (!_dirty) {
-		// The backend only repaints the mouse cursor from updateScreen(), so
-		// it must be called every frame even when the page itself is unchanged.
-		_system->updateScreen();
-		return;
-	}
+// Draws the open pages into the back buffer
+void CastleEngine::composeScreen() {
 	_screen.fillRect(Common::Rect(0, 0, _screen.w, _screen.h), 0);
 	if (_basePage)
 		_basePage->draw(_screen, *_res);
@@ -371,6 +364,18 @@ void CastleEngine::render() {
 		_screen.copyRectToSurface(_aniBackground, _aniPos.x, _aniPos.y, Common::Rect(0, 0, _aniBackground.w, _aniBackground.h));
 	}
 	_dirty = false;
+}
+
+void CastleEngine::render() {
+	if (_paletteDirty)
+		applyPalette();
+	if (!_dirty) {
+		// The backend only repaints the mouse cursor from updateScreen(), so
+		// it must be called every frame even when the page itself is unchanged.
+		_system->updateScreen();
+		return;
+	}
+	composeScreen();
 	if (_noScreenUpdate)
 		return;
 	_system->copyRectToScreen(_screen.getPixels(), _screen.pitch, 0, 0, _screen.w, _screen.h);
@@ -395,7 +400,7 @@ void CastleEngine::dumpSurface(const Graphics::Surface &surf) {
 	}
 }
 
-void CastleEngine::openBasePage(uint index) {
+void CastleEngine::openBasePage(uint index, const Common::Point &scroll) {
 	updateTrailScroll();
 	_hoverObject = nullptr;
 	_castleSection = -1;
@@ -416,6 +421,9 @@ void CastleEngine::openBasePage(uint index) {
 	}
 	applyQuestObjects(_basePage, true);
 	setupCollages(_basePage);
+	// A zoomed page starts at its zoom position, before anything is drawn
+	if (scroll.x || scroll.y)
+		_basePage->setScroll(scroll);
 	recordTrail(_basePage, false);
 	_dirty = true;
 	_paletteDirty = true;
@@ -1195,6 +1203,22 @@ void CastleEngine::clickObject(LiveObject *lo, LivePage *page) {
 		LiveObject *hs = _castleSection > 0 ? findColourHotspot(page, _castleSection) : nullptr;
 		if (hs)
 			clickObject(hs, page);
+		return;
+	}
+	case kObjDitherBitmap: {
+		// A cover of a cutaway view (FUN_00423260): after its click event
+		// the cover dissolves away, or back into place, and its sound plays
+		LivePage *before = _basePage;
+		uint popups = _popups.size();
+		const Event *ev = o->findEvent(kEventClick);
+		if (ev)
+			runEvent(ev, page, lo);
+		if (_basePage != before || _popups.size() != popups || _pendingBase)
+			return;
+		lo->visible = !lo->visible;
+		dissolveRect(lo->rect);
+		if (!o->strs.empty())
+			playWave(page->getDir(), o->strs[0], false);
 		return;
 	}
 	case kObjQuestionOKButton:
@@ -2434,12 +2458,9 @@ void CastleEngine::flushPendingPage() {
 		old.copyFrom(_screen);
 		_noScreenUpdate = true;
 	}
-	openBasePage(_pendingBasePage);
-	if (_basePage && (scroll.x || scroll.y)) {
-		_basePage->setScroll(scroll);
-		_dirty = true;
+	openBasePage(_pendingBasePage, scroll);
+	if (_basePage && (scroll.x || scroll.y))
 		updateTrailScroll();
-	}
 	if (wipe) {
 		render();
 		_noScreenUpdate = false;
@@ -3107,6 +3128,49 @@ void CastleEngine::updateWaveQueue() {
 	playWave(_waveQueueDir, name, false);
 }
 
+
+// Redraws a part of the screen in a random order of 4x4 blocks, as the
+// cutaway covers do (FUN_00423890 walks the blocks with a shift register)
+void CastleEngine::dissolveRect(const Common::Rect &rIn) {
+	Common::Rect r(rIn);
+	r.clip(Common::Rect(0, 0, _screen.w, _screen.h));
+	if (r.isEmpty() || _noScreenUpdate) {
+		_dirty = true;
+		return;
+	}
+	Graphics::Surface frame;
+	frame.copyFrom(_screen);
+	composeScreen();
+	const int block = 4;
+	int cols = (r.width() + block - 1) / block, rows = (r.height() + block - 1) / block;
+	Common::Array<int> order;
+	for (int i = 0; i < cols * rows; i++)
+		order.push_back(i);
+	for (int i = (int)order.size() - 1; i > 0; i--)
+		SWAP(order[i], order[_rnd.getRandomNumber(i)]);
+	const int duration = 250;
+	uint32 start = _system->getMillis();
+	uint done = 0;
+	for (;;) {
+		int t = MIN<int>(_system->getMillis() - start, duration);
+		uint target = order.size() * t / duration;
+		for (; done < target; done++) {
+			int bx = r.left + (order[done] % cols) * block, by = r.top + (order[done] / cols) * block;
+			Common::Rect b(bx, by, MIN(bx + block, (int)r.right), MIN(by + block, (int)r.bottom));
+			frame.copyRectToSurface(_screen, b.left, b.top, b);
+		}
+		_system->copyRectToScreen(frame.getPixels(), frame.pitch, 0, 0, frame.w, frame.h);
+		_system->updateScreen();
+		if (t >= duration)
+			break;
+		Common::Event event;
+		while (_eventMan->pollEvent(event))
+			;
+		_system->delayMillis(10);
+	}
+	frame.free();
+	dumpSurface(_screen);
+}
 
 // Wipes the new page (in _screen) over the old one: code 5 sweeps from the
 // left edge, code 4 from the right
