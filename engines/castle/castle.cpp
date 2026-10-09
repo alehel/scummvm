@@ -55,7 +55,7 @@ namespace Castle {
 
 CastleEngine::CastleEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst), _gameDescription(gameDesc),
 		_rnd("castle"), _script(nullptr), _hoverObject(nullptr), _hoverPage(nullptr), _db(nullptr), _res(nullptr), _basePage(nullptr), _dirty(true), _paletteDirty(true), _pendingBasePage(0),
-		_pendingBase(false), _dumpCount(0), _ani(nullptr), _aniNextFrame(0), _quest(nullptr), _quiz(nullptr), _spyChangedFlag(false), _saveSlot(-1), _savedPage(0), _pressedObject(nullptr), _pressedPage(nullptr), _dragging(false), _dragPage(nullptr), _dungeonTimerEnd(0), _scrollObject(nullptr), _scrollPage(nullptr), _scrollNext(0), _scrollStep(1), _ambientNext(0),
+		_pendingBase(false), _dumpCount(0), _ani(nullptr), _aniNextFrame(0), _quest(nullptr), _quiz(nullptr), _spyChangedFlag(false), _saveSlot(-1), _savedPage(0), _pressedObject(nullptr), _pressedPage(nullptr), _dragging(false), _dragPage(nullptr), _dungeonTimerEnd(0), _scrollObject(nullptr), _scrollPage(nullptr), _scrollNext(0), _scrollStep(1), _ambientNext(0), _castleSection(-1),
 		_trailNavigating(false), _pendingPopup(0), _scrollBarDrag(false), _scrollBarGrab(0), _editFocus(nullptr), _editFocusPage(nullptr), _pendingTransition(0), _noScreenUpdate(false), _repeatNext(0) {
 	const Common::FSNode gameDataDir(ConfMan.getPath("path"));
 	SearchMan.addSubDirectoryMatching(gameDataDir, "dkcode");
@@ -398,6 +398,7 @@ void CastleEngine::dumpSurface(const Graphics::Surface &surf) {
 void CastleEngine::openBasePage(uint index) {
 	updateTrailScroll();
 	_hoverObject = nullptr;
+	_castleSection = -1;
 	_scrollObject = nullptr;
 	_pressedObject = nullptr;
 	_dragging = false;
@@ -481,6 +482,7 @@ void CastleEngine::closePopup(uint index) {
 		if (_popups[i]->getIndex() == index || index == 0xffffffff) {
 			if (_hoverPage == _popups[i]) {
 				_hoverObject = nullptr;
+	_castleSection = -1;
 				_scrollObject = nullptr;
 	_pressedObject = nullptr;
 	_dragging = false;
@@ -505,6 +507,7 @@ void CastleEngine::closePopup(uint index) {
 void CastleEngine::closeAllPopups() {
 	if (_hoverPage && _hoverPage != _basePage) {
 		_hoverObject = nullptr;
+	_castleSection = -1;
 		_scrollObject = nullptr;
 	_pressedObject = nullptr;
 	_dragging = false;
@@ -1186,6 +1189,14 @@ void CastleEngine::clickObject(LiveObject *lo, LivePage *page) {
 		}
 		return;
 	}
+	case kObjHighlightingCastle: {
+		// A click on the castle goes to the hotspot of the section under
+		// the pointer (FUN_004660a0)
+		LiveObject *hs = _castleSection > 0 ? findColourHotspot(page, _castleSection) : nullptr;
+		if (hs)
+			clickObject(hs, page);
+		return;
+	}
 	case kObjQuestionOKButton:
 		answerClicked(lo, page);
 		return;
@@ -1298,6 +1309,54 @@ void CastleEngine::updateAmbientSound(uint32 now, bool force) {
 		return;
 	debugC(1, kDebugSound, "Castle: ambient sound '%s'", name.c_str());
 	playWaveChannel(_basePage->getDir(), name, -2, true);
+}
+
+// The castle of the Castle Guide: its colour reference bitmap gives every
+// pixel the number of the section drawn there (0 and 255: none)
+int CastleEngine::castleSectionAt(const LiveObject *hl, const Common::Point &p) const {
+	if (!hl->image)
+		return -1;
+	int x = p.x - hl->rect.left, y = p.y - hl->rect.top;
+	if (x < 0 || y < 0 || x >= hl->image->surface.w || y >= hl->image->surface.h)
+		return -1;
+	byte c = *(const byte *)hl->image->surface.getBasePtr(x, y);
+	return (c == 0 || c == 255) ? -1 : c;
+}
+
+// The ColourHotspot of a castle section: an object without a rectangle of
+// its own whose number (ints[0]) is the colour of the section
+LiveObject *CastleEngine::findColourHotspot(LivePage *page, int section) {
+	if (!page)
+		return nullptr;
+	const Common::Array<LivePanel *> &panels = page->getPanels();
+	for (uint i = 0; i < panels.size(); i++)
+		for (uint k = 0; k < panels[i]->objects.size(); k++) {
+			LiveObject &lo = panels[i]->objects[k];
+			if (lo.obj->cls == kObjColourHotspot && !lo.obj->ints.empty() && lo.obj->ints[0] == section)
+				return &lo;
+		}
+	return nullptr;
+}
+
+// The pointer moved onto another section of the castle (FUN_00465ef0): the
+// new section lights up and its hotspot gets the roll-on; leaving the castle
+// (-1) restores the plain artwork. The hotspots never get a roll-off.
+void CastleEngine::hoverCastleSection(LivePage *page, LiveObject *hl, int section) {
+	if (section == _castleSection)
+		return;
+	_castleSection = section;
+	hl->value = section;
+	hl->visible = section > 0;
+	_dirty = true;
+	debugC(2, kDebugScript, "Castle: castle section %d", section);
+	if (section <= 0)
+		return;
+	LiveObject *hs = findColourHotspot(page, section);
+	if (!hs)
+		return;
+	const Event *ev = hs->obj->findEvent(kEventRollOn);
+	if (ev)
+		runEvent(ev, page, hs);
 }
 
 LiveObject *CastleEngine::findHighlightObject(LivePage *page) {
@@ -1773,6 +1832,18 @@ void CastleEngine::handleMouseMove(const Common::Point &p) {
 			closePopup(pop->getIndex());
 		}
 	}
+	// Over the castle of the Castle Guide the section under the pointer
+	// counts, not the object as a whole
+	if (lo && lo->obj->cls == kObjHighlightingCastle) {
+		hoverCastleSection(page, lo, castleSectionAt(lo, p));
+		if (lo == _hoverObject)
+			setCursor(_castleSection > 0 ? "Hand" : _db->getDefaultCursor());
+	} else if (_castleSection != -1) {
+		LiveObject *hl = findHighlightObject(_hoverPage);
+		if (hl)
+			hoverCastleSection(_hoverPage, hl, -1);
+		_castleSection = -1;
+	}
 	debugC(2, kDebugScript, "Castle: mouse %d,%d over %s%s", p.x, p.y, lo ? objectClassName(lo->obj->cls) : "nothing", lo == _hoverObject ? " (unchanged)" : "");
 	if (lo == _hoverObject)
 		return;
@@ -1803,7 +1874,10 @@ void CastleEngine::handleMouseMove(const Common::Point &p) {
 		lo->hovered = true;
 		_dirty = true;
 	}
-	setCursor(lo && !lo->cursor.empty() ? lo->cursor : _db->getDefaultCursor());
+	if (lo && lo->obj->cls == kObjHighlightingCastle)
+		setCursor(_castleSection > 0 ? "Hand" : _db->getDefaultCursor());
+	else
+		setCursor(lo && !lo->cursor.empty() ? lo->cursor : _db->getDefaultCursor());
 	if (lo) {
 		const Event *ev = lo->obj->findEvent(kEventRollOn);
 		if (ev)

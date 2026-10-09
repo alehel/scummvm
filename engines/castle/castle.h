@@ -90,6 +90,9 @@ public:
 	void updateSpriteMotion(LivePage *page, LiveObject *lo, uint32 now);
 	void handleMouseMove(const Common::Point &p);
 	LiveObject *findHighlightObject(LivePage *page);
+	int castleSectionAt(const LiveObject *hl, const Common::Point &p) const;
+	LiveObject *findColourHotspot(LivePage *page, int section);
+	void hoverCastleSection(LivePage *page, LiveObject *hl, int section);
 	void updateNodeHotspots(LivePage *page, int node);
 	void doTransition(LivePage *page, int mode, int spriteId, int async);
 	void setCursor(const Common::String &name);
@@ -209,6 +212,7 @@ private:
 	Common::RandomSource _rnd;
 	ScriptVM *_script;
 	LiveObject *_hoverObject;
+	int _castleSection;     // section of the Castle Guide's castle under the pointer, -1 = none
 	LivePage *_hoverPage;
 	Database *_db;
 	Resources *_res;

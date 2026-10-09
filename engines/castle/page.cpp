@@ -708,11 +708,13 @@ LiveObject *LivePage::objectAt(const Common::Point &p, bool hotspotsOnly) {
 		LivePanel *lp = _panels[i];
 		for (int k = (int)lp->objects.size() - 1; k >= 0; k--) {
 			LiveObject &lo = lp->objects[k];
-			if (!lo.visible)
+			// The castle of the Castle Guide is hit whether or not a section
+			// of it is lit (visible only concerns the highlight)
+			if (!lo.visible && lo.obj->cls != kObjHighlightingCastle)
 				continue;
 			if (hotspotsOnly && lo.disabled)
 				continue;
-			bool builtinClick = lo.obj->cls == kObjCoinBitmap || lo.obj->cls == kObjCollectBitmap || lo.obj->cls == kObjToggleButton ||
+			bool builtinClick = lo.obj->cls == kObjCoinBitmap || lo.obj->cls == kObjHighlightingCastle || lo.obj->cls == kObjCollectBitmap || lo.obj->cls == kObjToggleButton ||
 				lo.obj->cls == kObjQuestionOKButton || lo.obj->cls == kObjRandomMapBitmap ||
 				lo.obj->cls == kObjCollage || lo.obj->cls == kObjScrollBar || lo.obj->cls == kObjCollageButton ||
 				lo.obj->cls == kObjEditBox || lo.obj->cls == kObjRoomEditBox || lo.obj->cls == kObjScrollEditBox || lo.obj->cls == kObjPageTurn ||
