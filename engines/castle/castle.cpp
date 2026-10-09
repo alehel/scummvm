@@ -29,6 +29,7 @@
 #include "graphics/cursorman.h"
 #include "graphics/palette.h"
 #include "graphics/paletteman.h"
+#include "video/qt_decoder.h"
 
 #include "common/file.h"
 #include "common/fs.h"
@@ -247,9 +248,36 @@ void CastleEngine::openBasePage(uint index) {
 	if (!_basePage->open(*_db, *_res, index, Common::Point(0, 0))) {
 		delete _basePage;
 		_basePage = nullptr;
+		return;
 	}
 	_dirty = true;
 	_paletteDirty = true;
+	render();
+	runPageEvents(_basePage, kEventOpen);
+}
+
+void CastleEngine::runPageEvents(LivePage *page, int eventType) {
+	PageRecord *rec = page->getRecord();
+	if (!rec)
+		return;
+	for (uint i = 0; i < rec->events.size(); i++)
+		if (rec->events[i]->type == eventType)
+			runEvent(rec->events[i], page, nullptr);
+	const Common::Array<LivePanel *> &panels = page->getPanels();
+	for (uint p = 0; p < panels.size(); p++) {
+		Panel *panel = panels[p]->panel;
+		for (uint i = 0; i < panel->events.size(); i++)
+			if (panel->events[i]->type == eventType)
+				runEvent(panel->events[i], page, nullptr);
+		for (uint k = 0; k < panels[p]->objects.size(); k++) {
+			LiveObject &lo = panels[p]->objects[k];
+			const Event *ev = lo.obj->findEvent(eventType);
+			if (ev)
+				runEvent(ev, page, &lo);
+		}
+		if (shouldQuit() || _pendingBase)
+			return;
+	}
 }
 
 void CastleEngine::openPopup(uint index) {
@@ -263,6 +291,8 @@ void CastleEngine::openPopup(uint index) {
 	}
 	_popups.push_back(page);
 	_dirty = true;
+	render();
+	runPageEvents(page, kEventOpen);
 }
 
 void CastleEngine::closePopup(uint index) {
@@ -342,6 +372,19 @@ void CastleEngine::runAction(const Action *a, LivePage *page, LiveObject *obj) {
 	case kActPlayPicsEx:
 		playAnimation(page ? page->getDir() : Common::String(), a->name, a->pt + (obj ? Common::Point(obj->panel->rect.left, obj->panel->rect.top) : Common::Point(0, 0)));
 		break;
+	case kActPlayVideoInd:
+	case kActTransitionVideo:
+	case kActPlayVideo: {
+		Common::Rect dest = a->rect;
+		Common::Point origin(0, 0);
+		if (obj)
+			origin = Common::Point(obj->panel->rect.left, obj->panel->rect.top);
+		else if (page && !page->getPanels().empty())
+			origin = Common::Point(page->getPanels()[0]->rect.left, page->getPanels()[0]->rect.top);
+		dest.translate(origin.x, origin.y);
+		playVideo(page ? page->getDir() : Common::String(), a->name, dest);
+		break;
+	}
 	case kActStopPics:
 		delete _ani;
 		_ani = nullptr;
@@ -371,6 +414,58 @@ void CastleEngine::playWave(const Common::String &dir, const Common::String &nam
 		return;
 	_mixer->stopHandle(_waveHandle);
 	_mixer->playStream(Audio::Mixer::kSFXSoundType, &_waveHandle, stream);
+}
+
+void CastleEngine::playVideo(const Common::String &dir, const Common::String &name, const Common::Rect &destIn) {
+	Common::SeekableReadStream *s = _res->openVideo(dir, name);
+	if (!s) {
+		debugC(1, kDebugGraphics, "Castle: video '%s' not found", name.c_str());
+		return;
+	}
+	Video::QuickTimeDecoder *qt = new Video::QuickTimeDecoder();
+	if (!qt->loadStream(s)) {
+		delete qt;
+		return;
+	}
+	byte pal[768];
+	_system->getPaletteManager()->grabPalette(pal, 0, 256);
+	qt->setDitheringPalette(pal);
+	Common::Rect dest = destIn;
+	if (dest.width() <= 0 || dest.height() <= 0)
+		dest = Common::Rect(0, 0, qt->getWidth(), qt->getHeight());
+	if (dest.width() != qt->getWidth() || dest.height() != qt->getHeight()) {
+		// centre the video in the destination
+		int x = dest.left + (dest.width() - qt->getWidth()) / 2;
+		int y = dest.top + (dest.height() - qt->getHeight()) / 2;
+		dest = Common::Rect(x, y, x + qt->getWidth(), y + qt->getHeight());
+	}
+	debugC(1, kDebugGraphics, "Castle: playing video '%s' %dx%d at %d,%d", name.c_str(), qt->getWidth(), qt->getHeight(), dest.left, dest.top);
+	qt->start();
+	bool skip = false;
+	while (!shouldQuit() && !qt->endOfVideo() && !skip) {
+		Common::Event event;
+		while (_eventMan->pollEvent(event)) {
+			if (event.type == Common::EVENT_LBUTTONDOWN || (event.type == Common::EVENT_KEYDOWN && event.kbd.keycode == Common::KEYCODE_ESCAPE))
+				skip = true;
+		}
+		if (qt->needsUpdate()) {
+			const Graphics::Surface *frame = qt->decodeNextFrame();
+			if (frame) {
+				if (frame->format.bytesPerPixel == 1) {
+					Common::Rect clip = dest;
+					clip.clip(Common::Rect(0, 0, _screen.w, _screen.h));
+					if (!clip.isEmpty())
+						_screen.copyRectToSurface(*frame, clip.left, clip.top, Common::Rect(0, 0, clip.width(), clip.height()));
+					_system->copyRectToScreen(_screen.getPixels(), _screen.pitch, 0, 0, _screen.w, _screen.h);
+					_system->updateScreen();
+				}
+			}
+		}
+		_system->delayMillis(10);
+	}
+	qt->close();
+	delete qt;
+	_dirty = true;
 }
 
 void CastleEngine::stopWave() {

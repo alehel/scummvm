@@ -68,6 +68,8 @@ private:
 	void runAction(const Action *a, LivePage *page, LiveObject *obj);
 
 	void playWave(const Common::String &dir, const Common::String &name, bool loop);
+	void playVideo(const Common::String &dir, const Common::String &name, const Common::Rect &dest);
+	void runPageEvents(LivePage *page, int eventType);
 	void stopWave();
 	void playAnimation(const Common::String &dir, const Common::String &name, const Common::Point &pos);
 	void updateAnimation();

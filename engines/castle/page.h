@@ -80,6 +80,7 @@ public:
 	Common::Rect getBounds() const { return _bounds; }
 	const Common::Array<LivePanel *> &getPanels() const { return _panels; }
 	const Image *getPaletteImage() const { return _paletteImage; }
+	PageRecord *getRecord() const { return _rec; }
 
 private:
 	LivePanel *addPanel(Panel *panel, const Common::Rect &rect, const Common::String &dir, Resources &res);
