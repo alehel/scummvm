@@ -54,6 +54,7 @@ struct LiveObject {
 	bool visible;
 	bool disabled;
 	bool hovered;           // mouse is over the object (rollover buttons)
+	bool pressed;           // mouse button held on the object (buttons show their pressed artwork)
 	int zOrder;
 	int value;
 	int counters[5];
@@ -78,7 +79,7 @@ struct LiveObject {
 	int selStart;           // edit boxes: start of the selected (auto-completed) text, -1 = none
 	Collage *collage;       // Collage objects: the list (owned by the page)
 	LiveObject() : obj(nullptr), panel(nullptr), image(nullptr), frame(0), frameCount(0), frameDelay(100), nextFrameTime(0),
-			playing(false), visible(true), disabled(false), hovered(false), zOrder(0), value(0), spriteFlags(0), spriteState(0), spriteLoops(-1), spriteStartTime(0), spriteStarted(false), overlayA(nullptr), overlayB(nullptr), altImage(nullptr), dithered(false), regionIn(0), regionOut(0), vx(0), vy(0), motionT0x(0), motionT0y(0), nextMotionTime(0), style(nullptr), selStart(-1), collage(nullptr) {
+			playing(false), visible(true), disabled(false), hovered(false), pressed(false), zOrder(0), value(0), spriteFlags(0), spriteState(0), spriteLoops(-1), spriteStartTime(0), spriteStarted(false), overlayA(nullptr), overlayB(nullptr), altImage(nullptr), dithered(false), regionIn(0), regionOut(0), vx(0), vy(0), motionT0x(0), motionT0y(0), nextMotionTime(0), style(nullptr), selStart(-1), collage(nullptr) {
 		memset(counters, 0, sizeof(counters));
 		memset(extra, 0, sizeof(extra));
 	}

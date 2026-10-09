@@ -121,7 +121,7 @@ void LivePage::layoutObjects(LivePanel *lp, Resources &res) {
 			lo.image = res.loadImage(lp->dir, obj->file);
 		}
 
-		if (obj->cls == kObjToggleButton && obj->strs.size() > 1)
+		if ((obj->cls == kObjToggleButton || obj->cls == kObjButton) && obj->strs.size() > 1 && !obj->strs[1].empty())
 			lo.altImage = res.loadImage(lp->dir, obj->strs[1]);
 		if (obj->cls == kObjCollectBitmap && obj->strs.size() > 1)
 			lo.altImage = res.loadImage(lp->dir, obj->strs[1]);
@@ -518,6 +518,9 @@ void LivePage::draw(Graphics::Surface &screen, Resources &res) const {
 			// Toggle buttons show their off artwork when cleared, blinking
 			// evidence alternates between its two pictures
 			if (lo.obj->cls == kObjToggleButton && !lo.value && lo.altImage)
+				img = lo.altImage;
+			// Plain buttons show their second artwork while held (FUN_00482390)
+			if (lo.obj->cls == kObjButton && lo.pressed && lo.altImage)
 				img = lo.altImage;
 			if (lo.obj->cls == kObjCollectBitmap && (lo.frame & 1) && lo.altImage)
 				img = lo.altImage;

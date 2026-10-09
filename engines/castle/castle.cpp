@@ -53,7 +53,7 @@
 
 namespace Castle {
 
-CastleEngine::CastleEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst), _gameDescription(gameDesc),
+CastleEngine::CastleEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst),
 		_rnd("castle"), _script(nullptr), _hoverObject(nullptr), _hoverPage(nullptr), _db(nullptr), _res(nullptr), _basePage(nullptr), _dirty(true), _paletteDirty(true), _pendingBasePage(0),
 		_pendingBase(false), _dumpCount(0), _ani(nullptr), _aniNextFrame(0), _quest(nullptr), _quiz(nullptr), _spyChangedFlag(false), _saveSlot(-1), _savedPage(0), _pressedObject(nullptr), _pressedPage(nullptr), _dragging(false), _dragPage(nullptr), _dungeonTimerEnd(0), _scrollObject(nullptr), _scrollPage(nullptr), _scrollNext(0), _scrollStep(1), _ambientNext(0), _castleSection(-1),
 		_trailNavigating(false), _pendingPopup(0), _scrollBarDrag(false), _scrollBarGrab(0), _editFocus(nullptr), _editFocusPage(nullptr), _pendingTransition(0), _noScreenUpdate(false), _repeatNext(0) {
@@ -1000,10 +1000,8 @@ void CastleEngine::pressObject(LiveObject *lo, LivePage *page, const Common::Poi
 		runSpriteFrameScripts(page, lo, 4, lo->frame);
 		return;
 	}
-	if (lo->obj->cls == kObjScrollObject || lo->obj->cls == kObjWrapScrollObject) {
-		_scrollStep = 8;
+	if (lo->obj->cls == kObjScrollObject || lo->obj->cls == kObjWrapScrollObject)
 		return;
-	}
 	if (lo->obj->cls == kObjCollage) {
 		collagePress(lo, page, p);
 		return;
@@ -1015,6 +1013,10 @@ void CastleEngine::pressObject(LiveObject *lo, LivePage *page, const Common::Poi
 	if (lo->obj->cls == kObjScrollBar) {
 		scrollBarPress(lo, page, p);
 		return;
+	}
+	if (lo->obj->cls == kObjButton && lo->altImage) {
+		lo->pressed = true;
+		_dirty = true;
 	}
 	if (lo->obj->cls == kObjRepeatingHotspot) {
 		// Clicks again on a timer while the button is held (ints[2] ms)
@@ -1042,6 +1044,10 @@ void CastleEngine::releaseMouse(const Common::Point &p) {
 	_dragPage = nullptr;
 	if (!lo)
 		return;
+	if (lo->pressed) {
+		lo->pressed = false;
+		_dirty = true;
+	}
 	if (_dragging) {
 		_dragging = false;
 		lo->spriteState &= ~0x20;
@@ -1270,11 +1276,25 @@ void CastleEngine::clickObject(LiveObject *lo, LivePage *page) {
 // Scroll-edge objects of the zoom pages scroll their panel while the mouse
 // rests on them, speeding up from 1 to 8 pixels per tick.
 void CastleEngine::updateScrolling(uint32 now) {
-	if (!_scrollObject || !_scrollPage || now < _scrollNext)
+	// No scrolling under an open popup (FUN_00480ca0: every popup template
+	// in the data clears the flag that would allow it)
+	if (!_scrollObject || !_scrollPage || now < _scrollNext || !_popups.empty())
 		return;
 	_scrollNext = now + 40;
+	// The step doubles up to 8 pixels a tick, plus 10 while the button is
+	// held on the strip (FUN_00429bf0)
+	scrollStripBy(_scrollStep + (_pressedObject == _scrollObject ? 10 : 0));
+	if (_scrollStep < 8)
+		_scrollStep *= 2;
+}
+
+// One tick of the hover strip under the pointer: ints[0] gives the
+// direction (0 up, 1 down, 2 left, 3 right, 4-7 the diagonals)
+void CastleEngine::scrollStripBy(int st) {
+	if (!_scrollObject || !_scrollPage || st <= 0)
+		return;
 	int dir = _scrollObject->obj->ints.empty() ? -1 : _scrollObject->obj->ints[0];
-	int dx = 0, dy = 0, st = _scrollStep;
+	int dx = 0, dy = 0;
 	switch (dir) {
 	case 0: dy = -st; break;
 	case 1: dy = st; break;
@@ -1288,10 +1308,8 @@ void CastleEngine::updateScrolling(uint32 now) {
 	}
 	if (_scrollPage->scrollBy(dx, dy)) {
 		_dirty = true;
-		updateAmbientSound(now, true);
+		updateAmbientSound(_system->getMillis(), true);
 	}
-	if (_scrollStep < 8)
-		_scrollStep *= 2;
 }
 
 // Zoom pages carry a ZoomAmbientSoundObj: every few seconds (and whenever
@@ -1888,11 +1906,19 @@ void CastleEngine::handleMouseMove(const Common::Point &p) {
 		_scrollStep = 1;
 		_scrollNext = 0;
 	} else {
+		if (_scrollObject && _popups.empty()) {
+			// Leaving a strip lets the view coast for two more, shorter
+			// ticks (FUN_00429b90)
+			_scrollStep /= 2;
+			scrollStripBy(_scrollStep);
+			_scrollStep /= 4;
+			scrollStripBy(_scrollStep);
+		}
 		_scrollObject = nullptr;
-	_pressedObject = nullptr;
-	_dragging = false;
-	_dragPage = nullptr;
 		_scrollPage = nullptr;
+		_pressedObject = nullptr;
+		_dragging = false;
+		_dragPage = nullptr;
 	}
 	if (lo && lo->obj->cls == kObjNavRollOverButton) {
 		lo->hovered = true;

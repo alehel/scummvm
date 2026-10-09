@@ -108,6 +108,7 @@ public:
 	LivePage *popupAt(const Common::Point &p);
 	void updateDungeonTimer(uint32 now);
 	void updateScrolling(uint32 now);
+	void scrollStripBy(int st);
 	void updateAmbientSound(uint32 now, bool force);
 	LiveObject *findZoomCaption(int id, LivePage *page);
 	Quest *getQuest() { return _quest; }
@@ -210,7 +211,6 @@ private:
 	void playAnimation(const Common::String &dir, const Common::String &name, const Common::Point &pos);
 	void updateAnimation();
 
-	const ADGameDescription *_gameDescription;
 	Common::RandomSource _rnd;
 	ScriptVM *_script;
 	LiveObject *_hoverObject;
