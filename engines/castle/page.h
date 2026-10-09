@@ -137,6 +137,7 @@ private:
 	bool _mouseEntered;     // roll-off-close pages: the pointer has been inside the page
 	Common::Array<LivePanel *> _panels;
 	Image *_paletteImage;
+	bool _paletteFixed;     // a PaletteBitmap chose the palette
 	Scope _scope;
 };
 

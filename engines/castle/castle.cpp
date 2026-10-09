@@ -253,6 +253,7 @@ void CastleEngine::applyPalette() {
 	const Image *img = _basePage ? _basePage->getPaletteImage() : nullptr;
 	for (uint i = 0; i < _popups.size() && !img; i++)
 		img = _popups[i]->getPaletteImage();
+	debugC(2, kDebugGraphics, "Castle: palette from image %dx%d with %u entries", img ? img->surface.w : 0, img ? img->surface.h : 0, img ? img->palette.size() : 0);
 	if (img && img->palette.size() > 0) {
 		_system->getPaletteManager()->setPalette(img->palette.data(), 0, MIN<uint>(256, img->palette.size()));
 		byte pal[768];

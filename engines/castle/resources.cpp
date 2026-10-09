@@ -19,6 +19,7 @@
  *
  */
 
+#include "common/compression/deflate.h"
 #include "common/config-manager.h"
 #include "common/debug.h"
 #include "common/file.h"
@@ -285,6 +286,115 @@ static Image *decodeSegmentedBitmap(Common::SeekableReadStream *stream) {
 	return img;
 }
 
+// Decodes an 8-bit paletted, non-interlaced PNG keeping its indices; the
+// generic decoder would expand images with several transparent palette
+// entries to RGBA. Returns nullptr for anything else.
+static Image *decodePalettedPNG(Common::SeekableReadStream *stream) {
+	stream->seek(8);
+	int32 width = 0, height = 0;
+	byte bitDepth = 0, colorType = 0, interlace = 0;
+	Common::Array<byte> idat;
+	Image *img = new Image();
+	bool gotHeader = false;
+	while (stream->pos() + 8 <= stream->size()) {
+		uint32 len = stream->readUint32BE();
+		char tag[4];
+		stream->read(tag, 4);
+		if (stream->eos() || (uint32)stream->pos() + len > (uint32)stream->size())
+			break;
+		if (memcmp(tag, "IHDR", 4) == 0) {
+			width = stream->readSint32BE();
+			height = stream->readSint32BE();
+			bitDepth = stream->readByte();
+			colorType = stream->readByte();
+			stream->readByte();
+			stream->readByte();
+			interlace = stream->readByte();
+			gotHeader = true;
+			if (bitDepth != 8 || colorType != 3 || interlace != 0 || width <= 0 || height <= 0) {
+				delete img;
+				return nullptr;
+			}
+		} else if (memcmp(tag, "PLTE", 4) == 0) {
+			uint n = MIN<uint>(256, len / 3);
+			img->palette.resize(256, false);
+			for (uint i = 0; i < n; i++) {
+				byte r = stream->readByte(), g = stream->readByte(), b = stream->readByte();
+				img->palette.set(i, r, g, b);
+			}
+			stream->skip(len - n * 3);
+		} else if (memcmp(tag, "tRNS", 4) == 0) {
+			uint n = MIN<uint>(256, len);
+			for (uint i = 0; i < n; i++)
+				if (stream->readByte() == 0) {
+					img->mask[i] = 1;
+					img->hasMask = true;
+				}
+			stream->skip(len - n);
+		} else if (memcmp(tag, "IDAT", 4) == 0) {
+			uint old = idat.size();
+			idat.resize(old + len);
+			stream->read(&idat[old], len);
+		} else if (memcmp(tag, "IEND", 4) == 0) {
+			break;
+		} else {
+			stream->skip(len);
+		}
+		stream->readUint32BE(); // crc
+	}
+	if (!gotHeader || idat.empty()) {
+		delete img;
+		return nullptr;
+	}
+	uint32 stride = width + 1;
+	unsigned long rawLen = stride * height;
+	byte *raw = (byte *)malloc(rawLen);
+	if (!Common::inflateZlib(raw, &rawLen, &idat[0], idat.size()) || rawLen < stride * height) {
+		free(raw);
+		delete img;
+		return nullptr;
+	}
+	img->surface.create(width, height, Graphics::PixelFormat::createFormatCLUT8());
+	byte *prev = nullptr;
+	for (int y = 0; y < height; y++) {
+		byte filter = raw[y * stride];
+		byte *row = raw + y * stride + 1;
+		for (int x = 0; x < width; x++) {
+			int a = x > 0 ? row[x - 1] : 0;
+			int b = prev ? prev[x] : 0;
+			int c = (prev && x > 0) ? prev[x - 1] : 0;
+			switch (filter) {
+			case 1: row[x] += a; break;
+			case 2: row[x] += b; break;
+			case 3: row[x] += (a + b) / 2; break;
+			case 4: {
+				int pp = a + b - c, pa = ABS(pp - a), pb = ABS(pp - b), pc = ABS(pp - c);
+				row[x] += (pa <= pb && pa <= pc) ? a : (pb <= pc ? b : c);
+				break;
+			}
+			default: break;
+			}
+		}
+		memcpy(img->surface.getBasePtr(0, y), row, width);
+		prev = row;
+	}
+	free(raw);
+	// A single transparent index can use the plain colour-key path
+	int count = 0, single = -1;
+	for (int i = 0; i < 256; i++)
+		if (img->mask[i]) {
+			count++;
+			single = i;
+		}
+	if (count == 1) {
+		img->hasTransparentColor = true;
+		img->transparentColor = single;
+		img->hasMask = false;
+	}
+	findKeyIndex(img);
+	return img;
+}
+
 static Image *decodeBitmap8(Common::SeekableReadStream *stream) {
 	stream->seek(0);
 	if (stream->readByte() != 'B' || stream->readByte() != 'M')
@@ -348,6 +458,10 @@ Image *Resources::decodeImage(Common::SeekableReadStream *stream) {
 	stream->seek(0);
 	::Image::ImageDecoder *decoder;
 	if (magic[0] == 0x89 && magic[1] == 'P' && magic[2] == 'N' && magic[3] == 'G') {
+		Image *pal = decodePalettedPNG(stream);
+		if (pal)
+			return pal;
+		stream->seek(0);
 		decoder = new ::Image::PNGDecoder();
 	} else if (memcmp(magic, "RIFF", 4) == 0) {
 		return decodeSegmentedBitmap(stream);
@@ -369,6 +483,7 @@ Image *Resources::decodeImage(Common::SeekableReadStream *stream) {
 	img->hasTransparentColor = decoder->hasTransparentColor();
 	img->transparentColor = decoder->getTransparentColor();
 	findKeyIndex(img);
+	debugC(3, kDebugGraphics, "Castle: decoded %dx%d palette %u transparent %d (%u)", img->surface.w, img->surface.h, img->palette.size(), img->hasTransparentColor ? 1 : 0, img->transparentColor);
 	delete decoder;
 	return img;
 }

@@ -30,7 +30,7 @@
 
 namespace Castle {
 
-LivePage::LivePage() : _index(0), _rec(nullptr), _tmpl(nullptr), _mouseEntered(false), _paletteImage(nullptr) {
+LivePage::LivePage() : _index(0), _rec(nullptr), _tmpl(nullptr), _mouseEntered(false), _paletteImage(nullptr), _paletteFixed(false) {
 }
 
 LivePage::~LivePage() {
@@ -107,11 +107,17 @@ void LivePage::layoutObjects(LivePanel *lp, Resources &res) {
 				lo.rect.right = lo.rect.left + lo.image->surface.w;
 				lo.rect.bottom = lo.rect.top + lo.image->surface.h;
 			}
-			if ((!_paletteImage || _paletteImage->palette.size() < 256) && lo.image->palette.size() > 0 &&
-					(!_paletteImage || lo.image->palette.size() > _paletteImage->palette.size()))
+			// The page palette comes from its largest full-palette image
+			// (a PaletteBitmap object overrides that below)
+			if (lo.image->palette.size() > 0 && (!_paletteImage ||
+					(_paletteImage->palette.size() < 256 && lo.image->palette.size() > _paletteImage->palette.size()) ||
+					(lo.image->palette.size() >= 256 && _paletteImage->palette.size() >= 256 && !_paletteFixed &&
+					 lo.image->surface.w * lo.image->surface.h > _paletteImage->surface.w * _paletteImage->surface.h)))
 				_paletteImage = lo.image;
-			if (obj->cls == kObjPaletteBitmap && lo.image->palette.size() >= 256)
+			if (obj->cls == kObjPaletteBitmap && lo.image->palette.size() >= 256) {
 				_paletteImage = lo.image;
+				_paletteFixed = true;
+			}
 		}
 		lp->objects.push_back(lo);
 		if (!(obj->flags & kObjFlagCopyRect)) {
@@ -238,7 +244,11 @@ static void blitImage(Graphics::Surface &screen, const Image *img, const Common:
 		const byte *src = (const byte *)img->surface.getBasePtr(sx0, sy);
 		byte *d = (byte *)screen.getBasePtr(r.left, r.top + y);
 		int w = MIN((int)r.width(), (int)img->surface.w - sx0);
-		if (img->hasTransparentColor) {
+		if (img->hasMask) {
+			for (int x = 0; x < w; x++)
+				if (!img->mask[src[x]])
+					d[x] = src[x];
+		} else if (img->hasTransparentColor) {
 			for (int x = 0; x < w; x++)
 				if (src[x] != img->transparentColor)
 					d[x] = src[x];

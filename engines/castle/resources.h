@@ -47,7 +47,9 @@ struct Image {
 	bool hasTransparentColor;
 	uint32 transparentColor;
 	int keyIndex;               // palette index of pure green (0,255,0), the colour key, or -1
-	Image() : palette(0), hasTransparentColor(false), transparentColor(0), keyIndex(-1) {}
+	bool hasMask;               // some palette indices are fully transparent (PNG tRNS)
+	byte mask[256];             // 1 = transparent index
+	Image() : palette(0), hasTransparentColor(false), transparentColor(0), keyIndex(-1), hasMask(false) { memset(mask, 0, sizeof(mask)); }
 	~Image() { surface.free(); }
 };
 
