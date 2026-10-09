@@ -994,8 +994,11 @@ bool Database::readDocument(Common::SeekableReadStream &s, uint32 end) {
 		t->hasPos4c = f != 0;
 		if (f)
 			t->pos4c = readPoint(s);
+		int16 extra[12];
 		for (int k = 0; k < 2 + 6 + 4; k++)
-			s.readSint16BE();
+			extra[k] = s.readSint16BE();
+		t->centred = extra[6] != 0;
+		debugC(3, kDebugDatabase, "Castle: template %d type %d flags %d size %d,%d pos4c %d,%d (%d) extra %d %d %d %d %d %d %d %d %d %d %d %d", t->id, t->type, t->flags, t->size.x, t->size.y, t->pos4c.x, t->pos4c.y, t->hasPos4c ? 1 : 0, extra[0], extra[1], extra[2], extra[3], extra[4], extra[5], extra[6], extra[7], extra[8], extra[9], extra[10], extra[11]);
 		f = s.readSint16BE();
 		if (f)
 			readRect(s);

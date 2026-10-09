@@ -26,7 +26,15 @@
 #include "common/formats/winexe_pe.h"
 #include "common/memstream.h"
 #include "common/textconsole.h"
+#include "graphics/font.h"
+#include "graphics/fontman.h"
+#include "graphics/paletteman.h"
+#include "graphics/palette.h"
 #include "graphics/wincursor.h"
+#ifdef USE_FREETYPE2
+#include "graphics/fonts/ttf.h"
+#endif
+#include "common/system.h"
 #include "image/bmp.h"
 #include "image/png.h"
 
@@ -40,7 +48,7 @@ static const char *const kWaveExtensions[] = { ".wav", nullptr };
 static const char *const kAniExtensions[] = { ".ani", nullptr };
 static const char *const kVideoExtensions[] = { ".mov", nullptr };
 
-Resources::Resources() : _exe(nullptr) {
+Resources::Resources() : _exe(nullptr), _textFont(nullptr), _textFontTried(false) {
 	for (int i = 0; i < 256; i++)
 		_highlight[i] = i;
 }
@@ -64,6 +72,7 @@ void Resources::buildHighlightTable(const byte *palette) {
 }
 
 Resources::~Resources() {
+	delete _textFont;
 	for (Common::HashMap<Common::String, Image *>::iterator it = _imageCache.begin(); it != _imageCache.end(); ++it)
 		delete it->_value;
 	for (uint i = 0; i < _cursorGroups.size(); i++)
@@ -94,6 +103,20 @@ Common::String Resources::makePath(const Common::String &dir, const Common::Stri
 		path = n.substr(1);
 	} else if (n.hasPrefix("&")) {
 		path = n.substr(1);
+	} else if (n.hasPrefix("..\\")) {
+		// Relative to the parent of the page directory (the room conversations)
+		if (d.hasPrefix("\\"))
+			d = d.substr(1);
+		while (n.hasPrefix("..\\")) {
+			n = n.substr(3);
+			if (d.hasSuffix("\\"))
+				d.deleteLastChar();
+			uint cut = d.size();
+			while (cut > 0 && d[cut - 1] != '\\')
+				cut--;
+			d = d.substr(0, cut);
+		}
+		path = d + n;
 	} else if (n.contains('\\')) {
 		// Names with a directory part are relative to the data root
 		path = n;
@@ -574,6 +597,35 @@ Graphics::Cursor *Resources::getCursor(const Common::String &nameIn) {
 	}
 	_cursorCache[name] = cursor;
 	return cursor;
+}
+
+const Graphics::Font *Resources::getTextFont() {
+	if (!_textFontTried) {
+		_textFontTried = true;
+#ifdef USE_FREETYPE2
+		_textFont = Graphics::loadTTFFontFromArchive("LiberationSerif-Regular.ttf", 16, Graphics::kTTFSizeModeCell);
+#endif
+		debugC(1, kDebugGraphics, "Castle: text font %s", _textFont ? "from fonts.dat" : "fallback");
+	}
+	if (_textFont)
+		return _textFont;
+	return FontMan.getFontByUsage(Graphics::FontManager::kBigGUIFont);
+}
+
+byte Resources::findPaletteColor(byte r, byte g, byte b) const {
+	byte pal[768];
+	g_system->getPaletteManager()->grabPalette(pal, 0, 256);
+	int best = 0;
+	int bestDist = 0x7fffffff;
+	for (int i = 0; i < 256; i++) {
+		int dr = pal[i * 3] - r, dg = pal[i * 3 + 1] - g, db = pal[i * 3 + 2] - b;
+		int dist = dr * dr + dg * dg + db * db;
+		if (dist < bestDist) {
+			bestDist = dist;
+			best = i;
+		}
+	}
+	return (byte)best;
 }
 
 Common::SeekableReadStream *Resources::openWave(const Common::String &dir, const Common::String &name) {

@@ -122,6 +122,14 @@ int Quest::getItem(int index) const {
 	return index >= 0 && index < kItems ? _items[index] : 0;
 }
 
+bool Quest::useItem(int index) {
+	if (getItem(index) != 2)
+		return false;
+	_items[index] = 1;
+	_dirty = true;
+	return true;
+}
+
 bool Quest::collectItem(int index) {
 	if (getItem(index) != 1)
 		return false;

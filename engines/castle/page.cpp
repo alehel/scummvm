@@ -22,6 +22,7 @@
 #include "common/debug.h"
 #include "common/system.h"
 #include "common/textconsole.h"
+#include "graphics/font.h"
 #include "graphics/surface.h"
 
 #include "castle/detection.h"
@@ -97,7 +98,7 @@ void LivePage::layoutObjects(LivePanel *lp, Resources &res) {
 			lo.nextFrameTime = g_system->getMillis() + 200;
 		} else if (!obj->file.empty() && (obj->isBitmap() || obj->cls == kObjButton || obj->cls == kObjToggleButton ||
 				obj->cls == kObjQuestionOKButton || obj->cls == kObjCollageButton || obj->cls == kObjNavRollOverButton ||
-				obj->cls == kObjHighlightingCastle || obj->cls == kObjHatchBitmap || obj->cls == kObjCollectBitmap)) {
+				obj->cls == kObjHighlightingCastle || obj->cls == kObjCollectBitmap)) {
 			lo.image = res.loadImage(lp->dir, obj->file);
 		}
 
@@ -231,6 +232,10 @@ bool LivePage::open(Database &db, Resources &res, uint index, const Common::Poin
 			_bounds.extend(_panels[i]->rect);
 		}
 	}
+	// Dialog-like popups (the questions, the save prompts) carry no position
+	// of their own and open in the middle of the screen
+	if (isPopup() && _tmpl && _tmpl->centred && origin == Common::Point(0, 0) && _rec->pos == Common::Point(0, 0) && !_bounds.isEmpty())
+		moveBy((640 - _bounds.width()) / 2 - _bounds.left, (480 - _bounds.height()) / 2 - _bounds.top);
 	debugC(1, kDebugGeneral, "Castle: opened page %u type %d template %d dir '%s' panels %u bounds %d,%d,%d,%d",
 	       index, _rec->type, _rec->id, _dir.c_str(), _panels.size(), _bounds.left, _bounds.top, _bounds.right, _bounds.bottom);
 	return true;
@@ -314,6 +319,17 @@ void LivePage::draw(Graphics::Surface &screen, Resources &res) const {
 		for (uint k = 0; k < order.size(); k++) {
 			const LiveObject &lo = *order[k];
 			debugC(4, kDebugGraphics, "Castle: draw %s %d visible=%d image=%p z=%d rect=%d,%d,%d,%d", objectClassName(lo.obj->cls), lo.obj->id, lo.visible ? 1 : 0, (const void *)lo.image, lo.zOrder, lo.rect.left, lo.rect.top, lo.rect.right, lo.rect.bottom);
+			if (lo.obj->cls == kObjEditBox || lo.obj->cls == kObjRoomEditBox || lo.obj->cls == kObjScrollEditBox) {
+				// The typed text, vertically centred in the box
+				const Graphics::Font *font = lo.visible && !lo.text.empty() ? res.getTextFont() : nullptr;
+				if (font) {
+					Common::Rect r = lo.rect;
+					r.clip(lp->rect);
+					int y = r.top + (r.height() - font->getFontHeight()) / 2;
+					font->drawString(&screen, lo.text, r.left + 2, y, r.width() - 4, res.findPaletteColor(0, 0, 0));
+				}
+				continue;
+			}
 			if (!lo.visible || (!lo.image && lo.obj->cls != kObjZoomCaption))
 				continue;
 			// Ambient animations of other room nodes are switched off
@@ -417,7 +433,9 @@ LiveObject *LivePage::objectAt(const Common::Point &p, bool hotspotsOnly) {
 				continue;
 			if (hotspotsOnly && lo.disabled)
 				continue;
-			bool builtinClick = lo.obj->cls == kObjCoinBitmap || lo.obj->cls == kObjCollectBitmap || lo.obj->cls == kObjToggleButton;
+			bool builtinClick = lo.obj->cls == kObjCoinBitmap || lo.obj->cls == kObjCollectBitmap || lo.obj->cls == kObjToggleButton ||
+				lo.obj->cls == kObjQuestionOKButton || lo.obj->cls == kObjRandomMapBitmap ||
+				(lo.obj->cls == kObjRandomScenarioHotspot && lo.obj->ints.size() > 3 && lo.obj->ints[2] == 0);
 			if (hotspotsOnly && !builtinClick && !lo.obj->findEvent(kEventClick)) {
 				bool clickScript = false;
 				for (uint s = 0; s < lo.obj->scripts.size(); s++)
@@ -429,8 +447,18 @@ LiveObject *LivePage::objectAt(const Common::Point &p, bool hotspotsOnly) {
 			Common::Point q = p;
 			if (!(lo.obj->flags & kObjFlagCopyRect))
 				q += lp->scroll;
-			if (lo.rect.contains(q))
-				return &lo;
+			if (!lo.rect.contains(q))
+				continue;
+			// Sprites are hit by their opaque pixels only
+			if (lo.obj->cls == kObjSprite && lo.image && lo.image->keyIndex >= 0) {
+				int px = q.x - lo.rect.left, py = q.y - lo.rect.top;
+				if (px < lo.image->surface.w && py < lo.image->surface.h) {
+					byte pix = *(const byte *)lo.image->surface.getBasePtr(px, py);
+					if (pix == lo.image->keyIndex || (lo.image->hasMask && lo.image->mask[pix]))
+						continue;
+				}
+			}
+			return &lo;
 		}
 	}
 	return nullptr;

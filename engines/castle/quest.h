@@ -67,6 +67,8 @@ public:
 	// Evidence items of the second spy: 1 waiting, 2 collected
 	int getItem(int index) const;
 	bool collectItem(int index);
+	// Hands a collected item to the spy: it goes back to waiting
+	bool useItem(int index);
 
 	// Chest tasks: one of three alternatives is active (1) per task, 2 when done
 	int getTask(int task, int choice) const;

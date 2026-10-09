@@ -66,6 +66,7 @@ struct LiveObject {
 	Image *overlayB;        // zoom caption: painted zoom object artwork
 	Image *altImage;        // second artwork: toggle off, blinking item
 	bool dithered;          // spy pictures of the hut: drawn through a checkerboard
+	Common::String text;    // edit boxes: the typed text
 	LiveObject() : obj(nullptr), panel(nullptr), image(nullptr), frame(0), frameCount(0), frameDelay(100), nextFrameTime(0),
 			playing(false), visible(true), disabled(false), hovered(false), zOrder(0), value(0), spriteFlags(0), spriteState(0), spriteLoops(-1), spriteStartTime(0), spriteStarted(false), overlayA(nullptr), overlayB(nullptr), altImage(nullptr), dithered(false) {
 		memset(counters, 0, sizeof(counters));

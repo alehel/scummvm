@@ -45,6 +45,7 @@ struct Event;
 class ScriptVM;
 struct Context;
 class Quest;
+class Quiz;
 struct Value;
 
 class CastleEngine : public Engine {
@@ -90,6 +91,15 @@ public:
 	void updateAmbientSound(uint32 now, bool force);
 	LiveObject *findZoomCaption(int id, LivePage *page);
 	Quest *getQuest() { return _quest; }
+	Quiz *getQuiz() { return _quiz; }
+
+	// Services of the spy's questions (see quiz.h)
+	void quizPlayVideo(const Common::String &name);
+	void quizPlayWave(const Common::String &name);
+	void quizChangePage(uint page, int transition);
+	void quizOpenPopup(uint page);
+	void quizSendMessage(int objectId, int msg);
+	void quizSetState(int state);
 
 private:
 	// Spy quest
@@ -108,6 +118,11 @@ private:
 	bool toggleState(int code) const;
 	void setToggleState(int code, bool on);
 	void applyToggles();
+	void startRoomQuestions(LivePage *page);
+	void answerClicked(LiveObject *lo, LivePage *page);
+	LiveObject *findEditBox(LivePage **pageOut);
+	void typeKey(int ascii, int keycode);
+	void flushPendingPage();
 
 	void handleEvents();
 	void render();
@@ -160,6 +175,7 @@ private:
 	};
 	Common::Array<WaveChannel> _channels;
 	Quest *_quest;
+	Quiz *_quiz;
 	bool _toggles[32];           // option toggles (sounds, transitions) by option code
 	bool _activityCompleted;     // ActivityCompleted action flag
 	bool _spyChangedFlag;        // GeneralPurposeAction 7

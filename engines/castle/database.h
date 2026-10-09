@@ -404,6 +404,7 @@ struct PageTemplate {
 	int16 flags;
 	Common::Point pos4c;
 	bool hasPos4c;
+	bool centred;       // popups without a position open centred on the screen
 	Common::Array<PanelDesc> panels;
 	Common::Array<Event *> events;
 	~PageTemplate();

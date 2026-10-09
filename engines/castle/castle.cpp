@@ -46,6 +46,7 @@
 #include "castle/detection.h"
 #include "castle/page.h"
 #include "castle/quest.h"
+#include "castle/quiz.h"
 #include "castle/resources.h"
 #include "castle/vm.h"
 
@@ -53,7 +54,7 @@ namespace Castle {
 
 CastleEngine::CastleEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst), _gameDescription(gameDesc),
 		_rnd("castle"), _script(nullptr), _hoverObject(nullptr), _hoverPage(nullptr), _db(nullptr), _res(nullptr), _basePage(nullptr), _dirty(true), _paletteDirty(true), _pendingBasePage(0),
-		_pendingBase(false), _dumpCount(0), _ani(nullptr), _aniNextFrame(0), _quest(nullptr), _activityCompleted(false), _spyChangedFlag(false), _saveSlot(-1), _savedPage(0), _pressedObject(nullptr), _pressedPage(nullptr), _dragging(false), _dragPage(nullptr), _dungeonTimerEnd(0), _scrollObject(nullptr), _scrollPage(nullptr), _scrollNext(0), _scrollStep(1), _ambientNext(0) {
+		_pendingBase(false), _dumpCount(0), _ani(nullptr), _aniNextFrame(0), _quest(nullptr), _quiz(nullptr), _activityCompleted(false), _spyChangedFlag(false), _saveSlot(-1), _savedPage(0), _pressedObject(nullptr), _pressedPage(nullptr), _dragging(false), _dragPage(nullptr), _dungeonTimerEnd(0), _scrollObject(nullptr), _scrollPage(nullptr), _scrollNext(0), _scrollStep(1), _ambientNext(0) {
 	const Common::FSNode gameDataDir(ConfMan.getPath("path"));
 	SearchMan.addSubDirectoryMatching(gameDataDir, "dkcode");
 	SearchMan.addSubDirectoryMatching(gameDataDir, "3drooms", 0, 3);
@@ -79,6 +80,7 @@ CastleEngine::~CastleEngine() {
 	_screen.free();
 	_aniBackground.free();
 	delete _script;
+	delete _quiz;
 	delete _quest;
 	delete _res;
 	delete _db;
@@ -99,7 +101,11 @@ Common::Error CastleEngine::run() {
 	_res->init();
 	_script = new ScriptVM(this);
 	_script->initDocScope(_db->getDocExtension());
+	// Debug harness: castle_seed makes the random choices reproducible
+	if (ConfMan.hasKey("castle_seed"))
+		_rnd.setSeed(ConfMan.getInt("castle_seed"));
 	_quest = new Quest(_rnd);
+	_quiz = new Quiz(this, _db, _quest, _rnd);
 	for (uint i = 0; i < ARRAYSIZE(_toggles); i++)
 		_toggles[i] = true;
 	const Common::Array<ToggleDesc> &toggles = _db->getTail().toggles;
@@ -117,10 +123,10 @@ Common::Error CastleEngine::run() {
 		if (loadGameState(ConfMan.getInt("save_slot")).getCode() == Common::kNoError && _savedPage)
 			start = _savedPage;
 	}
-	openBasePage(start);
 	// Debug harness: castle_spy presets the chosen spy
 	if (ConfMan.hasKey("castle_spy"))
 		setSpy(ConfMan.getInt("castle_spy"), false);
+	openBasePage(start);
 
 	setCursor(_db->getDefaultCursor());
 	CursorMan.showMouse(true);
@@ -131,7 +137,8 @@ Common::Error CastleEngine::run() {
 	const char *dumpDir = dumpDirStr.empty() ? nullptr : dumpDirStr.c_str();
 	// Each entry is "x,y" for a click, "m:x,y" for a mouse move, "p:x,y"
 	// for a button press, "r:x,y" for a release, "s:slot,0" saves and
-	// "l:slot,0" loads a game.
+	// "l:slot,0" loads a game, "t:code,0" types the character code
+	// (13 = Enter, 8 = Backspace).
 	Common::Array<Common::Point> clicks;
 	Common::Array<char> clickKind;
 	if (ConfMan.hasKey("castle_clicks")) {
@@ -176,6 +183,8 @@ Common::Error CastleEngine::run() {
 						afterQuestLoad(true, true);
 				} else if (kind == 'r') {
 					releaseMouse(pt);
+				} else if (kind == 't') {
+					typeKey(pt.x, pt.x == 13 ? Common::KEYCODE_RETURN : pt.x == 8 ? Common::KEYCODE_BACKSPACE : 0);
 				} else if (lo) {
 					pressObject(lo, page, pt);
 					if (kind == 'c')
@@ -184,16 +193,7 @@ Common::Error CastleEngine::run() {
 				nextClick = _system->getMillis() + 1500;
 			}
 		}
-		if (_pendingBase) {
-			_pendingBase = false;
-			Common::Point scroll = _pendingScroll;
-			_pendingScroll = Common::Point(0, 0);
-			openBasePage(_pendingBasePage);
-			if (_basePage && (scroll.x || scroll.y)) {
-				_basePage->setScroll(scroll);
-				_dirty = true;
-			}
-		}
+		flushPendingPage();
 		uint32 now = _system->getMillis();
 		if (_basePage) {
 			_basePage->update(now, *_res);
@@ -209,6 +209,10 @@ Common::Error CastleEngine::run() {
 		updateScrolling(now);
 		updateAmbientSound(now, false);
 		updateDungeonTimer(now);
+		if (_quiz->idleExpired(now) && !_ani) {
+			_quiz->clearIdle();
+			_quiz->fireEvent(Quiz::kEvtTimeout, 0);
+		}
 		updateAnimation();
 		render();
 		_system->delayMillis(10);
@@ -253,6 +257,8 @@ void CastleEngine::handleEvents() {
 				delete _ani;
 				_ani = nullptr;
 				_dirty = true;
+			} else {
+				typeKey(event.kbd.ascii, event.kbd.keycode);
 			}
 			break;
 		default:
@@ -350,6 +356,8 @@ void CastleEngine::openBasePage(uint index) {
 	_paletteDirty = true;
 	render();
 	runPageEvents(_basePage, kEventOpen);
+	if (!_pendingBase && _basePage)
+		startRoomQuestions(_basePage);
 }
 
 void CastleEngine::runPageEvents(LivePage *page, int eventType) {
@@ -386,6 +394,7 @@ void CastleEngine::openPopup(uint index) {
 		return;
 	}
 	_popups.push_back(page);
+	debugC(2, kDebugGraphics, "Castle: popup %u at %d,%d %dx%d", index, page->getBounds().left, page->getBounds().top, page->getBounds().width(), page->getBounds().height());
 	applyQuestObjects(page, true);
 	_dirty = true;
 	render();
@@ -402,6 +411,10 @@ void CastleEngine::closePopup(uint index) {
 	_dragging = false;
 	_dragPage = nullptr;
 				_hoverPage = nullptr;
+			}
+			if (_pressedPage == _popups[i]) {
+				_pressedObject = nullptr;
+				_pressedPage = nullptr;
 			}
 			delete _popups[i];
 			_popups.remove_at(i);
@@ -420,6 +433,8 @@ void CastleEngine::closeAllPopups() {
 	_dragPage = nullptr;
 		_hoverPage = nullptr;
 	}
+	_pressedObject = nullptr;
+	_pressedPage = nullptr;
 	for (uint i = 0; i < _popups.size(); i++)
 		delete _popups[i];
 	_popups.clear();
@@ -957,6 +972,52 @@ void CastleEngine::clickObject(LiveObject *lo, LivePage *page) {
 		_dirty = true;
 		return;
 	}
+	case kObjRandomScenarioHotspot: {
+		// Clicking the spy makes it ask again, up to three times
+		const Event *ev = o->findEvent(kEventClick);
+		if (ev)
+			runEvent(ev, page, lo);
+		if (o->ints.size() > 3 && o->ints[2] == 0) {
+			int count = ++lo->value;
+			if (count < 4) {
+				_quiz->setIdle(_system->getMillis());
+				_quiz->fireEvent(Quiz::kEvtAsk, count);
+			}
+		}
+		return;
+	}
+	case kObjRandomMapBitmap: {
+		// The map item of the current task: the first clicks play the spy's
+		// hints, then (or at once after the zoom page was seen) the task is done
+		int count = ++lo->value;
+		int task = o->ints.size() > 1 ? o->ints[0] : -1;
+		int choice = o->ints.size() > 1 ? o->ints[1] : -1;
+		bool done = _quiz->getFlag();
+		if (!done) {
+			LivePage *before = _basePage;
+			bool fired = _quiz->fireEvent(Quiz::kEvtHint, count);
+			if (_basePage != before)
+				return;
+			if (!fired && _quiz->getQuestion() == 1 && count == 1)
+				done = true;
+		}
+		if (done) {
+			lo->visible = false;
+			_quest->completeTask(task, choice);
+			playWaveChannel(Common::String(), "@chest1s", -1);
+			playWaveChannel(Common::String(), "@pape1s", -2);
+			chestFlash();
+			_dirty = true;
+		}
+		return;
+	}
+	case kObjQuestionOKButton:
+		answerClicked(lo, page);
+		return;
+	case kObjPageTurn:
+		// Seeing the zoom page lets the map item complete its task directly
+		_quiz->setFlag(true);
+		break;
 	case kObjToggleButton: {
 		int code = toggleCodeOf(o->id);
 		lo->value = lo->value ? 0 : 1;
@@ -1567,6 +1628,12 @@ void CastleEngine::applyQuestObjects(LivePage *page, bool onOpen) {
 					lo.rect.bottom = lo.rect.top + lo.image->surface.h;
 				}
 				break;
+			case kObjRandomMapBitmap:
+				// The map item of the active scenario of its task
+				lo.visible = spy != 0 && o->ints.size() > 1 && _quest->getTask(o->ints[0], o->ints[1]) == 1;
+				lo.value = 0;
+				debugC(2, kDebugScript, "Castle: map item '%s' task %d choice %d at %d,%d -> %s", o->file.c_str(), o->ints.size() > 1 ? o->ints[0] : -1, o->ints.size() > 1 ? o->ints[1] : -1, lo.rect.left, lo.rect.top, lo.visible ? "shown" : "hidden");
+				break;
 			case kObjSpyDitherBitmap:
 				// The chosen spy has left the hut: only the other one stays
 				lo.visible = o->ints.empty() || spy != o->ints[0];
@@ -1715,6 +1782,7 @@ void CastleEngine::applyToggles() {
 
 void CastleEngine::newGame() {
 	_quest->reset();
+	_quiz->reset();
 	setSpy(0, true);
 	_script->setDocVariable(_db->getTail().getNewGameVar(), Value::logical(true));
 }
@@ -1837,6 +1905,164 @@ Common::Error CastleEngine::loadGameState(int slot) {
 	applyToggles();
 	debugC(1, kDebugGeneral, "Castle: loaded game from slot %d (spy %d, page %u)", slot, _quest->getSpy(), _savedPage);
 	return Common::kNoError;
+}
+
+// --- The spy's questions ----------------------------------------------
+
+void CastleEngine::flushPendingPage() {
+	if (!_pendingBase)
+		return;
+	_pendingBase = false;
+	Common::Point scroll = _pendingScroll;
+	_pendingScroll = Common::Point(0, 0);
+	openBasePage(_pendingBasePage);
+	if (_basePage && (scroll.x || scroll.y)) {
+		_basePage->setScroll(scroll);
+		_dirty = true;
+	}
+}
+
+// A room page opened: its scenario hotspot (mode 0) starts the question
+// bound to it and the spy asks it
+void CastleEngine::startRoomQuestions(LivePage *page) {
+	const Common::Array<LivePanel *> &panels = page->getPanels();
+	for (uint i = 0; i < panels.size(); i++) {
+		for (uint k = 0; k < panels[i]->objects.size(); k++) {
+			LiveObject &lo = panels[i]->objects[k];
+			const GameObject *o = lo.obj;
+			if (o->cls != kObjRandomScenarioHotspot || o->ints.size() < 4)
+				continue;
+			debugC(2, kDebugScript, "Castle: scenario hotspot mode %d question %d name '%s'", o->ints[2], o->ints[3], o->strs.empty() ? "" : o->strs[0].c_str());
+			if (o->ints[2] != 0)
+				continue;
+			lo.value = 0;
+			_quiz->startQuestion(o->ints[3]);
+			_quiz->fireEvent(Quiz::kEvtStart, 0);
+			return;
+		}
+	}
+}
+
+static bool isEditBox(const GameObject *o) {
+	return o->cls == kObjEditBox || o->cls == kObjRoomEditBox || o->cls == kObjScrollEditBox;
+}
+
+static LiveObject *findObjectOfClass(LivePage *page, int cls, bool editBoxes) {
+	const Common::Array<LivePanel *> &panels = page->getPanels();
+	for (uint i = 0; i < panels.size(); i++)
+		for (uint k = 0; k < panels[i]->objects.size(); k++) {
+			LiveObject &lo = panels[i]->objects[k];
+			if (lo.visible && (editBoxes ? isEditBox(lo.obj) : lo.obj->cls == cls))
+				return &lo;
+		}
+	return nullptr;
+}
+
+// The edit box that receives the keyboard: the topmost page with one
+LiveObject *CastleEngine::findEditBox(LivePage **pageOut) {
+	for (int i = (int)_popups.size() - 1; i >= 0; i--) {
+		LiveObject *lo = findObjectOfClass(_popups[i], 0, true);
+		if (lo) {
+			*pageOut = _popups[i];
+			return lo;
+		}
+	}
+	if (_basePage) {
+		LiveObject *lo = findObjectOfClass(_basePage, 0, true);
+		if (lo) {
+			*pageOut = _basePage;
+			return lo;
+		}
+	}
+	return nullptr;
+}
+
+void CastleEngine::typeKey(int ascii, int keycode) {
+	LivePage *page = nullptr;
+	LiveObject *edit = findEditBox(&page);
+	if (!edit)
+		return;
+	if (keycode == Common::KEYCODE_RETURN || keycode == Common::KEYCODE_KP_ENTER) {
+		// Enter presses the page's OK button
+		LiveObject *ok = findObjectOfClass(page, kObjQuestionOKButton, false);
+		if (ok)
+			clickObject(ok, page);
+		return;
+	}
+	if (keycode == Common::KEYCODE_BACKSPACE) {
+		if (!edit->text.empty())
+			edit->text.deleteLastChar();
+	} else if (ascii >= 32 && ascii < 127 && edit->text.size() < 80) {
+		edit->text += (char)ascii;
+	} else {
+		return;
+	}
+	_dirty = true;
+}
+
+// QuestionOKButton: checks the typed answer against the lists of the
+// current question. A recognised misspelling keeps the popup open (the
+// original beeps); otherwise the popup closes and the spy reacts.
+void CastleEngine::answerClicked(LiveObject *lo, LivePage *page) {
+	LiveObject *edit = findObjectOfClass(page, 0, true);
+	if (!edit)
+		return;
+	int n = lo->obj->ints.size() > 2 ? lo->obj->ints[2] : 1;
+	int result = _quiz->checkAnswer(n, edit->text);
+	debugC(1, kDebugScript, "Castle: quiz: answer %d '%s' -> '%s' -> %d", n, edit->text.c_str(), _quiz->normalize(edit->text).c_str(), result);
+	if (result == Quiz::kAnswerMisspelled)
+		return;
+	if (page->isPopup())
+		closePopup(page->getIndex());
+	_quiz->fireEvent(result == Quiz::kAnswerAccepted ? Quiz::kEvtCorrect : Quiz::kEvtWrong, 0);
+	_quiz->answered();
+	_dirty = true;
+}
+
+// The conversation videos play over the room view (the first panel of the
+// room page); the names are relative to the room's directory
+void CastleEngine::quizPlayVideo(const Common::String &name) {
+	Common::Rect dest;
+	Common::String dir;
+	if (_basePage) {
+		dir = _basePage->getDir();
+		if (!_basePage->getPanels().empty())
+			dest = _basePage->getPanels()[0]->rect;
+	}
+	playVideo(dir, name, dest);
+}
+
+void CastleEngine::quizPlayWave(const Common::String &name) {
+	playWave(_basePage ? _basePage->getDir() : Common::String(), name, false);
+}
+
+// Page changes inside a conversation take effect at once, the objects
+// that follow in the group run on the new page
+void CastleEngine::quizChangePage(uint page, int transition) {
+	Action a;
+	a.type = kActChangePage;
+	a.page = page;
+	a.x = transition;
+	runAction(&a, _basePage, nullptr);
+	flushPendingPage();
+}
+
+void CastleEngine::quizOpenPopup(uint page) {
+	openPopup(page);
+}
+
+void CastleEngine::quizSendMessage(int objectId, int msg) {
+	Action a;
+	a.type = kActSendMessage;
+	a.p[0] = objectId;
+	a.p[1] = msg;
+	runAction(&a, _basePage, nullptr);
+}
+
+// The conversation state goes to the document variable the room scripts test
+void CastleEngine::quizSetState(int state) {
+	_script->setDocVariable(_db->getTail().vars[0], Value::number(state));
+	_quest->setExtra(state);
 }
 
 } // End of namespace Castle

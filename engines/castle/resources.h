@@ -35,6 +35,7 @@ class PEResources;
 
 namespace Graphics {
 class Cursor;
+class Font;
 struct WinCursorGroup;
 }
 
@@ -87,6 +88,11 @@ public:
 
 	static Common::String makePath(const Common::String &dir, const Common::String &name);
 
+	// The serif font the edit boxes are typed in (Times New Roman in the original)
+	const Graphics::Font *getTextFont();
+	// Index of the closest colour in the current screen palette
+	byte findPaletteColor(byte r, byte g, byte b) const;
+
 	// Builds a palette remapping table that brightens colours (used for the
 	// castle section highlight). Call whenever the palette changes.
 	void buildHighlightTable(const byte *palette);
@@ -98,6 +104,8 @@ private:
 	Common::SeekableReadStream *openExeWave(const Common::String &name);
 
 	Common::PEResources *_exe;
+	Graphics::Font *_textFont;
+	bool _textFontTried;
 	byte _highlight[256];
 	Common::HashMap<Common::String, Image *> _imageCache;
 	Common::HashMap<Common::String, Graphics::Cursor *> _cursorCache;
