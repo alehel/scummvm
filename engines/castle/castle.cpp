@@ -225,8 +225,12 @@ void CastleEngine::applyPalette() {
 	const Image *img = _basePage ? _basePage->getPaletteImage() : nullptr;
 	for (uint i = 0; i < _popups.size() && !img; i++)
 		img = _popups[i]->getPaletteImage();
-	if (img && img->palette.size() > 0)
+	if (img && img->palette.size() > 0) {
 		_system->getPaletteManager()->setPalette(img->palette.data(), 0, MIN<uint>(256, img->palette.size()));
+		byte pal[768];
+		_system->getPaletteManager()->grabPalette(pal, 0, 256);
+		_res->buildHighlightTable(pal);
+	}
 	_paletteDirty = false;
 }
 
@@ -460,6 +464,23 @@ void CastleEngine::runAction(const Action *a, LivePage *page, LiveObject *obj) {
 			break;
 		}
 		break;
+	case kActChangeColourRefBitmap: {
+		LiveObject *hl = findHighlightObject(page);
+		if (hl) {
+			hl->image = _res->loadImage(page ? page->getDir() : Common::String(), a->name);
+			_dirty = true;
+		}
+		break;
+	}
+	case kActHighlightCastleSection: {
+		LiveObject *hl = findHighlightObject(page);
+		if (hl) {
+			hl->value = a->x;
+			hl->visible = a->x > 0;
+			_dirty = true;
+		}
+		break;
+	}
 	case kActSetSpriteFrame: {
 		LiveObject *lo = findLiveObject(a->p[0], page);
 		if (lo)
@@ -470,6 +491,19 @@ void CastleEngine::runAction(const Action *a, LivePage *page, LiveObject *obj) {
 		debugC(1, kDebugScript, "Castle: unimplemented action %s", actionName(a->type));
 		break;
 	}
+}
+
+LiveObject *CastleEngine::findHighlightObject(LivePage *page) {
+	if (!page)
+		page = _basePage;
+	if (!page)
+		return nullptr;
+	const Common::Array<LivePanel *> &panels = page->getPanels();
+	for (uint i = 0; i < panels.size(); i++)
+		for (uint k = 0; k < panels[i]->objects.size(); k++)
+			if (panels[i]->objects[k].obj->cls == kObjHighlightingCastle)
+				return &panels[i]->objects[k];
+	return nullptr;
 }
 
 int CastleEngine::getBuiltinNumber(int id) const {
@@ -528,6 +562,7 @@ void CastleEngine::setSpriteFrame(LiveObject *lo, int frame) {
 	if (lo->frameCount > 0 && frame > lo->frameCount)
 		frame = lo->frameCount;
 	lo->frame = frame;
+	debugC(3, kDebugScript, "Castle: sprite %d frame -> %d", lo->obj->id, frame);
 	if (!lo->obj->file.empty()) {
 		Common::String name = lo->obj->cls == kObjSprite ? Common::String::format("%s%04d", lo->obj->file.c_str(), frame) : lo->obj->strs[MIN<uint>(frame - 1, lo->obj->strs.size() - 1)];
 		Image *img = _res->loadImage(lo->panel->dir, name);
@@ -579,15 +614,6 @@ void CastleEngine::updateSprites(uint32 now) {
 				LiveObject &lo = panels[i]->objects[k];
 				if (lo.obj->cls != kObjSprite || lo.frameCount <= 0)
 					continue;
-				if (!lo.spriteStarted) {
-					// Frame events fire for the initial frame as well
-					lo.spriteStarted = true;
-					runSpriteFrameScripts(page, &lo, 9, lo.frame);
-					if (lo.frame == lo.frameCount)
-						runSpriteFrameScripts(page, &lo, 0xd, lo.frame);
-					if (scriptShouldStop())
-						return;
-				}
 				if (!lo.playing || now < lo.nextFrameTime)
 					continue;
 				lo.nextFrameTime = now + lo.frameDelay;

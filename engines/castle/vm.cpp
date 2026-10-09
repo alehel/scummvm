@@ -119,7 +119,7 @@ void Scope::init(const Extension *ext) {
 			case kTypeString: val = Value::string(k < t.strs.size() ? t.strs[k] : Common::String()); break;
 			case kTypePoint: val = Value::point(k < t.pts.size() ? t.pts[k] : Common::Point()); break;
 			case kTypeRect: val = Value::rectangle(k < t.rects.size() ? t.rects[k] : Common::Rect()); break;
-			case kTypeObject: val = Value::object(k < t.u32s.size() ? (int32)t.u32s[k] : 0); break;
+			case kTypeObject: val = Value::object(k < t.l1.size() ? t.l1[k] : (k < t.u32s.size() ? (int32)t.u32s[k] : 0)); break;
 			case kTypeReal: val = Value::real(k < t.reals.size() ? t.reals[k] : 0.0); break;
 			default: break;
 			}
@@ -188,6 +188,7 @@ Value ScriptVM::getVariable(const Operand &op, Context &ctx) {
 }
 
 void ScriptVM::setVariable(const Operand &op, const Value &val, Context &ctx) {
+	debugC(3, kDebugScript, "Castle: set var %d%s%s = %s", op.b, op.e ? "." : "", op.e ? Common::String::format("%d", op.e).c_str() : "", val.toString().c_str());
 	Variable *var = findVariable(op.b, ctx);
 	if (!var) {
 		debugC(1, kDebugScript, "Castle: variable %d not found for assignment", op.b);
@@ -643,6 +644,7 @@ Value ScriptVM::getPropertyOf(LiveObject *lo, int prop) {
 
 void ScriptVM::setPropertyOf(LiveObject *lo, int prop, const Value &v) {
 	int n = v.toInt();
+	debugC(3, kDebugScript, "Castle: set %s %d prop %d = %s", objectClassName(lo->obj->cls), lo->obj->id, prop, v.toString().c_str());
 	if (lo->obj->cls == kObjSprite && prop != kPropVisible) {
 		if (spriteFlagBit(prop)) {
 			if (v.toBool())

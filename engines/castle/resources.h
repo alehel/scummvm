@@ -75,12 +75,18 @@ public:
 
 	static Common::String makePath(const Common::String &dir, const Common::String &name);
 
+	// Builds a palette remapping table that brightens colours (used for the
+	// castle section highlight). Call whenever the palette changes.
+	void buildHighlightTable(const byte *palette);
+	const byte *getHighlightTable() const { return _highlight; }
+
 private:
 	Image *decodeImage(Common::SeekableReadStream *stream);
 	Common::SeekableReadStream *openExeBitmap(const Common::String &name);
 	Common::SeekableReadStream *openExeWave(const Common::String &name);
 
 	Common::PEResources *_exe;
+	byte _highlight[256];
 	Common::HashMap<Common::String, Image *> _imageCache;
 };
 

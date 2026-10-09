@@ -38,6 +38,26 @@ static const char *const kAniExtensions[] = { ".ani", nullptr };
 static const char *const kVideoExtensions[] = { ".mov", nullptr };
 
 Resources::Resources() : _exe(nullptr) {
+	for (int i = 0; i < 256; i++)
+		_highlight[i] = i;
+}
+
+void Resources::buildHighlightTable(const byte *palette) {
+	for (int i = 0; i < 256; i++) {
+		int tr = MIN(255, palette[i * 3] + 80);
+		int tg = MIN(255, palette[i * 3 + 1] + 80);
+		int tb = MIN(255, palette[i * 3 + 2] + 40);
+		int best = i, bestDist = 0x7fffffff;
+		for (int k = 0; k < 256; k++) {
+			int dr = palette[k * 3] - tr, dg = palette[k * 3 + 1] - tg, db = palette[k * 3 + 2] - tb;
+			int dist = dr * dr + dg * dg + db * db;
+			if (dist < bestDist) {
+				bestDist = dist;
+				best = k;
+			}
+		}
+		_highlight[i] = best;
+	}
 }
 
 Resources::~Resources() {

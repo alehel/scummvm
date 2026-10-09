@@ -65,6 +65,7 @@ public:
 	void updateSprites(uint32 now);
 	void runSpriteFrameScripts(LivePage *page, LiveObject *lo, int event, int frame);
 	void handleMouseMove(const Common::Point &p);
+	LiveObject *findHighlightObject(LivePage *page);
 
 private:
 	void handleEvents();

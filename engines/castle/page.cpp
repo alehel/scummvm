@@ -241,6 +241,26 @@ static void blitImage(Graphics::Surface &screen, const Image *img, const Common:
 	}
 }
 
+// Brightens the screen pixels where the section mask has the given value
+static void highlightSection(Graphics::Surface &screen, const Image *mask, const Common::Rect &dst, int section, Resources &res) {
+	Common::Rect r = dst;
+	r.clip(Common::Rect(0, 0, screen.w, screen.h));
+	if (r.isEmpty() || section <= 0)
+		return;
+	const byte *remap = res.getHighlightTable();
+	int sx0 = r.left - dst.left, sy0 = r.top - dst.top;
+	for (int y = 0; y < r.height(); y++) {
+		if (sy0 + y >= mask->surface.h)
+			break;
+		const byte *m = (const byte *)mask->surface.getBasePtr(sx0, sy0 + y);
+		byte *d = (byte *)screen.getBasePtr(r.left, r.top + y);
+		int w = MIN((int)r.width(), (int)mask->surface.w - sx0);
+		for (int x = 0; x < w; x++)
+			if (m[x] == section)
+				d[x] = remap[d[x]];
+	}
+}
+
 void LivePage::draw(Graphics::Surface &screen, Resources &res) const {
 	for (uint i = 0; i < _panels.size(); i++) {
 		const LivePanel *lp = _panels[i];
@@ -263,6 +283,10 @@ void LivePage::draw(Graphics::Surface &screen, Resources &res) const {
 				continue;
 			Common::Rect r = lo.rect;
 			r.translate(-lp->scroll.x, -lp->scroll.y);
+			if (lo.obj->cls == kObjHighlightingCastle) {
+				highlightSection(screen, lo.image, r, lo.value, res);
+				continue;
+			}
 			blitImage(screen, lo.image, r, lp->rect);
 		}
 		for (uint k = 0; k < lp->overlays.size(); k++) {
