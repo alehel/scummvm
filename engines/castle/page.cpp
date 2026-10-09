@@ -268,12 +268,13 @@ static void blitImage(Graphics::Surface &screen, const Image *img, const Common:
 				if (!(img->hasMask && img->mask[src[x]]) && !(img->hasTransparentColor && src[x] == img->transparentColor) && src[x] != keyIndex)
 					d[x] = src[x];
 		} else if (img->hasMask) {
+			// Masked images may also use the key colour (book pages)
 			for (int x = 0; x < w; x++)
-				if (!img->mask[src[x]])
+				if (!img->mask[src[x]] && src[x] != keyIndex)
 					d[x] = src[x];
 		} else if (img->hasTransparentColor) {
 			for (int x = 0; x < w; x++)
-				if (src[x] != img->transparentColor)
+				if (src[x] != img->transparentColor && src[x] != keyIndex)
 					d[x] = src[x];
 		} else if (keyIndex >= 0) {
 			for (int x = 0; x < w; x++)
@@ -677,7 +678,7 @@ LiveObject *LivePage::objectAt(const Common::Point &p, bool hotspotsOnly) {
 			bool builtinClick = lo.obj->cls == kObjCoinBitmap || lo.obj->cls == kObjCollectBitmap || lo.obj->cls == kObjToggleButton ||
 				lo.obj->cls == kObjQuestionOKButton || lo.obj->cls == kObjRandomMapBitmap ||
 				lo.obj->cls == kObjCollage || lo.obj->cls == kObjScrollBar || lo.obj->cls == kObjCollageButton ||
-				lo.obj->cls == kObjEditBox || lo.obj->cls == kObjRoomEditBox || lo.obj->cls == kObjScrollEditBox ||
+				lo.obj->cls == kObjEditBox || lo.obj->cls == kObjRoomEditBox || lo.obj->cls == kObjScrollEditBox || lo.obj->cls == kObjPageTurn ||
 				(lo.obj->cls == kObjRandomScenarioHotspot && lo.obj->ints.size() > 3 && lo.obj->ints[2] == 0);
 			if (hotspotsOnly && !builtinClick && !lo.obj->findEvent(kEventClick)) {
 				bool clickScript = false;

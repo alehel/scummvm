@@ -159,6 +159,10 @@ private:
 	void focusEditBox(LiveObject *lo, LivePage *page);
 	void pageClosing(LivePage *page);
 
+	// Page-turn wipes between base pages, screen dumps of the test harness
+	void wipeTransition(const Graphics::Surface &from, int code);
+	void dumpSurface(const Graphics::Surface &surf);
+
 	void handleEvents();
 	void render();
 	void applyPalette();
@@ -242,6 +246,8 @@ private:
 	Common::String _waveQueueDir;
 	LiveObject *_editFocus;      // edit box receiving the keyboard
 	LivePage *_editFocusPage;
+	int _pendingTransition;      // transition code of the pending page change
+	bool _noScreenUpdate;        // render() leaves the screen alone (wipes)
 };
 
 } // End of namespace Castle

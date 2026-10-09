@@ -56,7 +56,7 @@ namespace Castle {
 CastleEngine::CastleEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst), _gameDescription(gameDesc),
 		_rnd("castle"), _script(nullptr), _hoverObject(nullptr), _hoverPage(nullptr), _db(nullptr), _res(nullptr), _basePage(nullptr), _dirty(true), _paletteDirty(true), _pendingBasePage(0),
 		_pendingBase(false), _dumpCount(0), _ani(nullptr), _aniNextFrame(0), _quest(nullptr), _quiz(nullptr), _activityCompleted(false), _spyChangedFlag(false), _saveSlot(-1), _savedPage(0), _pressedObject(nullptr), _pressedPage(nullptr), _dragging(false), _dragPage(nullptr), _dungeonTimerEnd(0), _scrollObject(nullptr), _scrollPage(nullptr), _scrollNext(0), _scrollStep(1), _ambientNext(0),
-		_trailNavigating(false), _pendingPopup(0), _scrollBarDrag(false), _scrollBarGrab(0), _editFocus(nullptr), _editFocusPage(nullptr) {
+		_trailNavigating(false), _pendingPopup(0), _scrollBarDrag(false), _scrollBarGrab(0), _editFocus(nullptr), _editFocusPage(nullptr), _pendingTransition(0), _noScreenUpdate(false) {
 	const Common::FSNode gameDataDir(ConfMan.getPath("path"));
 	SearchMan.addSubDirectoryMatching(gameDataDir, "dkcode");
 	SearchMan.addSubDirectoryMatching(gameDataDir, "3drooms", 0, 3);
@@ -338,17 +338,26 @@ void CastleEngine::render() {
 		// Composite the animation's current state on top
 		_screen.copyRectToSurface(_aniBackground, _aniPos.x, _aniPos.y, Common::Rect(0, 0, _aniBackground.w, _aniBackground.h));
 	}
+	_dirty = false;
+	if (_noScreenUpdate)
+		return;
 	_system->copyRectToScreen(_screen.getPixels(), _screen.pitch, 0, 0, _screen.w, _screen.h);
 	_system->updateScreen();
-	_dirty = false;
-	if (!_dumpDir.empty() && !_ani) {
+	if (!_dumpDir.empty() && !_ani)
+		dumpSurface(_screen);
+}
+
+void CastleEngine::dumpSurface(const Graphics::Surface &surf) {
+	if (_dumpDir.empty())
+		return;
+	{
 		Common::DumpFile f;
 		Common::Path path(Common::String::format("%s/castle%03d.png", _dumpDir.c_str(), _dumpCount++), '/');
 		debugC(1, kDebugGraphics, "Castle: dump %s", path.toString().c_str());
 		if (f.open(path)) {
 			byte pal[768];
 			_system->getPaletteManager()->grabPalette(pal, 0, 256);
-			::Image::writePNG(f, _screen, pal, 256);
+			::Image::writePNG(f, surf, pal, 256);
 			f.close();
 		}
 	}
@@ -505,12 +514,27 @@ void CastleEngine::runAction(const Action *a, LivePage *page, LiveObject *obj) {
 		if (!target)
 			return;
 		if (target->isPage && (target->type == kPagePopup || target->type == kPageDragPopup || target->type == kPageRolloffClose)) {
+			// Turning the page of a book wipes the new page over the old one
+			bool wipe = (a->x == 4 || a->x == 5) && toggleState(18) && !_noScreenUpdate;
+			Graphics::Surface old;
+			if (wipe) {
+				old.copyFrom(_screen);
+				_noScreenUpdate = true;
+			}
 			if (page && page->isPopup())
 				closePopup(page->getIndex());
 			openPopup(a->page);
+			if (wipe) {
+				render();
+				_noScreenUpdate = false;
+				wipeTransition(old, a->x);
+				old.free();
+				_dirty = true;
+			}
 		} else {
 			_pendingBasePage = a->page;
 			_pendingBase = true;
+			_pendingTransition = a->x;
 		}
 		break;
 	}
@@ -523,6 +547,7 @@ void CastleEngine::runAction(const Action *a, LivePage *page, LiveObject *obj) {
 		_pendingBasePage = a->page;
 		_pendingBase = true;
 		_pendingScroll = a->pt;
+		_pendingTransition = 0;
 		break;
 	case kActScrollListBox:
 		// p[0]: 0 scrolls the page's list down a line, otherwise up
@@ -1539,6 +1564,7 @@ void CastleEngine::playVideo(const Common::String &dir, const Common::String &na
 	debugC(1, kDebugGraphics, "Castle: playing video '%s' %dx%d at %d,%d", name.c_str(), qt->getWidth(), qt->getHeight(), dest.left, dest.top);
 	qt->start();
 	bool skip = false;
+	int frames = 0;
 	while (!shouldQuit() && !qt->endOfVideo() && !skip) {
 		Common::Event event;
 		while (_eventMan->pollEvent(event)) {
@@ -1554,6 +1580,14 @@ void CastleEngine::playVideo(const Common::String &dir, const Common::String &na
 					if (!clip.isEmpty())
 						_screen.copyRectToSurface(*frame, clip.left, clip.top, Common::Rect(0, 0, clip.width(), clip.height()));
 					_system->copyRectToScreen(_screen.getPixels(), _screen.pitch, 0, 0, _screen.w, _screen.h);
+				}
+				// Test harness: keep the tenth frame and stop after a second
+				frames++;
+				if (!_dumpDir.empty()) {
+					if (frames == 10)
+						dumpSurface(_screen);
+					if (frames >= 30)
+						skip = true;
 				}
 			}
 		}
@@ -2024,11 +2058,27 @@ void CastleEngine::flushPendingPage() {
 	_pendingBase = false;
 	Common::Point scroll = _pendingScroll;
 	_pendingScroll = Common::Point(0, 0);
+	int transition = _pendingTransition;
+	_pendingTransition = 0;
+	// Page turns wipe the new page over the old one (option 18 switches it off)
+	bool wipe = (transition == 4 || transition == 5) && toggleState(18) && _basePage && !_noScreenUpdate;
+	Graphics::Surface old;
+	if (wipe) {
+		old.copyFrom(_screen);
+		_noScreenUpdate = true;
+	}
 	openBasePage(_pendingBasePage);
 	if (_basePage && (scroll.x || scroll.y)) {
 		_basePage->setScroll(scroll);
 		_dirty = true;
 		updateTrailScroll();
+	}
+	if (wipe) {
+		render();
+		_noScreenUpdate = false;
+		wipeTransition(old, transition);
+		old.free();
+		_dirty = true;
 	}
 	if (_pendingPopup) {
 		uint popup = _pendingPopup;
@@ -2688,6 +2738,38 @@ void CastleEngine::updateWaveQueue() {
 	Common::String name = _waveQueue[0];
 	_waveQueue.remove_at(0);
 	playWave(_waveQueueDir, name, false);
+}
+
+
+// Wipes the new page (in _screen) over the old one: code 5 sweeps from the
+// left edge, code 4 from the right
+void CastleEngine::wipeTransition(const Graphics::Surface &from, int code) {
+	Graphics::Surface frame;
+	frame.copyFrom(from);
+	const int duration = 350;
+	uint32 start = _system->getMillis();
+	bool dumped = false;
+	for (;;) {
+		int t = MIN<int>(_system->getMillis() - start, duration);
+		int x = _screen.w * t / duration;
+		for (int y = 0; y < _screen.h; y++) {
+			int x0 = code == 5 ? 0 : _screen.w - x;
+			memcpy(frame.getBasePtr(x0, y), _screen.getBasePtr(x0, y), x);
+		}
+		_system->copyRectToScreen(frame.getPixels(), frame.pitch, 0, 0, frame.w, frame.h);
+		_system->updateScreen();
+		if (!dumped && t >= duration / 2) {
+			dumped = true;
+			dumpSurface(frame);
+		}
+		if (t >= duration)
+			break;
+		Common::Event event;
+		while (_eventMan->pollEvent(event))
+			;
+		_system->delayMillis(10);
+	}
+	frame.free();
 }
 
 } // End of namespace Castle
