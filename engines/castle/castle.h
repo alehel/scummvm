@@ -175,6 +175,8 @@ private:
 	LiveObject *hitTest(const Common::Point &p, LivePage **pageOut);
 
 	void runEvent(const Event *ev, LivePage *page, LiveObject *obj);
+	// Whether a page is still open (an action may have closed it)
+	bool pageAlive(const LivePage *page) const;
 	void runActions(const Common::Array<Action *> &actions, LivePage *page, LiveObject *obj);
 	void runAction(const Action *a, LivePage *page, LiveObject *obj);
 

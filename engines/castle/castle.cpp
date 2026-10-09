@@ -400,23 +400,32 @@ void CastleEngine::runPageEvents(LivePage *page, int eventType) {
 	PageRecord *rec = page->getRecord();
 	if (!rec)
 		return;
+	// An event may close the page (a chest's open script leaves when the
+	// purse is short) or change the base page: stop at once then
 	for (uint i = 0; i < rec->events.size(); i++)
-		if (rec->events[i]->type == eventType)
+		if (rec->events[i]->type == eventType) {
 			runEvent(rec->events[i], page, nullptr);
+			if (shouldQuit() || _pendingBase || !pageAlive(page))
+				return;
+		}
 	const Common::Array<LivePanel *> &panels = page->getPanels();
 	for (uint p = 0; p < panels.size(); p++) {
 		Panel *panel = panels[p]->panel;
 		for (uint i = 0; i < panel->events.size(); i++)
-			if (panel->events[i]->type == eventType)
+			if (panel->events[i]->type == eventType) {
 				runEvent(panel->events[i], page, nullptr);
+				if (shouldQuit() || _pendingBase || !pageAlive(page))
+					return;
+			}
 		for (uint k = 0; k < panels[p]->objects.size(); k++) {
 			LiveObject &lo = panels[p]->objects[k];
 			const Event *ev = lo.obj->findEvent(eventType);
-			if (ev)
+			if (ev) {
 				runEvent(ev, page, &lo);
+				if (shouldQuit() || _pendingBase || !pageAlive(page))
+					return;
+			}
 		}
-		if (shouldQuit() || _pendingBase)
-			return;
 	}
 }
 
@@ -497,17 +506,20 @@ void CastleEngine::runActions(const Common::Array<Action *> &actions, LivePage *
 		if (shouldQuit() || _pendingBase)
 			return;
 		// An action may have closed the page (CLOSEPAGE followed by Quit...)
-		if (page) {
-			bool alive = page == _basePage;
-			for (uint k = 0; k < _popups.size() && !alive; k++)
-				if (_popups[k] == page)
-					alive = true;
-			if (!alive) {
-				page = nullptr;
-				obj = nullptr;
-			}
+		if (page && !pageAlive(page)) {
+			page = nullptr;
+			obj = nullptr;
 		}
 	}
+}
+
+bool CastleEngine::pageAlive(const LivePage *page) const {
+	if (page == _basePage)
+		return true;
+	for (uint k = 0; k < _popups.size(); k++)
+		if (_popups[k] == page)
+			return true;
+	return false;
 }
 
 void CastleEngine::runAction(const Action *a, LivePage *page, LiveObject *obj) {
