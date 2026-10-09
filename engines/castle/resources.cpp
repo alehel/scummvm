@@ -34,7 +34,7 @@
 
 namespace Castle {
 
-static const char *const kImageExtensions[] = { ".png", ".dib", ".bmp", nullptr };
+static const char *const kImageExtensions[] = { ".png", ".dib", ".bmp", ".sbm", nullptr };
 static const char *const kWaveExtensions[] = { ".wav", nullptr };
 static const char *const kAniExtensions[] = { ".ani", nullptr };
 static const char *const kVideoExtensions[] = { ".mov", nullptr };
@@ -173,6 +173,118 @@ static void findKeyIndex(Image *img) {
 	}
 }
 
+// Decodes a BMP RLE8 stream into a rectangle of a surface. Rows are
+// bottom-up unless topDown is set.
+static void decodeRLE8(Common::SeekableReadStream *stream, Graphics::Surface &surf, int x0, int y0, int width, int height, bool topDown) {
+	int x = 0, y = 0;
+	while (!stream->eos()) {
+		byte count = stream->readByte();
+		byte value = stream->readByte();
+		if (stream->eos())
+			break;
+		if (count > 0) {
+			for (int i = 0; i < count; i++) {
+				if (x < width && y < height) {
+					int dy = topDown ? y : height - 1 - y;
+					if (x0 + x < surf.w && y0 + dy < surf.h)
+						*((byte *)surf.getBasePtr(x0 + x, y0 + dy)) = value;
+				}
+				x++;
+			}
+		} else if (value == 0) {
+			x = 0;
+			y++;
+		} else if (value == 1) {
+			break;
+		} else if (value == 2) {
+			x += stream->readByte();
+			y += stream->readByte();
+		} else {
+			for (int i = 0; i < value; i++) {
+				byte px = stream->readByte();
+				if (x < width && y < height) {
+					int dy = topDown ? y : height - 1 - y;
+					if (x0 + x < surf.w && y0 + dy < surf.h)
+						*((byte *)surf.getBasePtr(x0 + x, y0 + dy)) = px;
+				}
+				x++;
+			}
+			if (value & 1)
+				stream->readByte();
+		}
+	}
+}
+
+// The segmented bitmaps (RIFF "SBMP" files) hold a large 8-bit image as
+// RLE8-compressed 256x256 segments: "bmi " carries the BITMAPINFO,
+// "indx" a table of (segment, file offset, packed position) entries and
+// the numbered chunks the segments themselves.
+static Image *decodeSegmentedBitmap(Common::SeekableReadStream *stream) {
+	stream->seek(0);
+	byte magic[4];
+	stream->read(magic, 4);
+	if (memcmp(magic, "RIFF", 4) != 0)
+		return nullptr;
+	uint32 riffSize = stream->readUint32LE();
+	stream->read(magic, 4);
+	if (memcmp(magic, "SBMP", 4) != 0)
+		return nullptr;
+	uint32 end = MIN<uint32>(riffSize + 8, stream->size());
+	int32 width = 0, height = 0;
+	Image *img = new Image();
+	img->palette.resize(256, false);
+	Common::Array<uint32> index;
+	while ((uint32)stream->pos() + 8 <= end) {
+		stream->read(magic, 4);
+		uint32 size = stream->readUint32LE();
+		uint32 next = stream->pos() + size + (size & 1);
+		if (memcmp(magic, "bmi ", 4) == 0) {
+			uint32 hdr = stream->readUint32LE();
+			width = stream->readSint32LE();
+			height = stream->readSint32LE();
+			stream->readUint16LE();
+			uint16 bpp = stream->readUint16LE();
+			stream->skip(hdr - 16);
+			if (bpp != 8 || width <= 0 || height <= 0) {
+				delete img;
+				return nullptr;
+			}
+			for (uint i = 0; i < 256; i++) {
+				byte b = stream->readByte(), g = stream->readByte(), r = stream->readByte();
+				stream->readByte();
+				img->palette.set(i, r, g, b);
+			}
+		} else if (memcmp(magic, "indx", 4) == 0) {
+			index.resize(size / 4);
+			for (uint i = 0; i < index.size(); i++)
+				index[i] = stream->readUint32LE();
+		}
+		stream->seek(next);
+	}
+	if (!width || index.empty()) {
+		delete img;
+		return nullptr;
+	}
+	findKeyIndex(img);
+	img->surface.create(width, height, Graphics::PixelFormat::createFormatCLUT8());
+	memset(img->surface.getPixels(), 0, img->surface.pitch * height);
+	for (uint i = 0; i + 2 < index.size(); i += 3) {
+		if (index[i] != i / 3)
+			break;
+		uint32 offset = index[i + 1];
+		int sx = (index[i + 2] >> 8) & 0xffff;
+		int sy = index[i + 2] >> 24;
+		if (offset + 8 > end)
+			break;
+		stream->seek(offset + 4);
+		uint32 size = stream->readUint32LE();
+		Common::SeekableReadStream *seg = stream->readStream(size);
+		decodeRLE8(seg, img->surface, sx * 256, sy * 256, MIN(256, width - sx * 256), MIN(256, height - sy * 256), false);
+		delete seg;
+	}
+	return img;
+}
+
 static Image *decodeBitmap8(Common::SeekableReadStream *stream) {
 	stream->seek(0);
 	if (stream->readByte() != 'B' || stream->readByte() != 'M')
@@ -222,41 +334,7 @@ static Image *decodeBitmap8(Common::SeekableReadStream *stream) {
 		}
 		free(row);
 	} else if (compression == 1) {
-		int x = 0, y = 0;
-		while (!stream->eos()) {
-			byte count = stream->readByte();
-			byte value = stream->readByte();
-			if (stream->eos())
-				break;
-			if (count > 0) {
-				for (int i = 0; i < count; i++) {
-					if (x < width && y < height) {
-						int dy = topDown ? y : height - 1 - y;
-						*((byte *)img->surface.getBasePtr(x, dy)) = value;
-					}
-					x++;
-				}
-			} else if (value == 0) {
-				x = 0;
-				y++;
-			} else if (value == 1) {
-				break;
-			} else if (value == 2) {
-				x += stream->readByte();
-				y += stream->readByte();
-			} else {
-				for (int i = 0; i < value; i++) {
-					byte px = stream->readByte();
-					if (x < width && y < height) {
-						int dy = topDown ? y : height - 1 - y;
-						*((byte *)img->surface.getBasePtr(x, dy)) = px;
-					}
-					x++;
-				}
-				if (value & 1)
-					stream->readByte();
-			}
-		}
+		decodeRLE8(stream, img->surface, 0, 0, width, height, topDown);
 	} else {
 		delete img;
 		return nullptr;
@@ -271,6 +349,8 @@ Image *Resources::decodeImage(Common::SeekableReadStream *stream) {
 	::Image::ImageDecoder *decoder;
 	if (magic[0] == 0x89 && magic[1] == 'P' && magic[2] == 'N' && magic[3] == 'G') {
 		decoder = new ::Image::PNGDecoder();
+	} else if (memcmp(magic, "RIFF", 4) == 0) {
+		return decodeSegmentedBitmap(stream);
 	} else {
 		Image *bmp = decodeBitmap8(stream);
 		if (bmp)
