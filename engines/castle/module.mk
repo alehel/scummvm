@@ -6,6 +6,7 @@ MODULE_OBJS = \
 	database.o \
 	metaengine.o \
 	page.o \
+	quest.o \
 	resources.o \
 	vm.o
 

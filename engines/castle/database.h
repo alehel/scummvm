@@ -409,6 +409,73 @@ struct PageTemplate {
 	~PageTemplate();
 };
 
+// A quiz question of the spy's chest: the records describe the steps of the
+// conversation, the objects the answers (strings, videos, pages...)
+struct QuestionStep {
+	int16 v[15];
+};
+struct QuestionObject {
+	int16 type;
+	int16 value;
+	Common::String str;
+	uint32 u;
+	int16 a, b;
+	QuestionObject() : type(0), value(0), u(0), a(0), b(0) {}
+};
+struct Question {
+	Common::Array<QuestionStep> steps;
+	Common::Array<QuestionObject> objects;
+};
+
+// An answer list: accepted spellings and recognised misspellings
+struct AnswerList {
+	int16 ints[4];
+	Common::Array<Common::String> accepted;
+	Common::Array<Common::String> misspelled;
+	AnswerList() { memset(ints, 0, sizeof(ints)); }
+};
+
+struct ToggleDesc {
+	int16 objectId;
+	int16 state;
+	int16 code;       // OptionsAction code the toggle belongs to
+};
+
+// Trailing document data: quest tables, variable and page references
+struct DocumentTail {
+	Question questions[3][4];           // [spy][question]
+	Common::Array<AnswerList> scenarios;
+	Common::Array<Common::String> commonWords;
+	AnswerList answers[12];
+	int16 vars[11];                     // document variable ids (+0x910..)
+	uint32 pages[10];                   // zoom pages (+0xc0..)
+	int16 ints[16];                     // object ids (+0xe8..)
+	uint32 pages2[4];                   // +0x128..
+	uint32 page144;
+	int16 ints3[3];
+	Common::Array<ToggleDesc> toggles;
+	int16 ints4[4];
+	int16 questId;
+	int16 questMasks[10];
+	int16 questId2;
+	uint32 questPages[3];               // save-before-load, save-before-new-game, ending
+	uint32 quitPages[3];                // save-before-quit, main, quit confirmation
+	DocumentTail() : page144(0), questId(0), questId2(0) {
+		memset(vars, 0, sizeof(vars));
+		memset(pages, 0, sizeof(pages));
+		memset(ints, 0, sizeof(ints));
+		memset(pages2, 0, sizeof(pages2));
+		memset(ints3, 0, sizeof(ints3));
+		memset(ints4, 0, sizeof(ints4));
+		memset(questMasks, 0, sizeof(questMasks));
+		memset(questPages, 0, sizeof(questPages));
+		memset(quitPages, 0, sizeof(quitPages));
+	}
+	int16 getScenarioVar() const { return vars[8]; }
+	int16 getSpyVar() const { return vars[9]; }
+	int16 getNewGameVar() const { return vars[10]; }
+};
+
 class Database {
 public:
 	Database();
@@ -427,6 +494,7 @@ public:
 	const Common::String &getDefaultCursor() const { return _defaultCursor; }
 	const Extension *getDocExtension() const { return _docExt; }
 	int getBuiltinNumber(int id) const;
+	const DocumentTail &getTail() const { return _tail; }
 
 private:
 	// low level readers (big endian)
@@ -455,6 +523,8 @@ private:
 	Panel *readPanelBody(Common::SeekableReadStream &s, int16 type);
 	PageRecord *readRecord(uint index);
 	bool readDocument(Common::SeekableReadStream &s, uint32 end);
+	bool readDocumentTail(Common::SeekableReadStream &s, uint32 end);
+	void readAnswerList(Common::SeekableReadStream &s, AnswerList &a, bool withInts);
 
 	byte *_data;
 	uint32 _size;
@@ -469,6 +539,7 @@ private:
 	Extension *_docExt;
 	Common::Array<int16> _builtinIds, _builtinNums;
 	Common::Array<Event *> _docEvents;
+	DocumentTail _tail;
 	Common::HashMap<uint, PageRecord *> _records;
 	Common::String _empty;
 };

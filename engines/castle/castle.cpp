@@ -35,7 +35,9 @@
 
 #include "common/file.h"
 #include "common/fs.h"
+#include "common/savefile.h"
 #include "common/tokenizer.h"
+#include "engines/metaengine.h"
 #include "image/png.h"
 
 #include "castle/ani.h"
@@ -43,6 +45,7 @@
 #include "castle/database.h"
 #include "castle/detection.h"
 #include "castle/page.h"
+#include "castle/quest.h"
 #include "castle/resources.h"
 #include "castle/vm.h"
 
@@ -50,7 +53,7 @@ namespace Castle {
 
 CastleEngine::CastleEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst), _gameDescription(gameDesc),
 		_rnd("castle"), _script(nullptr), _hoverObject(nullptr), _hoverPage(nullptr), _db(nullptr), _res(nullptr), _basePage(nullptr), _dirty(true), _paletteDirty(true), _pendingBasePage(0),
-		_pendingBase(false), _dumpCount(0), _ani(nullptr), _aniNextFrame(0), _spyType(0), _pressedObject(nullptr), _pressedPage(nullptr), _dragging(false), _dragPage(nullptr), _dungeonTimerEnd(0), _dungeonState(0), _scrollObject(nullptr), _scrollPage(nullptr), _scrollNext(0), _scrollStep(1), _ambientNext(0) {
+		_pendingBase(false), _dumpCount(0), _ani(nullptr), _aniNextFrame(0), _quest(nullptr), _activityCompleted(false), _spyChangedFlag(false), _saveSlot(-1), _savedPage(0), _pressedObject(nullptr), _pressedPage(nullptr), _dragging(false), _dragPage(nullptr), _dungeonTimerEnd(0), _scrollObject(nullptr), _scrollPage(nullptr), _scrollNext(0), _scrollStep(1), _ambientNext(0) {
 	const Common::FSNode gameDataDir(ConfMan.getPath("path"));
 	SearchMan.addSubDirectoryMatching(gameDataDir, "dkcode");
 	SearchMan.addSubDirectoryMatching(gameDataDir, "3drooms", 0, 3);
@@ -76,12 +79,13 @@ CastleEngine::~CastleEngine() {
 	_screen.free();
 	_aniBackground.free();
 	delete _script;
+	delete _quest;
 	delete _res;
 	delete _db;
 }
 
 bool CastleEngine::hasFeature(EngineFeature f) const {
-	return f == kSupportsReturnToLauncher;
+	return f == kSupportsReturnToLauncher || f == kSupportsLoadingDuringRuntime || f == kSupportsSavingDuringRuntime;
 }
 
 Common::Error CastleEngine::run() {
@@ -95,13 +99,28 @@ Common::Error CastleEngine::run() {
 	_res->init();
 	_script = new ScriptVM(this);
 	_script->initDocScope(_db->getDocExtension());
+	_quest = new Quest(_rnd);
+	for (uint i = 0; i < ARRAYSIZE(_toggles); i++)
+		_toggles[i] = true;
+	const Common::Array<ToggleDesc> &toggles = _db->getTail().toggles;
+	for (uint i = 0; i < toggles.size(); i++)
+		setToggleState(toggles[i].code, toggles[i].state != 0);
+	afterQuestLoad(true, false);
 
 	uint start = _db->getStartPage();
 	if (ConfMan.hasKey("boot_param"))
 		start = ConfMan.getInt("boot_param");
 	if (ConfMan.hasKey("castle_dump"))
 		_dumpDir = ConfMan.get("castle_dump");
+	// A game chosen in the launcher resumes on the page it was saved from
+	if (ConfMan.hasKey("save_slot") && ConfMan.getInt("save_slot") >= 0) {
+		if (loadGameState(ConfMan.getInt("save_slot")).getCode() == Common::kNoError && _savedPage)
+			start = _savedPage;
+	}
 	openBasePage(start);
+	// Debug harness: castle_spy presets the chosen spy
+	if (ConfMan.hasKey("castle_spy"))
+		setSpy(ConfMan.getInt("castle_spy"), false);
 
 	setCursor(_db->getDefaultCursor());
 	CursorMan.showMouse(true);
@@ -111,7 +130,8 @@ Common::Error CastleEngine::run() {
 	Common::String dumpDirStr = ConfMan.hasKey("castle_dump") ? ConfMan.get("castle_dump") : Common::String();
 	const char *dumpDir = dumpDirStr.empty() ? nullptr : dumpDirStr.c_str();
 	// Each entry is "x,y" for a click, "m:x,y" for a mouse move, "p:x,y"
-	// for a button press and "r:x,y" for a release.
+	// for a button press, "r:x,y" for a release, "s:slot,0" saves and
+	// "l:slot,0" loads a game.
 	Common::Array<Common::Point> clicks;
 	Common::Array<char> clickKind;
 	if (ConfMan.hasKey("castle_clicks")) {
@@ -149,6 +169,11 @@ Common::Error CastleEngine::run() {
 						dragTo(pt);
 					else
 						handleMouseMove(pt);
+				} else if (kind == 's') {
+					saveGameState(pt.x, "harness", false);
+				} else if (kind == 'l') {
+					if (loadGameState(pt.x).getCode() == Common::kNoError)
+						afterQuestLoad(true, true);
 				} else if (kind == 'r') {
 					releaseMouse(pt);
 				} else if (lo) {
@@ -170,8 +195,16 @@ Common::Error CastleEngine::run() {
 			}
 		}
 		uint32 now = _system->getMillis();
-		if (_basePage)
+		if (_basePage) {
 			_basePage->update(now, *_res);
+			if (_basePage->takeChanged())
+				_dirty = true;
+		}
+		for (uint i = 0; i < _popups.size(); i++) {
+			_popups[i]->update(now, *_res);
+			if (_popups[i]->takeChanged())
+				_dirty = true;
+		}
 		updateSprites(now);
 		updateScrolling(now);
 		updateAmbientSound(now, false);
@@ -312,6 +345,7 @@ void CastleEngine::openBasePage(uint index) {
 		_basePage = nullptr;
 		return;
 	}
+	applyQuestObjects(_basePage, true);
 	_dirty = true;
 	_paletteDirty = true;
 	render();
@@ -352,6 +386,7 @@ void CastleEngine::openPopup(uint index) {
 		return;
 	}
 	_popups.push_back(page);
+	applyQuestObjects(page, true);
 	_dirty = true;
 	render();
 	runPageEvents(page, kEventOpen);
@@ -456,11 +491,21 @@ void CastleEngine::runAction(const Action *a, LivePage *page, LiveObject *obj) {
 		stopWaveChannel(a->x, a->name);
 		break;
 	case kActChangeSpyType:
-		_spyType = a->x;
+		setSpy(a->x, true);
+		break;
+	case kActOptions:
+		runOptionsAction(a->x, page, obj);
+		break;
+	case kActActivityCompleted:
+		_activityCompleted = true;
+		break;
+	case kActBribeGuard:
+		_quest->bribe(3);
 		break;
 	case kActPlayResponse: {
 		// Three wave/animation pairs, one per spy character
-		int idx = _spyType == 1 ? 0 : _spyType == 2 ? 1 : 2;
+		int spy = _quest->getSpy();
+		int idx = spy == 1 ? 0 : spy == 2 ? 1 : 2;
 		if (a->strs.size() < 6)
 			break;
 		Common::String dir = page ? page->getDir() : Common::String();
@@ -523,12 +568,61 @@ void CastleEngine::runAction(const Action *a, LivePage *page, LiveObject *obj) {
 	}
 	case kActGeneralPurpose:
 		switch (a->x) {
+		case 0:
+		case 6:
+			chestFlash();
+			break;
 		case 1:
-			playWave(Common::String(), "@rot1s", true);
+			if (toggleState(0x12))
+				playWave(Common::String(), "@rot1s", true);
 			break;
 		case 2:
 		case 0x10:
 			stopWave();
+			break;
+		case 3: {
+			// Toggles the chest's lid artwork (objects 0 and 1 of the chest panel)
+			LivePage *cp = nullptr;
+			LivePanel *chest = findSpyChest(&cp);
+			if (!chest)
+				break;
+			LiveObject *a0 = chest->panel->spy.size() > 1 ? cp->findObject(chest->panel->spy[0]) : nullptr;
+			LiveObject *a1 = chest->panel->spy.size() > 1 ? cp->findObject(chest->panel->spy[1]) : nullptr;
+			if (a0 && a1) {
+				if (a0->visible) {
+					a0->visible = false;
+					a1->zOrder = -30000;
+				} else if (_quest->getStage() != 2) {
+					a0->visible = true;
+					a1->zOrder = 5;
+				}
+				_dirty = true;
+			}
+			break;
+		}
+		case 4: {
+			// Reveals the chest's result artwork once every task is done
+			LivePage *cp = nullptr;
+			LivePanel *chest = findSpyChest(&cp);
+			if (!chest || chest->panel->spy.size() < 9)
+				break;
+			if (_quest->countTasksDone() == 4) {
+				LiveObject *a7 = cp->findObject(chest->panel->spy[7]);
+				LiveObject *a8 = cp->findObject(chest->panel->spy[8]);
+				if (a7 && a8) {
+					a7->visible = true;
+					a8->zOrder = 5;
+				}
+			} else {
+				LiveObject *a6 = cp->findObject(chest->panel->spy[6]);
+				if (a6)
+					a6->visible = true;
+			}
+			_dirty = true;
+			break;
+		}
+		case 7:
+			_spyChangedFlag = true;
 			break;
 		case 0xc:
 			playWave(Common::String(), "@con01", false);
@@ -544,10 +638,10 @@ void CastleEngine::runAction(const Action *a, LivePage *page, LiveObject *obj) {
 					}
 			break;
 		}
-		case 8: _dungeonState = 0; break;
-		case 9: _dungeonState = 1; break;
-		case 10: _dungeonState = 3; break;
-		case 0xb: _dungeonState = 2; break;
+		case 8: _quest->setMode(0); break;
+		case 9: _quest->setMode(1); break;
+		case 10: _quest->setMode(3); break;
+		case 0xb: _quest->setMode(2); break;
 		default:
 			debugC(1, kDebugScript, "Castle: GeneralPurposeAction %d not implemented", a->x);
 			break;
@@ -688,7 +782,7 @@ void CastleEngine::doTransition(LivePage *page, int mode, int spriteId, int asyn
 		lo->spriteState &= ~0x40;
 	if (async) {
 		lo->spriteFlags |= 8;
-		lo->playing = lo->frameDelay != 0;
+		lo->playing = lo->frameDelay > 0;
 		lo->nextFrameTime = 0;
 		_dirty = true;
 		return;
@@ -838,6 +932,42 @@ void CastleEngine::updateDungeonTimer(uint32 now) {
 // page-turn corner (sound and a page change
 // with the curl transition towards the stored page).
 void CastleEngine::clickObject(LiveObject *lo, LivePage *page) {
+	const GameObject *o = lo->obj;
+	switch (o->cls) {
+	case kObjCoinBitmap:
+		// Picking up a coin, as long as the purse is not full
+		if (lo->visible && _quest->countCoins() < Quest::kMaxCoins && o->ints.size() > 1) {
+			playWaveChannel(Common::String(), "@coin1s", -1);
+			lo->visible = false;
+			lo->zOrder = -30000;
+			_quest->collectCoin(o->ints[1], o->ints[0]);
+			chestFlash();
+			_dirty = true;
+		}
+		return;
+	case kObjCollectBitmap: {
+		static const char *const sounds[] = { "@fish1s", "@herb1s", "@hamm1s", "@cand1s" };
+		int item = o->ints.empty() ? -1 : o->ints[0];
+		lo->visible = false;
+		lo->zOrder = -30000;
+		_quest->collectItem(item);
+		if (item >= 0 && item < 4)
+			playWaveChannel(Common::String(), sounds[item], -1);
+		chestFlash();
+		_dirty = true;
+		return;
+	}
+	case kObjToggleButton: {
+		int code = toggleCodeOf(o->id);
+		lo->value = lo->value ? 0 : 1;
+		if (code >= 0)
+			setToggleState(code, lo->value != 0);
+		_dirty = true;
+		break;
+	}
+	default:
+		break;
+	}
 	const Event *ev = lo->obj->findEvent(kEventClick);
 	if (ev) {
 		runEvent(ev, page, lo);
@@ -1055,7 +1185,7 @@ void CastleEngine::updateSprites(uint32 now) {
 				// Only active (1), loaded (2) and running (4) sprites animate
 				if (!lo.playing || (lo.spriteState & 7) != 7 || now < lo.nextFrameTime)
 					continue;
-				lo.nextFrameTime = now + lo.frameDelay;
+				lo.nextFrameTime = now + MAX(25, lo.frameDelay);
 				if (!advanceSprite(page, &lo))
 					return;
 			}
@@ -1364,6 +1494,349 @@ void CastleEngine::updateAnimation() {
 		_aniBackground.copyRectToSurface(frame, dirty.left, dirty.top, Common::Rect(0, 0, frame.w, frame.h));
 	}
 	_dirty = true;
+}
+
+// --- Spy quest ---------------------------------------------------------
+
+// The quest module publishes its state through document variables so that
+// the page scripts can test them (spy type, scenario, new game flag)
+void CastleEngine::afterQuestLoad(bool ok, bool fireEvent) {
+	const DocumentTail &tail = _db->getTail();
+	_script->setDocVariable(tail.getNewGameVar(), Value::logical(!ok));
+	_script->setDocVariable(tail.getScenarioVar(), Value::number(_quest->getScenario()));
+	setSpy(_quest->getSpy(), fireEvent);
+}
+
+void CastleEngine::setSpy(int spy, bool fireEvent) {
+	_quest->setSpy(spy);
+	_script->setDocVariable(_db->getTail().getSpyVar(), Value::number(spy));
+	debugC(1, kDebugScript, "Castle: spy type %d", spy);
+	if (_basePage)
+		applyQuestObjects(_basePage, false);
+	for (uint i = 0; i < _popups.size(); i++)
+		applyQuestObjects(_popups[i], false);
+	_dirty = true;
+	if (fireEvent)
+		fireSpyChanged();
+}
+
+// on_SpyChanged goes to every open page, topmost first
+void CastleEngine::fireSpyChanged() {
+	Common::Array<LivePage *> pages;
+	for (int i = (int)_popups.size() - 1; i >= 0; i--)
+		pages.push_back(_popups[i]);
+	if (_basePage)
+		pages.push_back(_basePage);
+	for (uint p = 0; p < pages.size(); p++) {
+		bool open = p == pages.size() - 1 ? pages[p] == _basePage : false;
+		for (uint i = 0; i < _popups.size(); i++)
+			if (_popups[i] == pages[p])
+				open = true;
+		if (!open)
+			continue;
+		runPageEvents(pages[p], kEventSpyChanged);
+		if (scriptShouldStop())
+			return;
+	}
+}
+
+// Sets up the quest objects of a page: coins and evidence waiting to be
+// found, the spy pictures of the hut, the chest icon of the chosen spy and
+// the toggles of the options page
+void CastleEngine::applyQuestObjects(LivePage *page, bool onOpen) {
+	int spy = _quest->getSpy();
+	const Common::Array<LivePanel *> &panels = page->getPanels();
+	for (uint i = 0; i < panels.size(); i++) {
+		for (uint k = 0; k < panels[i]->objects.size(); k++) {
+			LiveObject &lo = panels[i]->objects[k];
+			const GameObject *o = lo.obj;
+			switch (o->cls) {
+			case kObjCoinBitmap: {
+				bool present = o->ints.size() > 1 && _quest->getCoin(o->ints[1], o->ints[0]) == 1;
+				lo.visible = spy != 0 && present;
+				debugC(2, kDebugScript, "Castle: coin room %d slot %d state %d -> %s", o->ints.size() > 1 ? o->ints[1] : -1, o->ints.empty() ? -1 : o->ints[0],
+				       o->ints.size() > 1 ? _quest->getCoin(o->ints[1], o->ints[0]) : -1, lo.visible ? "shown" : "hidden");
+				lo.zOrder = present ? 3 : -30000;
+				break;
+			}
+			case kObjCollectBitmap:
+				lo.visible = spy == 2 && !o->ints.empty() && _quest->getItem(o->ints[0]) == 1;
+				lo.zOrder = lo.visible ? o->d : -30000;
+				if (lo.visible && lo.image) {
+					lo.rect.right = lo.rect.left + lo.image->surface.w;
+					lo.rect.bottom = lo.rect.top + lo.image->surface.h;
+				}
+				break;
+			case kObjSpyDitherBitmap:
+				// The chosen spy has left the hut: only the other one stays
+				lo.visible = o->ints.empty() || spy != o->ints[0];
+				lo.zOrder = lo.visible ? 2 : -30000;
+				break;
+			case kObjBoxIconBitmap:
+				lo.visible = !o->ints.empty() && spy == o->ints[0];
+				lo.zOrder = lo.visible ? 2 : -30000;
+				break;
+			case kObjScrollTickBitmap:
+				lo.visible = !o->ints.empty() && _quest->getScrollFlag(o->ints[0]) == 1;
+				break;
+			case kObjToggleButton: {
+				int code = toggleCodeOf(o->id);
+				lo.value = code < 0 || toggleState(code) ? 1 : 0;
+				break;
+			}
+			default:
+				break;
+			}
+		}
+		if (onOpen && panels[i]->panel->type == kPanelSpyChest)
+			updateSpyChest(page);
+	}
+}
+
+// The spy's chest (SpyChestPanel): its 31 object slots show the lid, the
+// found evidence, the purse with the coin sprite frames and the coins
+void CastleEngine::updateSpyChest(LivePage *page) {
+	const Common::Array<LivePanel *> &panels = page->getPanels();
+	const Panel *chest = nullptr;
+	for (uint i = 0; i < panels.size() && !chest; i++)
+		if (panels[i]->panel->type == kPanelSpyChest)
+			chest = panels[i]->panel;
+	if (!chest || chest->spy.size() < 31)
+		return;
+	LiveObject *slots[31];
+	for (int i = 0; i < 31; i++)
+		slots[i] = page->findObject(chest->spy[i]);
+	int done = _quest->countTasksDone();
+	int coins = _quest->countCoins();
+	int spy = _quest->getSpy();
+	debugC(1, kDebugScript, "Castle: spy chest: spy %d, %d coins, %d tasks done, stage %d", spy, coins, done, _quest->getStage());
+	if (done == 4 && _quest->getStage() == 2) {
+		if (slots[7])
+			slots[7]->visible = true;
+		if (slots[8])
+			slots[8]->zOrder = 5;
+		if (slots[0])
+			slots[0]->visible = false;
+		if (slots[1])
+			slots[1]->zOrder = -30000;
+	} else {
+		static const int taskSlot[4] = { 2, 5, 3, 4 }; // task 0, 1, 2, 3
+		for (int t = 0; t < 4; t++) {
+			bool found = false;
+			for (int ch = 0; ch < 3; ch++)
+				if (_quest->getTask(t, ch) == 2)
+					found = true;
+			if (found && slots[taskSlot[t]])
+				slots[taskSlot[t]]->visible = true;
+		}
+		if (_quest->getStage() == 2) {
+			if (slots[6])
+				slots[6]->visible = true;
+			if (slots[0])
+				slots[0]->visible = false;
+			if (slots[1])
+				slots[1]->zOrder = -30000;
+		}
+	}
+	// The purse and drawer sprites are shown on the frame that matches the state
+	if (spy == 2) {
+		if (slots[9])
+			showSpriteFrame(slots[9], coins + 1);
+		static const int itemSlot[4] = { 13, 14, 12, 11 };
+		for (int it = 0; it < 4; it++)
+			if (slots[itemSlot[it]] && _quest->getItem(it) == 2)
+				showSpriteFrame(slots[itemSlot[it]], 2);
+	} else if (spy == 1 && slots[10]) {
+		showSpriteFrame(slots[10], coins + 1);
+	}
+	for (int i = 0; i < 16; i++)
+		if (slots[15 + i] && coins > i)
+			slots[15 + i]->zOrder = 7;
+	_dirty = true;
+}
+
+void CastleEngine::showSpriteFrame(LiveObject *lo, int frame) {
+	setSpriteFrame(lo, frame);
+	if (lo->image) {
+		lo->visible = true;
+		lo->spriteState |= 0x10;
+		if (lo->rect.width() <= 0 || lo->rect.height() <= 0) {
+			lo->rect.right = lo->rect.left + lo->image->surface.w;
+			lo->rect.bottom = lo->rect.top + lo->image->surface.h;
+		}
+	}
+}
+
+LivePanel *CastleEngine::findSpyChest(LivePage **pageOut) {
+	Common::Array<LivePage *> pages;
+	for (int i = (int)_popups.size() - 1; i >= 0; i--)
+		pages.push_back(_popups[i]);
+	if (_basePage)
+		pages.push_back(_basePage);
+	for (uint p = 0; p < pages.size(); p++) {
+		const Common::Array<LivePanel *> &panels = pages[p]->getPanels();
+		for (uint i = 0; i < panels.size(); i++)
+			if (panels[i]->panel->type == kPanelSpyChest) {
+				*pageOut = pages[p];
+				return panels[i];
+			}
+	}
+	return nullptr;
+}
+
+// Something went into the chest: the chest sound plays
+void CastleEngine::chestFlash() {
+	playWaveChannel(Common::String(), "@chest1s", -1);
+}
+
+int CastleEngine::toggleCodeOf(int objectId) const {
+	const Common::Array<ToggleDesc> &toggles = _db->getTail().toggles;
+	for (uint i = 0; i < toggles.size(); i++)
+		if (toggles[i].objectId == objectId)
+			return toggles[i].code;
+	return -1;
+}
+
+bool CastleEngine::toggleState(int code) const {
+	return code >= 0 && code < (int)ARRAYSIZE(_toggles) ? _toggles[code] : true;
+}
+
+void CastleEngine::setToggleState(int code, bool on) {
+	if (code < 0 || code >= (int)ARRAYSIZE(_toggles))
+		return;
+	_toggles[code] = on;
+	applyToggles();
+}
+
+// Option 11 switches the sounds, 18 the page transitions
+void CastleEngine::applyToggles() {
+	_mixer->muteSoundType(Audio::Mixer::kSFXSoundType, !toggleState(0xb));
+}
+
+void CastleEngine::newGame() {
+	_quest->reset();
+	setSpy(0, true);
+	_script->setDocVariable(_db->getTail().getNewGameVar(), Value::logical(true));
+}
+
+// "Start new game": a game in progress first asks whether to save it
+void CastleEngine::startGame() {
+	if (!_quest->isDirty()) {
+		newGame();
+		return;
+	}
+	const DocumentTail &tail = _db->getTail();
+	int mode = _quest->getMode();
+	openPopup(mode == 1 || mode == 2 ? tail.questPages[2] : tail.questPages[1]);
+}
+
+void CastleEngine::runOptionsAction(int code, LivePage *page, LiveObject *obj) {
+	debugC(1, kDebugScript, "Castle: OptionsAction %d", code);
+	const DocumentTail &tail = _db->getTail();
+	switch (code) {
+	case 1: case 2: case 3: case 4: case 5: case 6: case 7: case 8: case 9:
+		// Printing and the Windows clipboard
+	case 0xd: case 0xe: case 0x13:
+		debugC(1, kDebugScript, "Castle: print/copy option %d is not supported", code);
+		break;
+	case 0xb:
+	case 0x12:
+		applyToggles();
+		break;
+	case 0xc:
+		newGame();
+		break;
+	case 0xf:
+		// "Open saved game"
+		if (_quest->isDirty()) {
+			openPopup(tail.questPages[0]);
+		} else {
+			bool ok = loadGameDialog();
+			// The GUI dialogs replace the palette and the screen
+			_paletteDirty = true;
+			_dirty = true;
+			if (ok)
+				afterQuestLoad(true, true);
+		}
+		break;
+	case 0x10:
+		// "Save game": to the slot of the last save, else ask
+		if (_saveSlot >= 0) {
+			SaveStateDescriptor desc = getMetaEngine()->querySaveMetaInfos(_targetName.c_str(), _saveSlot);
+			saveGameState(_saveSlot, desc.getDescription(), false);
+		} else {
+			saveGameDialog();
+			_paletteDirty = true;
+			_dirty = true;
+		}
+		break;
+	case 0x11:
+		saveGameDialog();
+		_paletteDirty = true;
+		_dirty = true;
+		break;
+	case 0x14:
+		startGame();
+		break;
+	default:
+		debugC(1, kDebugScript, "Castle: OptionsAction %d not implemented", code);
+		break;
+	}
+}
+
+// --- Savegames ---------------------------------------------------------
+
+#define CASTLE_SAVE_TAG MKTAG('C', 'S', 'T', 'L')
+
+Common::Error CastleEngine::saveGameState(int slot, const Common::String &desc, bool isAutosave) {
+	Common::OutSaveFile *f = _saveFileMan->openForSaving(getSaveStateName(slot));
+	if (!f)
+		return Common::kWritingFailed;
+	f->writeUint32BE(CASTLE_SAVE_TAG);
+	f->writeByte(1);
+	f->writeUint32BE(_basePage ? _basePage->getIndex() : 0);
+	f->writeByte(ARRAYSIZE(_toggles));
+	for (uint i = 0; i < ARRAYSIZE(_toggles); i++)
+		f->writeByte(_toggles[i] ? 1 : 0);
+	_quest->saveToStream(*f);
+	getMetaEngine()->appendExtendedSave(f, getTotalPlayTime() / 1000, desc, isAutosave);
+	f->finalize();
+	bool ok = !f->err();
+	delete f;
+	if (!ok)
+		return Common::kWritingFailed;
+	_saveSlot = slot;
+	_quest->setDirty(false);
+	debugC(1, kDebugGeneral, "Castle: saved game to slot %d", slot);
+	return Common::kNoError;
+}
+
+Common::Error CastleEngine::loadGameState(int slot) {
+	Common::InSaveFile *f = _saveFileMan->openForLoading(getSaveStateName(slot));
+	if (!f)
+		return Common::kReadingFailed;
+	bool ok = f->readUint32BE() == CASTLE_SAVE_TAG;
+	if (ok) {
+		f->readByte(); // version
+		_savedPage = f->readUint32BE();
+		int n = f->readByte();
+		for (int i = 0; i < n; i++) {
+			bool on = f->readByte() != 0;
+			if (i < (int)ARRAYSIZE(_toggles))
+				_toggles[i] = on;
+		}
+		ok = _quest->loadFromStream(*f) && !f->err();
+	}
+	delete f;
+	if (!ok) {
+		warning("Castle: savegame slot %d could not be read", slot);
+		_quest->randomize();
+		return Common::kReadingFailed;
+	}
+	_saveSlot = slot;
+	applyToggles();
+	debugC(1, kDebugGeneral, "Castle: loaded game from slot %d (spy %d, page %u)", slot, _quest->getSpy(), _savedPage);
+	return Common::kNoError;
 }
 
 } // End of namespace Castle

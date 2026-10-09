@@ -39,10 +39,13 @@ class Resources;
 class LivePage;
 class AniDecoder;
 struct LiveObject;
+struct LivePanel;
 struct Action;
 struct Event;
 class ScriptVM;
 struct Context;
+class Quest;
+struct Value;
 
 class CastleEngine : public Engine {
 public:
@@ -51,6 +54,10 @@ public:
 
 	Common::Error run() override;
 	bool hasFeature(EngineFeature f) const override;
+	bool canLoadGameStateCurrently(Common::U32String *msg = nullptr) override { return true; }
+	bool canSaveGameStateCurrently(Common::U32String *msg = nullptr) override { return true; }
+	Common::Error loadGameState(int slot) override;
+	Common::Error saveGameState(int slot, const Common::String &desc, bool isAutosave = false) override;
 
 	Database *getDatabase() { return _db; }
 	Resources *getResources() { return _res; }
@@ -82,8 +89,26 @@ public:
 	void updateScrolling(uint32 now);
 	void updateAmbientSound(uint32 now, bool force);
 	LiveObject *findZoomCaption(int id, LivePage *page);
+	Quest *getQuest() { return _quest; }
 
 private:
+	// Spy quest
+	void setSpy(int spy, bool fireEvent);
+	void fireSpyChanged();
+	void applyQuestObjects(LivePage *page, bool onOpen);
+	void updateSpyChest(LivePage *page);
+	LivePanel *findSpyChest(LivePage **pageOut);
+	void chestFlash();
+	void showSpriteFrame(LiveObject *lo, int frame);
+	void newGame();
+	void startGame();
+	void runOptionsAction(int code, LivePage *page, LiveObject *obj);
+	void afterQuestLoad(bool ok, bool fireEvent);
+	int toggleCodeOf(int objectId) const;
+	bool toggleState(int code) const;
+	void setToggleState(int code, bool on);
+	void applyToggles();
+
 	void handleEvents();
 	void render();
 	void applyPalette();
@@ -134,13 +159,17 @@ private:
 		WaveChannel() : channel(0) {}
 	};
 	Common::Array<WaveChannel> _channels;
-	int _spyType;
+	Quest *_quest;
+	bool _toggles[32];           // option toggles (sounds, transitions) by option code
+	bool _activityCompleted;     // ActivityCompleted action flag
+	bool _spyChangedFlag;        // GeneralPurposeAction 7
+	int _saveSlot;               // slot of the last save/load, -1 when none
+	uint _savedPage;             // base page stored in a loaded savegame
 	LiveObject *_pressedObject;  // object under the mouse button
 	LivePage *_pressedPage;
 	bool _dragging;              // the pressed sprite follows the mouse
 	LivePage *_dragPage;         // drag popup being moved
 	uint32 _dungeonTimerEnd;     // 0 when no dungeon timer runs
-	int _dungeonState;
 	Common::Point _dragOffset;
 	LiveObject *_scrollObject;   // scroll-edge object under the mouse
 	LivePage *_scrollPage;

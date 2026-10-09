@@ -164,6 +164,35 @@ ObjectRef *ScriptVM::findSub(int id, Context &ctx) {
 	return nullptr;
 }
 
+bool ScriptVM::setDocVariable(int id, const Value &v) {
+	Context ctx;
+	Variable *var = findVariable(id, ctx);
+	if (!var) {
+		debugC(1, kDebugScript, "Castle: document variable %d not found", id);
+		return false;
+	}
+	if (var->values.empty())
+		var->values.push_back(Value());
+	Value &slot = var->values[0];
+	switch (var->type) {
+	case kTypeNumber: slot = Value::number(v.toInt()); break;
+	case kTypeLogical: slot = Value::logical(v.toBool()); break;
+	case kTypeString: slot = Value::string(v.toString()); break;
+	case kTypeReal: slot = Value::real(v.toReal()); break;
+	default: slot = v; break;
+	}
+	debugC(2, kDebugScript, "Castle: document variable %d = %s", id, slot.toString().c_str());
+	return true;
+}
+
+Value ScriptVM::getDocVariable(int id) {
+	Context ctx;
+	Variable *var = findVariable(id, ctx);
+	if (!var || var->values.empty())
+		return Value();
+	return var->values[0];
+}
+
 Value ScriptVM::getVariable(const Operand &op, Context &ctx) {
 	Variable *var = findVariable(op.b, ctx);
 	if (!var) {
@@ -653,7 +682,7 @@ void ScriptVM::setPropertyOf(LiveObject *lo, int prop, const Value &v) {
 			else
 				lo->spriteFlags &= ~spriteFlagBit(prop);
 			if (prop == 0x44) {
-				lo->playing = v.toBool() && lo->frameDelay != 0;
+				lo->playing = v.toBool() && lo->frameDelay > 0;
 				lo->nextFrameTime = 0;
 			}
 			_vm->markDirty();

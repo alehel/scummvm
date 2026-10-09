@@ -64,8 +64,10 @@ struct LiveObject {
 	bool spriteStarted;
 	Image *overlayA;        // zoom caption: painted zoom area artwork
 	Image *overlayB;        // zoom caption: painted zoom object artwork
+	Image *altImage;        // second artwork: toggle off, blinking item
+	bool dithered;          // spy pictures of the hut: drawn through a checkerboard
 	LiveObject() : obj(nullptr), panel(nullptr), image(nullptr), frame(0), frameCount(0), frameDelay(100), nextFrameTime(0),
-			playing(false), visible(true), disabled(false), hovered(false), zOrder(0), value(0), spriteFlags(0), spriteState(0), spriteLoops(-1), spriteStartTime(0), spriteStarted(false), overlayA(nullptr), overlayB(nullptr) {
+			playing(false), visible(true), disabled(false), hovered(false), zOrder(0), value(0), spriteFlags(0), spriteState(0), spriteLoops(-1), spriteStartTime(0), spriteStarted(false), overlayA(nullptr), overlayB(nullptr), altImage(nullptr), dithered(false) {
 		memset(counters, 0, sizeof(counters));
 		memset(extra, 0, sizeof(extra));
 	}
@@ -108,7 +110,9 @@ public:
 	void draw(Graphics::Surface &screen, Resources &res) const;
 	LiveObject *hitTest(const Common::Point &p);
 	LiveObject *objectAt(const Common::Point &p, bool hotspotsOnly);
+	// Advances the page's own animations; true when something changed
 	void update(uint32 now, Resources &res);
+	bool takeChanged() { bool c = _changed; _changed = false; return c; }
 
 	uint getIndex() const { return _index; }
 	int getType() const { return _rec ? _rec->type : kPageNull; }
@@ -135,6 +139,7 @@ private:
 	Common::Point _origin;
 	Common::Rect _bounds;
 	bool _mouseEntered;     // roll-off-close pages: the pointer has been inside the page
+	bool _changed;          // an animation advanced since the last draw
 	Common::Array<LivePanel *> _panels;
 	Image *_paletteImage;
 	bool _paletteFixed;     // a PaletteBitmap chose the palette

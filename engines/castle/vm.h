@@ -142,6 +142,10 @@ public:
 
 	Scope &docScope() { return _docScope; }
 	void initDocScope(const Extension *ext) { _docScope.init(ext); }
+	// Document variables by id (the quest module keeps the spy type and
+	// scenario number in script variables)
+	bool setDocVariable(int id, const Value &v);
+	Value getDocVariable(int id);
 
 private:
 	Value readOperand(const Operand &op, Context &ctx);

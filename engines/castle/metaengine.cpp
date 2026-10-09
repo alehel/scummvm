@@ -37,7 +37,9 @@ public:
 	}
 
 	bool hasFeature(MetaEngineFeature f) const override {
-		return false;
+		return f == kSavesUseExtendedFormat || f == kSimpleSavesNames || f == kSupportsListSaves ||
+		       f == kSupportsDeleteSave || f == kSavesSupportMetaInfo || f == kSavesSupportCreationDate ||
+		       f == kSavesSupportPlayTime || f == kSupportsLoadingDuringStartup;
 	}
 };
 

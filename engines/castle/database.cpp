@@ -1022,9 +1022,141 @@ bool Database::readDocument(Common::SeekableReadStream &s, uint32 end) {
 		_templates.push_back(t);
 	}
 	readEvents(s, _docEvents);
-	s.readUint32BE(); // trailer
-	// TODO: about 11 KB of unparsed data follow the document events.
-	debugC(1, kDebugDatabase, "Castle: document parse ended at %d, page table at %u", (int)s.pos(), end);
+	return readDocumentTail(s, end);
+}
+
+void Database::readAnswerList(Common::SeekableReadStream &s, AnswerList &a, bool withInts) {
+	if (withInts)
+		for (int i = 0; i < 3; i++)
+			a.ints[i] = s.readSint16BE();
+	int n = readCount(s);
+	if (withInts)
+		a.ints[3] = n;
+	for (int i = 0; i < n; i++)
+		a.accepted.push_back(readInlineString(s));
+	n = readCount(s);
+	for (int i = 0; i < n; i++)
+		a.misspelled.push_back(readInlineString(s));
+}
+
+// The data after the document events: two text style tables, the chest
+// quiz, the answer lists, and the ids of the variables, pages and objects
+// the built-in game logic works with.
+bool Database::readDocumentTail(Common::SeekableReadStream &s, uint32 end) {
+	// Text styles of the edit boxes: object id, font id, 4 colours, 5 shorts, font name, short
+	int n = readCount(s);
+	for (int i = 0; i < n; i++) {
+		s.skip(4 + 12 + 2 + 8);
+		readInlineString(s);
+		s.skip(2);
+	}
+	n = readCount(s);
+	s.skip(n * 15);
+
+	for (int spy = 0; spy < 3; spy++) {
+		for (int q = 0; q < 4; q++) {
+			Question &qu = _tail.questions[spy][q];
+			int m = readCount(s);
+			for (int i = 0; i < m; i++) {
+				QuestionStep st;
+				for (int k = 0; k < 15; k++)
+					st.v[k] = s.readSint16BE();
+				qu.steps.push_back(st);
+			}
+			m = readCount(s);
+			for (int i = 0; i < m; i++) {
+				QuestionObject o;
+				o.type = s.readSint16BE();
+				o.value = s.readSint16BE();
+				switch (o.type) {
+				case 0:
+				case 2:
+					o.str = readInlineString(s);
+					break;
+				case 1:
+					o.str = readInlineString(s);
+					o.a = s.readSint16BE();
+					break;
+				case 3:
+				case 8:
+					o.u = s.readUint32BE();
+					o.a = s.readSint16BE();
+					break;
+				case 4:
+					o.a = s.readSint16BE();
+					o.b = s.readSint16BE();
+					break;
+				case 5:
+				case 6:
+				case 7:
+					o.a = s.readSint16BE();
+					break;
+				case 9:
+					o.str = readInlineString(s);
+					o.a = s.readSint16BE();
+					o.b = s.readSint16BE();
+					break;
+				case 10:
+				case 11:
+					break;
+				default:
+					warning("Castle: unknown question object type %d at %d", o.type, (int)s.pos());
+					return false;
+				}
+				qu.objects.push_back(o);
+			}
+		}
+	}
+
+	s.readUint32BE();
+	n = readCount(s);
+	for (int i = 0; i < n; i++) {
+		AnswerList a;
+		readAnswerList(s, a, true);
+		_tail.scenarios.push_back(a);
+	}
+	n = readCount(s);
+	for (int i = 0; i < n; i++)
+		_tail.commonWords.push_back(readInlineString(s));
+	for (int i = 0; i < 12; i++)
+		readAnswerList(s, _tail.answers[i], false);
+
+	for (int i = 0; i < 11; i++)
+		_tail.vars[i] = s.readSint16BE();
+	for (int i = 0; i < 10; i++)
+		_tail.pages[i] = s.readUint32BE();
+	for (int i = 0; i < 16; i++)
+		_tail.ints[i] = s.readSint16BE();
+	for (int i = 0; i < 4; i++)
+		_tail.pages2[i] = s.readUint32BE();
+	_tail.page144 = s.readUint32BE();
+	for (int i = 0; i < 3; i++)
+		_tail.ints3[i] = s.readSint16BE();
+	for (int i = 0; i < 11; i++)
+		s.readSint16BE(); // font ids
+	n = readCount(s);
+	for (int i = 0; i < n; i++) {
+		ToggleDesc t;
+		t.objectId = s.readSint16BE();
+		t.state = s.readSint16BE();
+		t.code = s.readSint16BE();
+		_tail.toggles.push_back(t);
+	}
+	for (int i = 0; i < 4; i++)
+		_tail.ints4[i] = s.readSint16BE();
+	_tail.questId = s.readSint16BE();
+	for (int i = 0; i < 10; i++)
+		_tail.questMasks[i] = s.readSint16BE();
+	_tail.questId2 = s.readSint16BE();
+	for (int i = 0; i < 3; i++)
+		_tail.questPages[i] = s.readUint32BE();
+	for (int i = 0; i < 3; i++)
+		_tail.quitPages[i] = s.readUint32BE();
+
+	debugC(1, kDebugDatabase, "Castle: document parse ended at %d, page table at %u; spy var %d, scenario var %d, new game var %d",
+	       (int)s.pos(), end, _tail.getSpyVar(), _tail.getScenarioVar(), _tail.getNewGameVar());
+	if ((uint32)s.pos() != end)
+		warning("Castle: document tail ended at %d, expected %u", (int)s.pos(), end);
 	return true;
 }
 

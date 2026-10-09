@@ -30,7 +30,7 @@
 
 namespace Castle {
 
-LivePage::LivePage() : _index(0), _rec(nullptr), _tmpl(nullptr), _mouseEntered(false), _paletteImage(nullptr), _paletteFixed(false) {
+LivePage::LivePage() : _index(0), _rec(nullptr), _tmpl(nullptr), _mouseEntered(false), _changed(false), _paletteImage(nullptr), _paletteFixed(false) {
 }
 
 LivePage::~LivePage() {
@@ -63,7 +63,9 @@ void LivePage::layoutObjects(LivePanel *lp, Resources &res) {
 		if (obj->cls == kObjSprite) {
 			lo.frameCount = obj->spriteFrames;
 			lo.frame = obj->ints.size() > 1 ? obj->ints[1] + 1 : 1;
-			lo.frameDelay = obj->ints.size() > 2 ? MAX(25, (int)obj->ints[2]) : 100;
+			// A zero delay means the sprite never advances by itself (the
+			// chest's purse and drawers are stepped by the quest logic)
+			lo.frameDelay = obj->ints.size() > 2 ? (int)obj->ints[2] : 100;
 			for (int k = 0; k < 5; k++)
 				lo.counters[k] = obj->ints.size() > 5 + (uint)k ? obj->ints[5 + k] : 0;
 			lo.spriteFlags = obj->ints.size() > 3 ? obj->ints[3] : 0;
@@ -74,7 +76,7 @@ void LivePage::layoutObjects(LivePanel *lp, Resources &res) {
 			if (obj->flags & 0x20)
 				lo.spriteState |= 5;
 			lo.visible = (lo.spriteState & 0x10) != 0 && obj->c != 0;
-			lo.playing = (lo.spriteFlags & 8) != 0 && lo.frameDelay != 0;
+			lo.playing = (lo.spriteFlags & 8) != 0 && lo.frameDelay > 0;
 			lo.spriteStartTime = g_system->getMillis();
 			if ((lo.rect.width() <= 0 || lo.rect.height() <= 0) && obj->points.size() > 1) {
 				lo.rect.left = lp->rect.left + obj->points[1].x;
@@ -82,7 +84,7 @@ void LivePage::layoutObjects(LivePanel *lp, Resources &res) {
 				lo.rect.right = lo.rect.left;
 				lo.rect.bottom = lo.rect.top;
 			}
-			lo.nextFrameTime = g_system->getMillis() + lo.frameDelay;
+			lo.nextFrameTime = g_system->getMillis() + MAX(25, lo.frameDelay);
 			if (!obj->file.empty()) {
 				lo.image = res.loadImage(lp->dir, frameName(obj, lo.frame));
 				if (!lo.image)
@@ -99,6 +101,12 @@ void LivePage::layoutObjects(LivePanel *lp, Resources &res) {
 			lo.image = res.loadImage(lp->dir, obj->file);
 		}
 
+		if (obj->cls == kObjToggleButton && obj->strs.size() > 1)
+			lo.altImage = res.loadImage(lp->dir, obj->strs[1]);
+		if (obj->cls == kObjCollectBitmap && obj->strs.size() > 1)
+			lo.altImage = res.loadImage(lp->dir, obj->strs[1]);
+		if (obj->cls == kObjToggleButton)
+			lo.value = 1;
 		if (obj->cls == kObjHighlightingCastle)
 			lo.visible = false;
 		if (lo.image) {
@@ -228,7 +236,7 @@ bool LivePage::open(Database &db, Resources &res, uint index, const Common::Poin
 	return true;
 }
 
-static void blitImage(Graphics::Surface &screen, const Image *img, const Common::Rect &dst, const Common::Rect &clipTo, int keyIndex = -1) {
+static void blitImage(Graphics::Surface &screen, const Image *img, const Common::Rect &dst, const Common::Rect &clipTo, int keyIndex = -1, bool dither = false) {
 	Common::Rect r = dst;
 	Common::Rect clip(0, 0, screen.w, screen.h);
 	clip.clip(clipTo);
@@ -244,7 +252,12 @@ static void blitImage(Graphics::Surface &screen, const Image *img, const Common:
 		const byte *src = (const byte *)img->surface.getBasePtr(sx0, sy);
 		byte *d = (byte *)screen.getBasePtr(r.left, r.top + y);
 		int w = MIN((int)r.width(), (int)img->surface.w - sx0);
-		if (img->hasMask) {
+		if (dither) {
+			// Every other pixel in a checkerboard, as the original's dither brush
+			for (int x = ((r.left + r.top + y) & 1); x < w; x += 2)
+				if (!(img->hasMask && img->mask[src[x]]) && !(img->hasTransparentColor && src[x] == img->transparentColor) && src[x] != keyIndex)
+					d[x] = src[x];
+		} else if (img->hasMask) {
 			for (int x = 0; x < w; x++)
 				if (!img->mask[src[x]])
 					d[x] = src[x];
@@ -331,10 +344,17 @@ void LivePage::draw(Graphics::Surface &screen, Resources &res) const {
 			// on pure green; plain bitmaps of opaque panels are copied as is.
 			int key = -1;
 			int pt = lp->panel->type;
-			bool transparentPanel = pt == kPanelTransparent || pt == kPanelTransparentSprite || pt == kPanelTransparentText;
+			bool transparentPanel = pt == kPanelTransparent || pt == kPanelTransparentSprite || pt == kPanelTransparentText || pt == kPanelSpyChest;
+			const Image *img = lo.image;
+			// Toggle buttons show their off artwork when cleared, blinking
+			// evidence alternates between its two pictures
+			if (lo.obj->cls == kObjToggleButton && !lo.value && lo.altImage)
+				img = lo.altImage;
+			if (lo.obj->cls == kObjCollectBitmap && (lo.frame & 1) && lo.altImage)
+				img = lo.altImage;
 			if (lo.obj->cls != kObjBitmap || transparentPanel)
-				key = lo.image->keyIndex;
-			blitImage(screen, lo.image, r, lp->rect, key);
+				key = img->keyIndex;
+			blitImage(screen, img, r, lp->rect, key, lo.dithered);
 		}
 		for (uint k = 0; k < lp->overlays.size(); k++) {
 			const Overlay &ov = lp->overlays[k];
@@ -397,7 +417,8 @@ LiveObject *LivePage::objectAt(const Common::Point &p, bool hotspotsOnly) {
 				continue;
 			if (hotspotsOnly && lo.disabled)
 				continue;
-			if (hotspotsOnly && !lo.obj->findEvent(kEventClick)) {
+			bool builtinClick = lo.obj->cls == kObjCoinBitmap || lo.obj->cls == kObjCollectBitmap || lo.obj->cls == kObjToggleButton;
+			if (hotspotsOnly && !builtinClick && !lo.obj->findEvent(kEventClick)) {
 				bool clickScript = false;
 				for (uint s = 0; s < lo.obj->scripts.size(); s++)
 					if (lo.obj->scripts[s]->a == 5)
@@ -424,12 +445,18 @@ void LivePage::update(uint32 now, Resources &res) {
 		LivePanel *lp = _panels[i];
 		for (uint k = 0; k < lp->objects.size(); k++) {
 			LiveObject &lo = lp->objects[k];
+			if (lo.obj->cls == kObjCollectBitmap && lo.visible && lo.altImage && now >= lo.nextFrameTime) {
+				lo.frame++;
+				lo.nextFrameTime = now + 500;
+				_changed = true;
+			}
 			if (lo.obj->cls == kObjAmbientAnimation && lo.frameCount > 1 && now >= lo.nextFrameTime) {
 				lo.frame = lo.frame % lo.frameCount + 1;
 				Image *img = res.loadImage(lp->dir, frameName(lo.obj, lo.frame));
 				if (img)
 					lo.image = img;
 				lo.nextFrameTime = now + 200;
+				_changed = true;
 			}
 		}
 	}
