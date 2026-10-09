@@ -251,9 +251,12 @@ bool LivePage::open(Database &db, Resources &res, uint index, const Common::Poin
 			_bounds.extend(_panels[i]->rect);
 		}
 	}
-	// Dialog-like popups (the questions, the save prompts) carry no position
-	// of their own and open in the middle of the screen
-	if (isPopup() && _tmpl && _tmpl->centred && origin == Common::Point(0, 0) && _rec->pos == Common::Point(0, 0) && !_bounds.isEmpty())
+	// A popup without a position of its own (no record position, no panel
+	// placement from its template) opens in the middle of the screen, as the
+	// original's window creation centres it in its parent; the questions,
+	// save prompts, zoom captions, glossary and help pages are such pages
+	if (isPopup() && origin == Common::Point(0, 0) && _rec->pos == Common::Point(0, 0) && !_bounds.isEmpty() &&
+			((_tmpl && _tmpl->centred) || (_bounds.left == 0 && _bounds.top == 0 && !(_tmpl && _tmpl->hasPos4c))))
 		moveBy((640 - _bounds.width()) / 2 - _bounds.left, (480 - _bounds.height()) / 2 - _bounds.top);
 	createCollages(db, res);
 	debugC(1, kDebugGeneral, "Castle: opened page %u type %d template %d dir '%s' panels %u bounds %d,%d,%d,%d",
