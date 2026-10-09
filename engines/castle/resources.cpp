@@ -87,6 +87,9 @@ Common::String Resources::makePath(const Common::String &dir, const Common::Stri
 		path = n.substr(1);
 	} else if (n.hasPrefix("&")) {
 		path = n.substr(1);
+	} else if (n.contains('\\')) {
+		// Names with a directory part are relative to the data root
+		path = n;
 	} else {
 		if (d.hasPrefix("\\"))
 			d = d.substr(1);
