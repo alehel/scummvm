@@ -1282,7 +1282,8 @@ void CastleEngine::updateAmbientSound(uint32 now, bool force) {
 		                     zoomPanel->rect.top + zoomPanel->rect.height() / 2 + zoomPanel->scroll.y);
 		for (int k = (int)zoomPanel->objects.size() - 1; k >= 0; k--) {
 			const LiveObject &lo = zoomPanel->objects[k];
-			if (lo.obj->cls == kObjSoundHotspot && !lo.obj->strs.empty() && lo.rect.contains(centre)) {
+			if (lo.obj->cls == kObjSoundHotspot && !lo.obj->strs.empty() && lo.rect.contains(centre) &&
+			    (!lo.obj->mask || lo.obj->mask->contains(centre))) {
 				name = lo.obj->strs[0];
 				break;
 			}

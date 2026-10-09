@@ -314,12 +314,17 @@ struct Action {
 	~Action();
 };
 
-// Scanline mask of a hotspot (stored when flag 0x800 is set)
+// Scanline mask of a hotspot (stored when flag 0x800 is set): one span per
+// row, further spans of the same row chained through the link field
 struct HotspotMask {
 	Common::Point pos;
 	Common::Point size;
-	int16 a, b, c;
-	Common::Array<uint32> data;
+	int16 rows;       // number of rows (the first rows entries of data)
+	int16 step;       // pixels per cell
+	int16 byRow;      // 0: rows run along x and spans along y, else the reverse
+	Common::Array<uint32> data; // start << 22 | length << 12 | link to the next span of the row
+
+	bool contains(const Common::Point &p) const;
 };
 
 struct GameObject {

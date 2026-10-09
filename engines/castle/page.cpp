@@ -730,6 +730,9 @@ LiveObject *LivePage::objectAt(const Common::Point &p, bool hotspotsOnly) {
 				q += lp->scroll;
 			if (!lo.rect.contains(q))
 				continue;
+			// Irregular hotspots carry a scanline mask within their rectangle
+			if (lo.obj->mask && !lo.obj->mask->contains(q))
+				continue;
 			// Sprites are hit only while active (state bits 1 and 2) and when
 			// their hit flag (0x80) is set; flag 1 asks for a pixel precise test
 			if (lo.obj->cls == kObjSprite && ((lo.spriteState & 3) != 3 || !(lo.spriteFlags & 0x80)))

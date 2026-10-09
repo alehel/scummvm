@@ -536,13 +536,45 @@ HotspotMask *Database::readMask(Common::SeekableReadStream &s) {
 	HotspotMask *m = new HotspotMask();
 	m->pos = readPoint(s);
 	m->size = readPoint(s);
-	m->a = s.readSint16BE();
-	m->b = s.readSint16BE();
+	m->rows = s.readSint16BE();
+	m->step = s.readSint16BE();
 	int n = readCount(s);
-	m->c = s.readSint16BE();
+	m->byRow = s.readSint16BE();
 	for (int i = 0; i < n; i++)
 		m->data.push_back(s.readUint32BE());
 	return m;
+}
+
+// The original's mask test (FUN_00420f20): the point selects a row, and the
+// chain of spans of that row is walked until one covers the point
+bool HotspotMask::contains(const Common::Point &p) const {
+	if (step <= 0)
+		return false;
+	int row, col;
+	if (byRow) {
+		row = (p.y - pos.y) / step;
+		col = (p.x - pos.x) / step;
+	} else {
+		row = (p.x - pos.x) / step;
+		col = (p.y - pos.y) / step;
+	}
+	if (row < 0 || col < 0 || row >= rows)
+		return false;
+	uint idx = row;
+	while (idx < data.size()) {
+		uint32 e = data[idx];
+		uint start = e >> 22;
+		uint len = (e >> 12) & 0x3ff;
+		uint link = e & 0xfff;
+		if ((uint)col < start)
+			return false;
+		if ((uint)col < start + len)
+			return true;
+		if (link == 0)
+			return false;
+		idx += link;
+	}
+	return false;
 }
 
 void Database::readObjectBase(Common::SeekableReadStream &s, GameObject *o) {
