@@ -64,9 +64,14 @@ public:
 	int getBuiltinNumber(int id) const;
 	void runCommand(const Action *a, LivePage *page, LiveObject *obj);
 	void updateSprites(uint32 now);
+	bool advanceSprite(LivePage *page, LiveObject *lo);
+	bool spriteLoopDone(LivePage *page, LiveObject *lo);
+	void spriteFinished(LivePage *page, LiveObject *lo);
 	void runSpriteFrameScripts(LivePage *page, LiveObject *lo, int event, int frame);
 	void handleMouseMove(const Common::Point &p);
 	LiveObject *findHighlightObject(LivePage *page);
+	void updateNodeHotspots(LivePage *page, int node);
+	void doTransition(LivePage *page, int mode, int spriteId, int async);
 	void setCursor(const Common::String &name);
 
 private:
@@ -88,6 +93,8 @@ private:
 	void playVideo(const Common::String &dir, const Common::String &name, const Common::Rect &dest);
 	void runPageEvents(LivePage *page, int eventType);
 	void stopWave();
+	void playWaveChannel(const Common::String &dir, const Common::String &name, int channel);
+	void stopWaveChannel(int channel, const Common::String &name);
 	void playAnimation(const Common::String &dir, const Common::String &name, const Common::Point &pos);
 	void updateAnimation();
 
@@ -111,6 +118,14 @@ private:
 	Common::String _dumpDir;
 	int _dumpCount;
 	Audio::SoundHandle _waveHandle;
+	struct WaveChannel {
+		int channel;
+		Common::String name;
+		Audio::SoundHandle handle;
+		WaveChannel() : channel(0) {}
+	};
+	Common::Array<WaveChannel> _channels;
+	int _spyType;
 	Audio::SoundHandle _aniAudioHandle;
 	AniDecoder *_ani;
 	Common::Point _aniPos;

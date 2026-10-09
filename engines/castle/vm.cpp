@@ -694,6 +694,10 @@ void ScriptVM::setPropertyOf(LiveObject *lo, int prop, const Value &v) {
 		_vm->spriteGotoFrame(lo, n);
 		break;
 	case kPropSpriteFrameCount: lo->frameCount = n; break;
+	case 0x3a:
+	case 0x60:
+		// Frame cache hints (preload / release a frame range); frames are loaded on demand here
+		break;
 	case kPropSpriteDelay: lo->frameDelay = MAX(25, n); break;
 	case kPropSpriteCounter1: case kPropSpriteCounter2: case kPropSpriteCounter3:
 	case kPropSpriteCounter4: case kPropSpriteCounter5:

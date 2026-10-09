@@ -50,7 +50,7 @@ namespace Castle {
 
 CastleEngine::CastleEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst), _gameDescription(gameDesc),
 		_rnd("castle"), _script(nullptr), _hoverObject(nullptr), _hoverPage(nullptr), _db(nullptr), _res(nullptr), _basePage(nullptr), _dirty(true), _paletteDirty(true), _pendingBasePage(0),
-		_pendingBase(false), _dumpCount(0), _ani(nullptr), _aniNextFrame(0) {
+		_pendingBase(false), _dumpCount(0), _ani(nullptr), _aniNextFrame(0), _spyType(0) {
 	const Common::FSNode gameDataDir(ConfMan.getPath("path"));
 	SearchMan.addSubDirectoryMatching(gameDataDir, "dkcode");
 	SearchMan.addSubDirectoryMatching(gameDataDir, "3drooms", 0, 3);
@@ -412,14 +412,39 @@ void CastleEngine::runAction(const Action *a, LivePage *page, LiveObject *obj) {
 		quitGame();
 		break;
 	case kActPlayWave:
-	case kActNewPlayWave:
-	case kActPlayWaveChannel:
 		playWave(page ? page->getDir() : Common::String(), a->name, false);
 		break;
+	case kActNewPlayWave:
+	case kActPlayWaveChannel:
+		playWaveChannel(page ? page->getDir() : Common::String(), a->name, a->p[1]);
+		break;
 	case kActStopWave:
-	case kActStopWaveChannel:
 		stopWave();
 		break;
+	case kActStopWaveChannel:
+		stopWaveChannel(a->x, a->name);
+		break;
+	case kActChangeSpyType:
+		_spyType = a->x;
+		break;
+	case kActPlayResponse: {
+		// Three wave/animation pairs, one per spy character
+		int idx = _spyType == 1 ? 0 : _spyType == 2 ? 1 : 2;
+		if (a->strs.size() < 6)
+			break;
+		Common::String dir = page ? page->getDir() : Common::String();
+		if (!a->strs[idx].empty())
+			playWaveChannel(dir, a->strs[idx], -1);
+		if (!a->strs[3 + idx].empty()) {
+			Common::Point origin(0, 0);
+			if (obj)
+				origin = Common::Point(obj->panel->rect.left, obj->panel->rect.top);
+			else if (page && !page->getPanels().empty())
+				origin = Common::Point(page->getPanels()[0]->rect.left, page->getPanels()[0]->rect.top);
+			playAnimation(dir, a->strs[3 + idx], origin);
+		}
+		break;
+	}
 	case kActPlayPics:
 	case kActPlayPicsEx:
 		playAnimation(page ? page->getDir() : Common::String(), a->name, a->pt + (obj ? Common::Point(obj->panel->rect.left, obj->panel->rect.top) : Common::Point(0, 0)));
@@ -502,9 +527,84 @@ void CastleEngine::runAction(const Action *a, LivePage *page, LiveObject *obj) {
 			setSpriteFrame(lo, a->p[1]);
 		break;
 	}
+	case kActUpdateNodeHtsp:
+		updateNodeHotspots(page, a->x);
+		break;
+	case kActDoTransition:
+		doTransition(page, a->p[0], a->p[1], a->p[2]);
+		break;
 	default:
 		debugC(1, kDebugScript, "Castle: unimplemented action %s", actionName(a->type));
 		break;
+	}
+}
+
+// UpdateNodeHtsp: a 3D room page keeps one panoramic sprite whose frames are
+// the views from the room's nodes. Every node-bound object carries the node
+// it belongs to; this enables the ones for the given node and disables the
+// rest (-1 while turning disables everything).
+void CastleEngine::updateNodeHotspots(LivePage *page, int node) {
+	if (!page)
+		page = _basePage;
+	if (!page)
+		return;
+	const Common::Array<LivePanel *> &panels = page->getPanels();
+	for (uint i = 0; i < panels.size(); i++) {
+		for (uint k = 0; k < panels[i]->objects.size(); k++) {
+			LiveObject &lo = panels[i]->objects[k];
+			const GameObject *obj = lo.obj;
+			switch (obj->cls) {
+			case kObjNodalHotspot:
+			case kObjPlayResponseHotspot:
+				// ints: highlight, h2, node
+				lo.disabled = obj->ints.size() < 3 || obj->ints[2] != node;
+				break;
+			case kObjAmbientAnimation:
+				lo.disabled = obj->ints.empty() || obj->ints[0] != node;
+				break;
+			case kObjRandomScenarioHotspot:
+				lo.value = node;
+				break;
+			default:
+				break;
+			}
+		}
+	}
+	_dirty = true;
+}
+
+// DoTransition: plays the walk animation sprite that leads to the next node;
+// its last frame script then changes to the destination page.
+void CastleEngine::doTransition(LivePage *page, int mode, int spriteId, int async) {
+	LiveObject *lo = findLiveObject(spriteId, page);
+	if (!lo || lo->obj->cls != kObjSprite)
+		return;
+	lo->zOrder = 10;
+	lo->visible = true;
+	if (mode)
+		lo->spriteState |= 0x40;
+	else
+		lo->spriteState &= ~0x40;
+	if (async) {
+		lo->spriteFlags |= 8;
+		lo->playing = lo->frameDelay != 0;
+		lo->nextFrameTime = 0;
+		_dirty = true;
+		return;
+	}
+	// Synchronous variant: the original steps the frames itself, 200 ms apart
+	setSpriteFrame(lo, 1);
+	for (int f = 2; f <= lo->frameCount && !shouldQuit(); f++) {
+		uint32 until = _system->getMillis() + 200;
+		while (_system->getMillis() < until && !shouldQuit()) {
+			handleEvents();
+			render();
+			_system->delayMillis(10);
+		}
+		setSpriteFrame(lo, f);
+		runSpriteFrameScripts(page, lo, 9, f);
+		if (scriptShouldStop())
+			return;
 	}
 }
 
@@ -643,28 +743,70 @@ void CastleEngine::updateSprites(uint32 now) {
 				if (!lo.playing || now < lo.nextFrameTime)
 					continue;
 				lo.nextFrameTime = now + lo.frameDelay;
-				int next = lo.frame + 1;
-				if (next > lo.frameCount) {
-					if (lo.spriteLoops > 0)
-						lo.spriteLoops--;
-					if (lo.spriteLoops == 0) {
-						lo.playing = false;
-						continue;
-					}
-					next = 1;
-					runSpriteFrameScripts(page, &lo, 0x10, next);
-					if (scriptShouldStop())
-						return;
-				}
-				setSpriteFrame(&lo, next);
-				runSpriteFrameScripts(page, &lo, 9, next);
-				if (next == lo.frameCount)
-					runSpriteFrameScripts(page, &lo, 0xd, next);
-				if (scriptShouldStop())
+				if (!advanceSprite(page, &lo))
 					return;
 			}
 		}
 	}
+}
+
+// One step of the sprite state machine (FUN_0040c370 in the original): the
+// state bit 0x40 selects the direction and the loop mode decides what happens
+// at either end: 1 loops, 2 bounces, 3 stops on the last frame, anything else
+// ends the animation and fires the sprite's "finished" scripts.
+// Returns false when a script changed the page.
+bool CastleEngine::advanceSprite(LivePage *page, LiveObject *lo) {
+	const GameObject *obj = lo->obj;
+	int mode = obj->ints.size() > 7 ? obj->ints[7] : 1;
+	bool forward = (lo->spriteState & 0x40) != 0;
+	int next = lo->frame;
+	bool atEnd = forward ? lo->frame >= lo->frameCount : lo->frame <= 1;
+	if (atEnd) {
+		switch (mode) {
+		case 1:
+			if (!spriteLoopDone(page, lo))
+				return !scriptShouldStop();
+			next = forward ? 1 : lo->frameCount;
+			break;
+		case 2:
+			lo->spriteState ^= 0x40;
+			spriteLoopDone(page, lo);
+			return !scriptShouldStop();
+		case 3:
+			lo->spriteFlags &= ~8;
+			lo->playing = false;
+			return true;
+		default:
+			spriteFinished(page, lo);
+			return !scriptShouldStop();
+		}
+	} else {
+		next += forward ? 1 : -1;
+	}
+	setSpriteFrame(lo, next);
+	runSpriteFrameScripts(page, lo, 9, next);
+	if (!scriptShouldStop() && next == lo->frameCount)
+		runSpriteFrameScripts(page, lo, 0xd, next);
+	return !scriptShouldStop();
+}
+
+// Counts down the remaining loops; false when the animation is over.
+bool CastleEngine::spriteLoopDone(LivePage *page, LiveObject *lo) {
+	if (lo->spriteLoops > 0)
+		lo->spriteLoops--;
+	if (lo->spriteLoops == 0) {
+		spriteFinished(page, lo);
+		return false;
+	}
+	runSpriteFrameScripts(page, lo, 0x10, lo->frame);
+	return true;
+}
+
+void CastleEngine::spriteFinished(LivePage *page, LiveObject *lo) {
+	lo->playing = false;
+	lo->spriteFlags &= ~8;
+	lo->spriteState = (lo->spriteState & ~4) | 8;
+	runSpriteFrameScripts(page, lo, 4, lo->frame);
 }
 
 void CastleEngine::setCursor(const Common::String &name) {
@@ -809,6 +951,43 @@ void CastleEngine::playVideo(const Common::String &dir, const Common::String &na
 
 void CastleEngine::stopWave() {
 	_mixer->stopHandle(_waveHandle);
+}
+
+// Waves started on a numbered channel can be stopped again by channel (and
+// optionally by name); the library pages use channel 0 for the read-aloud
+// narration and restart it on every click.
+void CastleEngine::playWaveChannel(const Common::String &dir, const Common::String &name, int channel) {
+	Common::SeekableReadStream *s = _res->openWave(dir, name);
+	if (!s) {
+		debugC(1, kDebugSound, "Castle: wave '%s' not found", name.c_str());
+		return;
+	}
+	Audio::SeekableAudioStream *stream = Audio::makeWAVStream(s, DisposeAfterUse::YES);
+	if (!stream)
+		return;
+	for (uint i = 0; i < _channels.size(); i++) {
+		if (_channels[i].name.equalsIgnoreCase(name)) {
+			_mixer->stopHandle(_channels[i].handle);
+			_channels.remove_at(i);
+			break;
+		}
+	}
+	WaveChannel wc;
+	wc.channel = channel;
+	wc.name = name;
+	_mixer->playStream(Audio::Mixer::kSFXSoundType, &wc.handle, stream);
+	_channels.push_back(wc);
+}
+
+void CastleEngine::stopWaveChannel(int channel, const Common::String &name) {
+	for (uint i = 0; i < _channels.size();) {
+		if (_channels[i].channel == channel && (name.empty() || _channels[i].name.equalsIgnoreCase(name))) {
+			_mixer->stopHandle(_channels[i].handle);
+			_channels.remove_at(i);
+		} else {
+			i++;
+		}
+	}
 }
 
 void CastleEngine::playAnimation(const Common::String &dir, const Common::String &name, const Common::Point &pos) {

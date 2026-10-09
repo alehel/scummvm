@@ -286,6 +286,9 @@ void LivePage::draw(Graphics::Surface &screen, Resources &res) const {
 			const LiveObject &lo = *order[k];
 			if (!lo.visible || !lo.image)
 				continue;
+			// Ambient animations of other room nodes are switched off
+			if (lo.obj->cls == kObjAmbientAnimation && lo.disabled)
+				continue;
 			Common::Rect r = lo.rect;
 			r.translate(-lp->scroll.x, -lp->scroll.y);
 			if (lo.obj->cls == kObjHighlightingCastle) {
