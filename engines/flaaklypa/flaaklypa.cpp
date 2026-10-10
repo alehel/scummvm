@@ -144,7 +144,7 @@ Common::String FlaaklypaEngine::getString(const Common::String &key) {
 		return key;
 	Common::String value;
 	if (_language->getKey(key.substr(colon + 1), key.substr(0, colon), value))
-		return value;
+		return Resources::iniValue(value);
 	return key;
 }
 

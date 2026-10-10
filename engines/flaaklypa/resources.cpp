@@ -38,6 +38,28 @@ namespace Flaaklypa {
 // replace backdrops, hotspot masks and ini files of the base game.
 static const char *const kDataDirs[] = { "lang3", "data3", "lang2", "data2", "lang1", "data1", "lang", "data", nullptr };
 
+Common::String Resources::iniValue(const Common::String &raw) {
+	Common::String s = raw;
+	if (s.size() >= 2 && s.firstChar() == '"' && s.lastChar() == '"')
+		s = Common::String(s.c_str() + 1, s.size() - 2);
+	Common::String out;
+	for (uint i = 0; i < s.size(); i++) {
+		char c = s[i];
+		if (c == '\\' && i + 1 < s.size()) {
+			switch (s[i + 1]) {
+			case 'n': out += '\n'; i++; continue;
+			case 't': out += '\t'; i++; continue;
+			case '"': out += '"'; i++; continue;
+			case '\\': out += '\\'; i++; continue;
+			case '0': out += '\0'; i++; continue;   // separators of option lists
+			default: break;
+			}
+		}
+		out += c;
+	}
+	return out;
+}
+
 Resources::Resources() {
 }
 

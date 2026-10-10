@@ -73,6 +73,13 @@ public:
 	/** Opens a Smacker clip. The decoder owns the stream. */
 	Video::SmackerDecoder *openSmacker(const Common::String &scene, const Common::String &file);
 
+	/**
+	 * Cleans an INI value like the original's loader (FUN_0040dc10 /
+	 * FUN_0040e160): strips one pair of enclosing quotes and expands the
+	 * escapes \n \t \" \\ and \0.
+	 */
+	static Common::String iniValue(const Common::String &raw);
+
 	/** Loads a Windows-1252 INI file. */
 	bool loadIni(const Common::String &scene, const Common::String &file, Common::INIFile &ini);
 
