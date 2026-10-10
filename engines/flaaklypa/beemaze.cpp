@@ -434,8 +434,10 @@ void BeemazeScene::startLevel() {
 	_flags = 0;
 	killGameTimers();
 
+	// SCENE_AddAnim moves an already added bitmap, so Ludvig jumps to the start.
+	_walkFrame = 0;
 	_player->add(_px + kSpriteDX, _py + kSpriteDY, kZPlayer);
-	drawPlayerFrame();
+	updatePlayerAnim();
 
 	for (int i = 0; i < kMaxLives; i++)
 		_lifeAnims[i]->remove();
