@@ -16,6 +16,7 @@ MODULE_OBJS = \
 	hopscotch.o \
 	lettersort.o \
 	hustle.o \
+	intent.o \
 	menu.o \
 	metaengine.o \
 	music.o \
