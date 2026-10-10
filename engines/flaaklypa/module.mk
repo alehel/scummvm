@@ -16,6 +16,7 @@ MODULE_OBJS = \
 	resources.o \
 	scene.o \
 	scenedata.o \
+	wheelbarrow.o \
 	yard.o
 
 # This module can be built as a plugin

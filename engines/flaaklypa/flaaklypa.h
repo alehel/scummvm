@@ -26,6 +26,7 @@
 #include "common/error.h"
 #include "common/fs.h"
 #include "common/hash-str.h"
+#include "common/keyboard.h"
 #include "common/random.h"
 #include "common/serializer.h"
 #include "common/util.h"
@@ -72,8 +73,16 @@ private:
 	};
 	Common::Array<AutoClick> _autoClicks;
 
+	struct AutoKey {
+		uint32 time;
+		Common::KeyCode key;
+		bool down;
+	};
+	Common::Array<AutoKey> _autoKeys;
+
 	void switchScene();
 	void parseAutoClicks();
+	void parseAutoKeys();
 
 protected:
 	// Engine APIs

@@ -73,7 +73,7 @@ void FlaaklypaEngine::changeScene(const Common::String &name, int arg) {
 
 void FlaaklypaEngine::startGame(const Common::String &name) {
 	const SceneDef *def = findSceneDef(name.c_str());
-	if (!def || scumm_stricmp(name.c_str(), "puzzle") != 0) {
+	if (!def || (scumm_stricmp(name.c_str(), "puzzle") != 0 && scumm_stricmp(name.c_str(), "wheelbarrow") != 0)) {
 		// TODO: the other sub games and activities
 		warning("Sub game '%s' is not implemented yet", name.c_str());
 		return;
@@ -125,6 +125,48 @@ void FlaaklypaEngine::parseAutoClicks() {
 	}
 }
 
+// Development aid: "autokey=t:key[:hold];..." presses a key at t ms after
+// start and releases it hold ms later (default 100). Keys: left, right, up,
+// down, space, esc, tab, return or a single character.
+void FlaaklypaEngine::parseAutoKeys() {
+	if (!ConfMan.hasKey("autokey"))
+		return;
+	Common::StringTokenizer tok(ConfMan.get("autokey"), ";");
+	while (!tok.empty()) {
+		Common::StringTokenizer parts(tok.nextToken(), ":");
+		Common::String t = parts.nextToken(), name = parts.nextToken(), hold = parts.nextToken();
+		if (t.empty() || name.empty())
+			continue;
+		Common::KeyCode code;
+		if (name == "left")
+			code = Common::KEYCODE_LEFT;
+		else if (name == "right")
+			code = Common::KEYCODE_RIGHT;
+		else if (name == "up")
+			code = Common::KEYCODE_UP;
+		else if (name == "down")
+			code = Common::KEYCODE_DOWN;
+		else if (name == "space")
+			code = Common::KEYCODE_SPACE;
+		else if (name == "esc")
+			code = Common::KEYCODE_ESCAPE;
+		else if (name == "tab")
+			code = Common::KEYCODE_TAB;
+		else if (name == "return")
+			code = Common::KEYCODE_RETURN;
+		else
+			code = (Common::KeyCode)name[0];
+		AutoKey k;
+		k.time = (uint32)atoi(t.c_str());
+		k.key = code;
+		k.down = true;
+		_autoKeys.push_back(k);
+		k.time += hold.empty() ? 100 : (uint32)atoi(hold.c_str());
+		k.down = false;
+		_autoKeys.push_back(k);
+	}
+}
+
 void FlaaklypaEngine::switchScene() {
 	Common::String name = _nextScene;
 	int arg = _nextSceneArg;
@@ -169,6 +211,7 @@ Common::Error FlaaklypaEngine::run() {
 	if (ConfMan.hasKey("random_seed"))
 		_randomSource.setSeed(ConfMan.getInt("random_seed"));
 	parseAutoClicks();
+	parseAutoKeys();
 	uint32 startTime = g_system->getMillis();
 
 	// Development aid: "autoshot=<file>" with "autoshot_delay=<ms>" writes a
@@ -213,6 +256,19 @@ Common::Error FlaaklypaEngine::run() {
 			e.type = Common::EVENT_LBUTTONDOWN;
 			_scene->handleEvent(e);
 			e.type = Common::EVENT_LBUTTONUP;
+			_scene->handleEvent(e);
+		}
+
+		for (uint i = 0; i < _autoKeys.size();) {
+			if (g_system->getMillis() - startTime < _autoKeys[i].time) {
+				i++;
+				continue;
+			}
+			AutoKey k = _autoKeys[i];
+			_autoKeys.remove_at(i);
+			debug(1, "Auto key %d %s", k.key, k.down ? "down" : "up");
+			e.type = k.down ? Common::EVENT_KEYDOWN : Common::EVENT_KEYUP;
+			e.kbd = Common::KeyState(k.key);
 			_scene->handleEvent(e);
 		}
 
