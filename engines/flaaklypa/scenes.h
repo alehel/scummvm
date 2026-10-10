@@ -174,6 +174,31 @@ private:
 	int _longFrame, _shortFrame; ///< clock hand frames currently shown
 };
 
+/** Story page 12: the TV station (TV-stasjonen). */
+class TvstationScene : public Scene {
+public:
+	enum { kMonitors = 4 };
+
+	TvstationScene(FlaaklypaEngine *vm, const SceneDef *def);
+
+	void onInit(int arg) override;
+	void onMouseDown(int hotspot, int x, int y) override;
+	void onRightClick(int x, int y) override;
+	void onKey(const Common::KeyState &key) override;
+	void onAnimFinished(Anim *anim) override;
+	void onTimer(int id, int data) override;
+
+private:
+	void clearMonitor(int monitor);
+	void showMonitorStill(int monitor);
+	bool isMonitorBusy(int monitor);
+	int monitorOfStill(const char *name) const;
+	int pickFreeMonitor();
+
+	Common::String _reelName;   ///< "reel_NN" bitmap of this visit
+	static bool _carpartFound;  ///< TODO: profile; kept across visits like the original
+};
+
 } // End of namespace Flaaklypa
 
 #endif

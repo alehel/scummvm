@@ -225,6 +225,8 @@ Scene *createScene(FlaaklypaEngine *vm, const char *name) {
 		return new IntentScene(vm, def);
 	if (!scumm_stricmp(name, "desk"))
 		return new DeskScene(vm, def);
+	if (!scumm_stricmp(name, "tvstation"))
+		return new TvstationScene(vm, def);
 	return new Scene(vm, def);
 }
 

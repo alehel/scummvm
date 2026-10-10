@@ -1415,6 +1415,54 @@ navigator result -> `424dc0`, 0x11f -> `424d30`). Engine: `desk.cpp`.
   navigator's 0x7d2 override (needs a result callback from
   `showNavigator()`).
 
+## Story page `tvstation` ("TV-stasjonen")
+
+Handler `FUN_004279a0` (`tvstation.cpp`, `TvstationScene`). The TV
+station (the fact texts mention Småfiks at the editing table): an editing
+desk with four monitors, a panel of six red buttons, a crank and a film
+reel on top, a fuse box on the wall, and one character (clips
+`S12AN-RAN-*`, hotspot 5; idle `RAN-001`, bored `RAN-002/003`, reaction
+`RAN-004/005`). Music `ambience5`.
+
+* Init (`427a70`): two periodic timers (id 1 every 2 s, id 2 every 10 s),
+  each of the four monitors gets a random still (`monitorNb..Ne` bitmaps,
+  z -10; `427bb0`), the character is created, the film reel bitmap
+  `reel_NN` (hotspot 1, at 155,167, z -10) with NN = number of collected
+  items of collection category 1 (`FUN_0041b540(1)` reads the profile's
+  collection masks, `FUN_0041b690(1, mask)` counts the 18 items of the
+  category whose bit is set in the mask or in the built-in mask
+  `DAT_0049ca60[1]` = 1, so item 0 is always owned; capped at 12, no reel
+  when 0), `carpart` (hotspot 100, z -10) unless page profile key 0 says it
+  was found. Arg 0: `S12AN-SS-001` as a sequence plus narration
+  `S12AN-NAR-001`; else characters reset to idle.
+* Timer 1: a random monitor not currently playing a clip (`427ca0`: 100
+  random tries, then the first free one, then monitor 1) gets a new random
+  still. Timer 2: with probability 1/3 the `lights` clip plays (0,359).
+* Hotspots: 1 reel (hotspot of the `reel_NN` bitmap, `DAT_005b8a38`) ->
+  `movieplayer` activity (`FUN_0040cd70("movieplayer")`, via `startGame`,
+  not implemented yet); 2 the fuse box: `fuse`; 4 the crank on the desk
+  front: `S12AN-SS-002` (a character clip, starts when his current clip
+  ends); 11..13 three of the six red panel buttons (map 10..15; 10, 14, 15
+  do nothing): 11 monitor 3 still removed, sequence `monitor3a`,
+  `monitor3f`; 12 monitor 4: `monitor4a`; 13 monitor 1 (the low one on the
+  left): `monitor1a` (monitor 2 has no clip; after a clip ends the monitor
+  stays dark until timer 1 picks it); the clips are sequences, so the
+  cursor is hidden while they run (`monitor1a` and `monitor3f` are about
+  20 s each); 100 car part found: profile key 0 = 1, award dialog, bitmap
+  removed; 200..211 fact pages (fact.ini, 200..203 the monitors; handled by
+  the fact module). Map index 30 (a large area) has no handler.
+* Anim finished: `NAR-001` removed, then `NAR-002` plays when the profile's
+  session counter (profile key 0x400, incremented by the profile selection
+  `FUN_00412030`) is below 2; `NAR-002` removed. A finished monitor still
+  gets replaced (dead code, they are bitmaps).
+* Space removes the narrations (the framework stops the sequence); right
+  click: navigator `racing` / `buildacar`.
+* State across visits: none in the page itself; profile: car part found
+  (static member for now), collection count, session count.
+* TODO: profile collection mask (reel count fixed to 1), session counter
+  (NAR-002 always plays), car part flag in the profile, award dialog, fact
+  pages, the movie player.
+
 ## Development aids (config keys in the `[flaaklypa]` section)
 
 `start_scene`, `autoshot` / `autoshot_delay` / `autoshot_quit` (screenshot),

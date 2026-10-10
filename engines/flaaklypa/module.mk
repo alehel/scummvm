@@ -33,6 +33,7 @@ MODULE_OBJS = \
 	sockdrawer.o \
 	sound.o \
 	textinvader.o \
+	tvstation.o \
 	whackamole.o \
 	wheelbarrow.o \
 	yard.o
