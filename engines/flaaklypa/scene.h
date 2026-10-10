@@ -94,7 +94,7 @@ public:
 	 * Defines an element that has no entry in the scene tables (buttons and
 	 * other bitmaps the original loads through other modules).
 	 */
-	Anim *defineAnim(const char *name, bool smacker, bool transparent, int hotspot, int x, int y, int z = 0, bool visible = true);
+	Anim *defineAnim(const char *name, bool smacker, bool transparent, int hotspot, int x, int y, int z = 0, bool visible = true, bool loop = false);
 	/** Defines a procedurally drawn element, see Anim::createSurface(). */
 	Anim *defineSurfaceAnim(const char *name, int w, int h, uint32 keyColor, int hotspot = 0);
 
@@ -107,6 +107,7 @@ public:
 	void stopSequence();
 
 	// ---- characters (CHAR module)
+	/** Creates a character (FUN_0040a2b0); does nothing if it already exists. */
 	void addCharacter(int id, int hotspot);
 	void setCharacterZ(int id, int z);
 	void setCharacterAnims(int id, AnimList idle, AnimList bored, AnimList reaction);
@@ -123,7 +124,11 @@ public:
 	 * cycles like the idle list until setCharacterState() switches away.
 	 */
 	void playCharacterList(int id, AnimList list);
-	/** Removes the character's current clip and forgets it (FUN_0040a310). */
+	/**
+	 * Removes the character's current clip and deletes the character
+	 * (FUN_0040a310). Not to be called from onAnimStarted(), which can run
+	 * while the scene walks its characters.
+	 */
 	void stopCharacter(int id);
 	/** True while the character's current clip is on screen (FUN_0040a240). */
 	bool isCharacterActive(int id);

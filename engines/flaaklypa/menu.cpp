@@ -241,6 +241,8 @@ Scene *createScene(FlaaklypaEngine *vm, const char *name) {
 		return new GoodbyeScene(vm, def);
 	if (!scumm_stricmp(name, "outro"))
 		return new OutroScene(vm, def);
+	if (!scumm_stricmp(name, "pee"))
+		return new PeeScene(vm, def);
 	return new Scene(vm, def);
 }
 

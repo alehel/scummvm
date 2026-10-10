@@ -29,6 +29,7 @@ MODULE_OBJS = \
 	music.o \
 	outro.o \
 	outtent.o \
+	pee.o \
 	pipeline.o \
 	puzzle.o \
 	puzzledata.o \

@@ -360,6 +360,39 @@ private:
 	uint32 _startTime;
 };
 
+/** Story page 3: Ludvig's bush (pee). */
+class PeeScene : public Scene {
+public:
+	PeeScene(FlaaklypaEngine *vm, const SceneDef *def);
+
+	void onInit(int arg) override;
+	void onMouseDown(int hotspot, int x, int y) override;
+	void onRightClick(int x, int y) override;
+	void onKey(const Common::KeyState &key) override;
+	void onAnimStarted(Anim *anim) override;
+	void onAnimFinished(Anim *anim) override;
+	void onUpdate() override;
+
+private:
+	enum { kMaxPoints = 50 };
+
+	int pickBush();
+	void newFlight();
+	static int heading(const Common::Point &p0, const Common::Point &p1);
+
+	int _bushCount;              ///< clicks on the bush this visit
+	static int _bushMask;        ///< variants played, kept across visits like the original
+
+	// The flying butterfly
+	Common::Point _points[kMaxPoints]; ///< flight path
+	int _pointCount;
+	float _progress;             ///< 0..1 along the path
+	float _speed;                ///< path fraction per second
+	int _colour;                 ///< index into the butterfly clip names
+	uint32 _lastTick;
+	Common::String _butterfly;   ///< clip currently shown
+};
+
 } // End of namespace Flaaklypa
 
 #endif

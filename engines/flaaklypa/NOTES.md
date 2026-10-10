@@ -1727,6 +1727,61 @@ Ludvig watch the fireworks from the yard; music `track15`.
   glasses are removed. Right click: navigator (previous `goodbye`). Space:
   back to the menu (`FUN_0040cc30`).
 
+## Story page `pee` ("Ludvigs busk")
+
+Story page 3: the yard behind the house with the woodshed, Reodor's machine,
+Ludvig's bush, the outhouse and the flower bed; Ludvig stands in the middle.
+Parent `menu`, music `track3` (restarted on every visit: `FUN_0040b1f0(..,
+1)`). Handler `FUN_00426650`: 0x103 -> `FUN_00426730` init, 0x105 ->
+`FUN_00426970` mouse down, 0x107 -> `FUN_00426f10` right click (navigator:
+next `house`, previous `desk`), 0x10c -> `FUN_00426b50` key, 0x10f ->
+`FUN_00426b30` anim started, 0x110 -> `FUN_00426ba0` anim finished, 0x112
+-> `FUN_00426c10` frame tick. Engine: `pee.cpp` (`PeeScene`). This page uses
+its own hotspot numbering, not the 55..99/251.. ranges of the other pages.
+
+* Init: Ludvig is character 2 (hotspot 2, z 10; idle `S03AN-LUD-010/012`,
+  bored `LUD-001..008`, reaction `LUD-009`); `door` is added at z -10,
+  `carpart` and `3dglasses` at z -20 (the glasses sit behind the outhouse
+  door and show once the door clip has played and been removed). Arg 0
+  plays the intro `S03AN-SS-001A/B/C`; when `SS-001C` starts the narration
+  `S03AN-NAR-001` plays, followed by `NAR-002`. Other args reset the
+  characters to idle.
+* Hotspots (backdrop mask unless noted): 1 bottom right corner ->
+  `S03AN-SS-002`, then `desk` with arg 2 when it ends; 18 watering can ->
+  `SS-003`; 19 bush -> `SS-004A/B/C` or `SS-005` (`FUN_0040a150` pick of 2:
+  the visit's click counter is reset at init, the "played" mask is kept
+  across visits); 21 top of the pole -> the magpie (character 0x10, hotspot
+  21, idle `S03AN-MAG-001/002`) lands with `SS-006`; a click on it plays
+  `SS-009` (it flies off) and the character is deleted when that ends
+  (`FUN_0040a310`); 23 machine -> `SS-010`; 25 wheelbarrow -> sub game
+  `wheelbarrow`; 26 the flying butterfly (see below) -> sub game
+  `butterfly`; 27 flower bed -> `SS-014`; 29 fence -> activity `fence`; 30
+  the door clip -> plays it; 31 car part, 32 3D glasses (bitmaps); 39 ->
+  `desk` arg 1 (handled, but not in the mask); 200..206 fact pages
+  (`fact.ini`, factopedia cursor). 22 and 28 are in the mask but unhandled.
+  Space removes the narration clips.
+* The flying butterfly (`FUN_00426820` path, `FUN_00426c10` per frame): a
+  path of 25..49 points, starting at x -100 or 900 (random side) and a
+  random y in 0..299, then x stepping 1000 / (n - 1) towards the other side
+  and y = 150 + 100 sin(phase), phase += rand() / 65535 per point. Progress
+  t goes 0..1 at 0.05..0.1 per second (`FUN_00426950(0.05) + 0.075`); a frame
+  more than 999 ms after the previous one only resyncs; t > 1 starts a new
+  path with a new species. Position: linear in x and cosine interpolated in
+  y (`FUN_00426e10`) between points idx = (int)((n - 1) t) and (idx + 1) % 50
+  with the fraction `fmod` (`FUN_0048ef3a` is the C runtime's `_CIfmod`).
+  The clip is `sprintf("%s%d", {largeblue, smallwhite, bluemorph}[species],
+  heading)`, heading from `FUN_00426e50` (`FUN_00470070` normalises the 2D
+  vector, `FUN_0048ef70` is `_CIasin`; 0 up, clockwise, rounded to 45
+  degrees). The original renames one animation structure at `0x5b8960`
+  (smacker, transparent, looping, hotspot 26, z 100) and makes it clickable
+  within 20 px of its centre (`FUN_00413670(anim, 1, 20, 0)`, hotspot mode
+  1 in `FUN_00413750`: the square [c - r, c + r) and the distance to the
+  centre); the engine defines the 24 clips with `defineAnim(.., loop)` and
+  uses `Anim::setHitRadius()`.
+* TODO: profile (car part only while page key 0 is 0, set to 1 when found;
+  3D glasses only while 3D scene 3 is not found), the award dialogs
+  (`FUN_0041c150`, `FUN_0041c1b0(3)`), the fact pages, activity `fence`.
+
 ## Development aids (config keys in the `[flaaklypa]` section)
 
 `start_scene`, `autoshot` / `autoshot_delay` / `autoshot_quit` (screenshot),

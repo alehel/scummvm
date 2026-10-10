@@ -95,6 +95,12 @@ public:
 	 * bitmaps). The mask stays owned by the caller.
 	 */
 	void setHitMask(const Graphics::Surface *mask) { _hitMask = mask; }
+	/**
+	 * Makes the element clickable within r pixels of its centre instead of
+	 * on its opaque pixels (hotspot mode 1 of the original, FUN_00413670;
+	 * the pee page's flying butterfly). 0 restores the pixel test.
+	 */
+	void setHitRadius(int r) { _hitRadius = r; }
 	/** Character bit mask; animations sharing a bit cannot play at the same time. */
 	uint32 group() const { return _group; }
 	void setGroup(uint32 g) { _group = g; }
@@ -131,6 +137,7 @@ private:
 	int _x, _y, _z;
 	int _hotspot;
 	const Graphics::Surface *_hitMask;
+	int _hitRadius;
 	uint32 _group;
 	bool _added, _playing, _removeWhenDone;
 	bool _ownSurface;        ///< _frame was made by createSurface() and survives unload()
