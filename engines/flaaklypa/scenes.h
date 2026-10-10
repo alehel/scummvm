@@ -102,6 +102,27 @@ private:
 	static bool _carPartFound;           ///< TODO: profile key 0 of the page
 };
 
+/** Story page 4: the house. */
+class HouseScene : public Scene {
+public:
+	HouseScene(FlaaklypaEngine *vm, const SceneDef *def);
+
+	void onInit(int arg) override;
+	void onClose() override;
+	void onMouseDown(int hotspot, int x, int y) override;
+	void onRightClick(int x, int y) override;
+	void onKey(const Common::KeyState &key) override;
+	void onAnimFinished(Anim *anim) override;
+	void onTimer(int id, int data) override;
+
+private:
+	int pickRandom(int &count, int &mask, int n);
+
+	int _countWindow, _countBench, _countDoor;   ///< picks made this visit (reset on init)
+	static int _maskWindow, _maskBench, _maskDoor; ///< variants used since the last reset, kept across visits
+	int _audiopairsHotspot;                      ///< DAT_005b877c
+};
+
 } // End of namespace Flaaklypa
 
 #endif

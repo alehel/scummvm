@@ -189,6 +189,8 @@ Scene *createScene(FlaaklypaEngine *vm, const char *name) {
 		return new YardScene(vm, def);
 	if (!scumm_stricmp(name, "garage"))
 		return new GarageScene(vm, def);
+	if (!scumm_stricmp(name, "house"))
+		return new HouseScene(vm, def);
 	if (!scumm_stricmp(name, "hopscotch"))
 		return new HopscotchScene(vm, def);
 	if (!scumm_stricmp(name, "puzzle"))
