@@ -277,7 +277,9 @@ private:
 	AniDecoder *_ani;
 	Common::Point _aniPos;
 	uint32 _aniNextFrame;
-	Graphics::Surface _aniBackground;
+	Graphics::Surface _aniBackground; // canvas of the frames painted so far
+	Graphics::Surface _aniFrame;      // frame decoded but not yet painted
+	Common::Rect _aniFrameRect;
 	Common::Array<TrailEntry> _trail;
 	bool _trailNavigating;       // returning to a trail entry: do not record it again
 	uint _pendingPopup;          // popup to open once the pending base page is up

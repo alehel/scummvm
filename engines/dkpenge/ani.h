@@ -91,7 +91,6 @@ private:
 	uint32 _sampleRate;
 	uint16 _blockAlign;
 	uint16 _bitsPerSample;
-	uint32 _audioChunkSize;
 	int _curFrame;
 	Graphics::Surface _frame;
 	Audio::QueuingAudioStream *_audio;

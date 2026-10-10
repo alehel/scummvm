@@ -359,9 +359,35 @@ void DKPengeEngine::composeScreen() {
 		_basePage->draw(_screen, *_res);
 	for (uint i = 0; i < _popups.size(); i++)
 		_popups[i]->draw(_screen, *_res);
-	if (_ani && _aniBackground.getPixels()) {
-		// Composite the animation's current state on top
-		_screen.copyRectToSurface(_aniBackground, _aniPos.x, _aniPos.y, Common::Rect(0, 0, _aniBackground.w, _aniBackground.h));
+	if (_ani) {
+		// The animation's frames accumulate on a canvas placed at the
+		// action's position; the canvas starts as a copy of the page under
+		// it, so the parts no frame has painted show the page
+		if (_aniFrame.getPixels()) {
+			int needW = MAX<int>(_aniFrameRect.right, _aniBackground.w), needH = MAX<int>(_aniFrameRect.bottom, _aniBackground.h);
+			if (needW > _aniBackground.w || needH > _aniBackground.h) {
+				Graphics::Surface bigger;
+				bigger.create(needW, needH, Graphics::PixelFormat::createFormatCLUT8());
+				Common::Rect under(_aniPos.x, _aniPos.y, _aniPos.x + needW, _aniPos.y + needH);
+				under.clip(Common::Rect(0, 0, _screen.w, _screen.h));
+				if (!under.isEmpty())
+					bigger.copyRectToSurface(_screen, under.left - _aniPos.x, under.top - _aniPos.y, under);
+				if (_aniBackground.getPixels())
+					bigger.copyRectToSurface(_aniBackground, 0, 0, Common::Rect(0, 0, _aniBackground.w, _aniBackground.h));
+				_aniBackground.free();
+				_aniBackground = bigger;
+			}
+			_aniBackground.copyRectToSurface(_aniFrame, _aniFrameRect.left, _aniFrameRect.top, Common::Rect(0, 0, _aniFrame.w, _aniFrame.h));
+			_aniFrame.free();
+		}
+		if (_aniBackground.getPixels()) {
+			Common::Rect src(0, 0, _aniBackground.w, _aniBackground.h);
+			Common::Rect dst(src);
+			dst.translate(_aniPos.x, _aniPos.y);
+			dst.clip(Common::Rect(0, 0, _screen.w, _screen.h));
+			if (!dst.isEmpty())
+				_screen.copyRectToSurface(_aniBackground, dst.left, dst.top, Common::Rect(dst.left - _aniPos.x, dst.top - _aniPos.y, dst.right - _aniPos.x, dst.bottom - _aniPos.y));
+		}
 	}
 	_dirty = false;
 }
@@ -380,7 +406,7 @@ void DKPengeEngine::render() {
 		return;
 	_system->copyRectToScreen(_screen.getPixels(), _screen.pitch, 0, 0, _screen.w, _screen.h);
 	_system->updateScreen();
-	if (!_dumpDir.empty() && !_ani)
+	if (!_dumpDir.empty())
 		dumpSurface(_screen);
 }
 
@@ -2120,6 +2146,7 @@ void DKPengeEngine::playAnimation(const Common::String &dir, const Common::Strin
 	_aniPos = pos;
 	_aniNextFrame = _system->getMillis();
 	_aniBackground.free();
+	_aniFrame.free();
 	_mixer->stopHandle(_aniAudioHandle);
 	_mixer->playStream(Audio::Mixer::kSFXSoundType, &_aniAudioHandle, _ani->getAudioStream());
 }
@@ -2134,22 +2161,18 @@ void DKPengeEngine::updateAnimation() {
 	if (!_ani->decodeNextFrame(dirty) || _ani->getCurFrame() >= (int)_ani->getFrameCount()) {
 		delete _ani;
 		_ani = nullptr;
+		_aniBackground.free();
+		_aniFrame.free();
 		_dirty = true;
 		return;
 	}
 	_aniNextFrame = now + 1000 / _ani->getFrameRate();
 	const Graphics::Surface &frame = _ani->getFrame();
-	if (frame.getPixels()) {
-		if (!_aniBackground.getPixels())
-			_aniBackground.create(MAX<int>(dirty.right, 1), MAX<int>(dirty.bottom, 1), Graphics::PixelFormat::createFormatCLUT8());
-		if (dirty.right > _aniBackground.w || dirty.bottom > _aniBackground.h) {
-			Graphics::Surface bigger;
-			bigger.create(MAX<int>(dirty.right, _aniBackground.w), MAX<int>(dirty.bottom, _aniBackground.h), Graphics::PixelFormat::createFormatCLUT8());
-			bigger.copyRectToSurface(_aniBackground, 0, 0, Common::Rect(0, 0, _aniBackground.w, _aniBackground.h));
-			_aniBackground.free();
-			_aniBackground = bigger;
-		}
-		_aniBackground.copyRectToSurface(frame, dirty.left, dirty.top, Common::Rect(0, 0, frame.w, frame.h));
+	// Audio-only chunks carry no picture; a frame waits for composeScreen
+	if (frame.getPixels() && !dirty.isEmpty()) {
+		_aniFrame.free();
+		_aniFrame.copyFrom(frame);
+		_aniFrameRect = dirty;
 	}
 	_dirty = true;
 }

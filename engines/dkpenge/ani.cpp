@@ -31,7 +31,7 @@
 namespace DKPenge {
 
 AniDecoder::AniDecoder() : _stream(nullptr), _frameCount(0), _fps(0), _prerollMul(0), _formatTag(0), _channels(0),
-		_sampleRate(0), _blockAlign(0), _bitsPerSample(0), _audioChunkSize(0), _curFrame(-1), _audio(nullptr) {
+		_sampleRate(0), _blockAlign(0), _bitsPerSample(0), _curFrame(-1), _audio(nullptr) {
 }
 
 AniDecoder::~AniDecoder() {
@@ -71,9 +71,8 @@ bool AniDecoder::load(Common::SeekableReadStream *stream) {
 	_blockAlign = stream->readUint16LE();
 	_bitsPerSample = stream->readUint16LE();
 	stream->seek(fmtStart + fmtSize);
-	stream->readUint16LE(); // 1
-	_audioChunkSize = stream->readUint32LE();
-	stream->skip(16);
+	// The chunks follow the wave format directly: a 22-byte header, the
+	// "funky!" magic, the audio bytes, then the RLE video of a dirty rect
 
 	if (_fps == 0)
 		_fps = 10;
@@ -110,6 +109,9 @@ bool AniDecoder::readChunkHeader(uint32 &audioSize, Common::Rect &rect, uint32 &
 	rawSize = _stream->readUint32LE();
 	compSize = _stream->readUint32LE();
 	_stream->skip(6); // "funky!"
+	// A truncated final chunk (GNGMAIN.ANI carries one) ends the animation
+	if (_stream->pos() + audioSize + compSize > (uint32)_stream->size())
+		return false;
 	return true;
 }
 
