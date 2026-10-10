@@ -31,7 +31,13 @@
 
 namespace Flaaklypa {
 
-static const char *const kDataDirs[] = { "lang", "lang1", "lang2", "lang3", "data", "data1", "data2", "data3", nullptr };
+// Search order of the original (FUN_0040d6d0): the add-on sets from the
+// highest down, each language container before its data container, then
+// the base containers. The containers are merged into one directory where
+// the first one to provide a file wins (FUN_0040f4b0), so an add-on set
+// replaces files of the sets below it (data3 has the Gold edition's
+// sceneindex/scene.ini and backdrop, lang3 the full language.ini).
+static const char *const kDataDirs[] = { "lang3", "data3", "lang2", "data2", "lang1", "data1", "lang", "data", nullptr };
 
 Resources::Resources() {
 }

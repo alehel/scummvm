@@ -8,6 +8,7 @@ MODULE_OBJS = \
 	buildabike.o \
 	beemaze.o \
 	bugzzz.o \
+	button.o \
 	console.o \
 	cursor.o \
 	dialog.o \
@@ -28,6 +29,7 @@ MODULE_OBJS = \
 	resources.o \
 	scene.o \
 	scenedata.o \
+	sceneindex.o \
 	sockdrawer.o \
 	textinvader.o \
 	whackamole.o \

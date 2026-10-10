@@ -31,6 +31,7 @@
 #include "flaaklypa/buildabike.h"
 #include "flaaklypa/pipeline.h"
 #include "flaaklypa/puzzle.h"
+#include "flaaklypa/sceneindex.h"
 #include "flaaklypa/scenes.h"
 #include "flaaklypa/sockdrawer.h"
 #include "flaaklypa/textinvader.h"
@@ -185,6 +186,8 @@ Scene *createScene(FlaaklypaEngine *vm, const char *name) {
 		return nullptr;
 	if (!scumm_stricmp(name, "menu"))
 		return new MenuScene(vm, def);
+	if (!scumm_stricmp(name, "sceneindex"))
+		return new SceneindexScene(vm, def);
 	if (!scumm_stricmp(name, "yard"))
 		return new YardScene(vm, def);
 	if (!scumm_stricmp(name, "garage"))
