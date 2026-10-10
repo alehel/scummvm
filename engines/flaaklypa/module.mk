@@ -8,6 +8,7 @@ MODULE_OBJS = \
 	flaaklypa.o \
 	font.o \
 	gem3d.o \
+	lettersort.o \
 	menu.o \
 	metaengine.o \
 	music.o \
