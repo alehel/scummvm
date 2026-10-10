@@ -1223,6 +1223,43 @@ buttons (2 help `FUN_0041e580`, 3 exit `FUN_0040cc30`, 4 album -> scene
   the sub game abort confirmation, the "info" fact page, `sound.ini`
   volumes, the LOVELYFLIES cheat.
 
+## Story page `house` ("På tunet")
+
+Reodor's house (`S04`, handler `FUN_00425160`, `house.cpp`, `HouseScene`).
+Solan (character 1, hotspot 51) and Ludvig (character 2, hotspot 52) idle
+in front of the house; the clips of the two share the group bits 1 and 2.
+Music `track4` (the original restarts it even if it already plays) plus a
+random ambience clip (`FUN_0040b0f0`, TODO). Navigator (right click):
+next `tvroom`, previous `desk`.
+
+* Init with arg 0 (coming from the menu/navigator): the cursor is hidden and
+  a 2 s timer (id 0) starts the narration `S04AN-NAR-001` and the intro
+  sequence `S04AN-SS-001` (75 s, Solan and Ludvig at the door); a 64 s timer
+  (id 1) then starts the looping windmill clip `S04AN-SS-008`. Init with
+  arg 1 (back from a sub game): the windmill loop plays and the characters
+  are reset to idle. Space removes the narration, starts the windmill loop
+  if it is not running and kills the pending timer (the framework aborts
+  the sequence); `S04AN-NAR-001` is removed when it finishes.
+* The hidden car part (`carpart`, hotspot 20) and 3D glasses (`3dglasses`,
+  hotspot 22) bitmaps are added at z -10 (TODO: only while not yet found:
+  profile key 0 / 3D scene 4); clicking them removes the bitmap (TODO: award
+  dialogs, profile update).
+* Hotspots (the mask has no hotspot 1; 11, 12, 13 and 19 are in the mask
+  but unused): 2 `audiopairs` (the original compares against a variable set
+  to 2 at init), 16 `hopscotch`, 21 `whackamole`; one clip sequences: 3
+  `smoke` (chimney), 4 `S04AN-SS-014`, 6 `S04AN-SS-005`, 7 `S04AN-SS-009`,
+  8 `S04AN-SS-006`, 9 `S04AN-SS-004`, 10 `S04AN-SS-015a`, 17 `S04AN-SS-013a`,
+  18 `S04AN-SS-015b`; two variants picked without repeats (`FUN_0040a150`):
+  5 `S04AN-SS-002a`/`002c`, 14 `S04AN-SS-015c`/`015d`, 15
+  `S04AN-SS-013b`/`013c`. Hotspots 100..116 are fact pages
+  (`lang/house/fact.ini`, handled by the fact module: TODO).
+* State: the three "pick without repeats" counters are reset at init, the
+  three masks are globals and survive a visit (static members).
+* Clips of this page are spread over `data/house`, `data1..3/house` and
+  `lang1/house` (the intro, narration and the longer dialogue clips).
+* TODO: ambience clip, fact pages, profile (car part / 3D glasses found),
+  award dialogs, the navigator dialog itself (engine stub).
+
 ## Development aids (config keys in the `[flaaklypa]` section)
 
 `start_scene`, `autoshot` / `autoshot_delay` / `autoshot_quit` (screenshot),

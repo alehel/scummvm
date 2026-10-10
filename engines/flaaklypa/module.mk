@@ -14,6 +14,7 @@ MODULE_OBJS = \
 	font.o \
 	gem3d.o \
 	hopscotch.o \
+	house.o \
 	lettersort.o \
 	hustle.o \
 	menu.o \
