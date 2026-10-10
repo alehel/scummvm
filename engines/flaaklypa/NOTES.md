@@ -430,10 +430,12 @@ table, not a function in the Ghidra project): 0x103 -> `FUN_00428bd0` init,
   Key press in state 1 (`FUN_00429230`): plays the sound, yellow; the
   second press starts the 650 ms timer. Timer (`FUN_00429890`): both red
   when equal, else green. Miss: tries - 1, game over at 0. Hit
-  (`FUN_00429700`): score + 80; if the left machine has 14 parts: level +
-  1, score + 25 x tries (added after the text was drawn), state 3, `left`
-  plays; else a left part is added, and when no green key is left: a new
-  board and tries + 3. `left` done -> `money`; `money` done: if the right
+  (`FUN_00429700`): score + 80; if the left machine already has 14 parts
+  (the count is tested before the part is added, so the machine runs on
+  the 15th pair): level + 1, score + 25 x tries (added after the text was
+  drawn), state 3, `left` plays; else a left part is added, and when no
+  green key is left: a new board and tries + 3. Likewise `money` tests the
+  right count before adding, so `right` runs on the 15th left machine. `left` done -> `money`; `money` done: if the right
   machine has 14 parts `right` plays, else `left` is removed, a right part
   is added and state 4 removes the left parts one per tick; tries + 5.
   `right` done: everything removed, counts 0, state 1, new board. Game
