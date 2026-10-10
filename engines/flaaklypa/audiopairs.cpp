@@ -467,8 +467,8 @@ void AudiopairsScene::startGame() {
 	setState(kStateClearAll);
 }
 
-// FUN_00429700: a pair was found. Returns true when the left machine is
-// complete and its clip has been started.
+// FUN_00429700: a pair was found. The part count is tested before the part
+// is added, so the machine runs on the pair after the 14th part.
 void AudiopairsScene::pairFound() {
 	_score += kScorePerPair;
 	updateScore();
