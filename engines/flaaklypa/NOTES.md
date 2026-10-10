@@ -283,3 +283,58 @@ colour 0x00ff00, flags 0x101 = centred.
 `start_scene`, `autoshot` / `autoshot_delay` / `autoshot_quit` (screenshot),
 `autoclick=t:x,y;t:x,y,m` (synthetic clicks, `m` = move only, t in ms after
 start), `random_seed` (deterministic boards).
+
+## Mini game checklist
+
+From `sceneindex/scene.ini` and `language.ini` (Gold edition). Tick off as
+they get ported; each needs a scene class, `createScene()` and
+`FlaaklypaEngine::startGame()`.
+
+Sub games (`[subgame]`, score based):
+
+| Done | Scene | Title | Started from | Data |
+|---|---|---|---|---|
+| | lettersort | Postsorteringsmaskinen | yard | data |
+| | bugzzz | Larveliv i leiren | yard | data |
+| | sockdrawer | Sokkeskapet | desk | data |
+| | wheelbarrow | Eplehøsten | pee | data |
+| | hopscotch | Solan og Ludvig i Paradis | house | data |
+| | audiopairs | Reodors Lydmaskin | house | data |
+| | textinvader | Ordspillet | goodbye | data2 |
+| | balloonhunt | Solans ballongjakt | outtent | data2 (no sceneDefs entry yet) |
+| | whackamole | Dra meg baklengs! | house | data2 |
+| | beemaze | Ludvigs Labyrint | tvroom | data |
+| | buildabike | Reodors sykkelverksted | garage | data |
+| | mountain | (no title in language.ini) | morning | data (no sceneDefs entry yet) |
+| | pipeline | Oljeeventyret | outtent | data |
+| | butterfly | Sommerfugler i magen | pee | data |
+| | hustle | Emanuels utfordring | intent | data |
+
+Activities (`[activity]`, open ended):
+
+| Done | Scene | Title | Started from | Data |
+|---|---|---|---|---|
+| | gallery | Karakter galleri | tvroom | data |
+| | bouquet | Ludvigs blomsterbinderi | desk | data |
+| | fence | Musikkgjerdet | pee | data |
+| | colorfill | Reodors tegnebord | desk | data2 |
+| | jigsaw | Puslespillet | yard | data |
+| | mahjong | Mah Jongg | outtent | data2 |
+| | draughts | Damm | tvroom | data |
+| x | puzzle | Solines Smykkeskrin | intent | data2 (message box, high score, help open) |
+| | sliding | Skyvepusslespillet | garage | data |
+| | chess | Sjakk | intent | data |
+| | movieplayer | Filmfremviser | tvstation | data |
+| | activity | Aktivitetssenteret | sceneindex | data |
+
+Add-on set 3 (CD 2, fourth index group):
+
+| Done | Scene | Title | Data |
+|---|---|---|---|
+| | gametrivia | Kjentmannsprøven | data3 |
+| | anaglyph | 3D-titter | data3 |
+| | mathlab | Reodors Tallmaskin | data3 |
+| | synonym | Reodors Ordmaskin | data3 |
+
+Not games: `buildacar` and `racing` are story pages, `buttercol`
+(Sommerfugl kolleksjon) is the collection screen of `butterfly`.
