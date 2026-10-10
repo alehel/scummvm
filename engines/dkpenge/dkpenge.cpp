@@ -55,7 +55,7 @@ namespace DKPenge {
 
 DKPengeEngine::DKPengeEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst),
 		_rnd("dkpenge"), _script(nullptr), _hoverObject(nullptr), _hoverPage(nullptr), _db(nullptr), _res(nullptr), _basePage(nullptr), _dirty(true), _paletteDirty(true), _pendingBasePage(0),
-		_pendingBase(false), _dumpCount(0), _busy(0), _busyStart(0), _walkSprite(nullptr), _ani(nullptr), _aniNextFrame(0), _quest(nullptr), _quiz(nullptr), _spyChangedFlag(false), _saveSlot(-1), _savedPage(0), _pressedObject(nullptr), _pressedPage(nullptr), _dragging(false), _dragPage(nullptr), _dungeonTimerEnd(0), _scrollObject(nullptr), _scrollPage(nullptr), _scrollNext(0), _scrollStep(1), _ambientNext(0), _castleSection(-1),
+		_pendingBase(false), _dumpCount(0), _busy(0), _busyStart(0), _walkSprite(nullptr), _ani(nullptr), _aniNextFrame(0), _quest(nullptr), _quiz(nullptr), _spyChangedFlag(false), _saveSlot(-1), _savedPage(0), _pressedObject(nullptr), _pressedPage(nullptr), _dragging(false), _dragPage(nullptr), _dungeonTimerEnd(0), _scrollObject(nullptr), _scrollPage(nullptr), _scrollNext(0), _scrollStep(1), _ambientNext(0), _ambientDone(false), _castleSection(-1),
 		_trailNavigating(false), _pendingPopup(0), _scrollBarDrag(false), _scrollBarGrab(0), _editFocus(nullptr), _editFocusPage(nullptr), _pendingTransition(0), _noScreenUpdate(false), _repeatNext(0) {
 	const Common::FSNode gameDataDir(ConfMan.getPath("path"));
 	SearchMan.addSubDirectoryMatching(gameDataDir, "dkcode");
@@ -150,7 +150,7 @@ Common::Error DKPengeEngine::run() {
 	// Each entry is "x,y" for a click, "m:x,y" for a mouse move, "p:x,y"
 	// for a button press, "r:x,y" for a release, "s:slot,0" saves and
 	// "l:slot,0" loads a game, "t:code,0" types the character code
-	// (13 = Enter, 8 = Backspace, 9 = Tab), "o:page,0" opens a popup page,
+	// (13 = Enter, 8 = Backspace, 9 = Tab), "o:page,0" opens a popup page, "x:page,0" closes it,
 	// "g:id,0" presses the centre of object id, "d:dx,dy" moves the mouse by
 	// a delta (dragging when a button is held), "u:0,0" releases in place.
 	Common::Array<Common::Point> clicks;
@@ -217,6 +217,8 @@ Common::Error DKPengeEngine::run() {
 					releaseMouse(pt);
 				} else if (kind == 'o') {
 					openPopup(pt.x);
+				} else if (kind == 'x') {
+					closePopup(pt.x);
 				} else if (kind == 't') {
 					// Control codes map to their keys (13 Enter, 8 Backspace, 9 Tab);
 					// letters carry their own code
@@ -450,6 +452,8 @@ void DKPengeEngine::openBasePage(uint index, const Common::Point &scroll) {
 	_dragPage = nullptr;
 	_hoverPage = nullptr;
 	resetBusy();
+	// The new page's ZoomAmbientSoundObj, if any, starts afresh
+	_ambientDone = false;
 	closeAllPopups();
 	if (_basePage)
 		pageClosing(_basePage);
@@ -462,6 +466,11 @@ void DKPengeEngine::openBasePage(uint index, const Common::Point &scroll) {
 	}
 	applyQuestObjects(_basePage, true);
 	setupCollages(_basePage);
+	// on_preopen runs before the page is first drawn (the Spy Hut arranges
+	// its spies, box icons and hotspots by the chosen spy)
+	runPageEvents(_basePage, kEventPreOpen);
+	if (shouldQuit() || _pendingBase || !_basePage)
+		return;
 	// A zoomed page starts at its zoom position, before anything is drawn
 	if (scroll.x || scroll.y)
 		_basePage->setScroll(scroll);
@@ -523,6 +532,11 @@ void DKPengeEngine::openPopup(uint index) {
 	debugC(2, kDebugGraphics, "DKPenge: popup %u at %d,%d %dx%d", index, page->getBounds().left, page->getBounds().top, page->getBounds().width(), page->getBounds().height());
 	applyQuestObjects(page, true);
 	setupCollages(page);
+	runPageEvents(page, kEventPreOpen);
+	if (shouldQuit() || _pendingBase || !pageAlive(page)) {
+		endSyncBusy();
+		return;
+	}
 	recordTrail(page, true);
 	_dirty = true;
 	render();
@@ -552,6 +566,8 @@ void DKPengeEngine::closePopup(uint index) {
 			delete _popups[i];
 			_popups.remove_at(i);
 			_dirty = true;
+			if (_popups.empty())
+				resumeAmbientSound();
 			return;
 		}
 	}
@@ -785,7 +801,15 @@ void DKPengeEngine::runAction(const Action *a, LivePage *page, LiveObject *obj) 
 			stopWave();
 			break;
 		case 0xf:
+			// FUN_00439190(0) then FUN_00438e70: the busy level is cleared and
+			// the pointer re-synchronised whether or not it was raised
 			setBusy(0);
+			resyncPointer();
+			break;
+		case 0xd:
+			// Finishes the zoom page's ambient sound (FUN_0044b9d0 on the
+			// active ZoomAmbientSoundObj) before a popup covers the page
+			finishAmbientSound();
 			break;
 		case 3: {
 			// Toggles the chest's lid artwork (objects 0 and 1 of the chest panel)
@@ -1443,6 +1467,10 @@ void DKPengeEngine::scrollStripBy(int st) {
 void DKPengeEngine::updateAmbientSound(uint32 now, bool force) {
 	if (!force && now < _ambientNext)
 		return;
+	// A finished object ignores its timer and the scrolling (FUN_0044bb80,
+	// FUN_0044bf80) until it is resumed
+	if (_ambientDone)
+		return;
 	_ambientNext = now + 4000;
 	Common::String name;
 	LivePanel *zoomPanel = nullptr;
@@ -1476,6 +1504,45 @@ void DKPengeEngine::updateAmbientSound(uint32 now, bool force) {
 		return;
 	debugC(1, kDebugSound, "DKPenge: ambient sound '%s'", name.c_str());
 	playWaveChannel(_basePage->getDir(), name, -2, true);
+}
+
+// Whether the base page carries a ZoomAmbientSoundObj (the original keeps
+// the active one in DAT_004acaa8)
+bool DKPengeEngine::hasZoomAmbient() const {
+	if (!_basePage)
+		return false;
+	const Common::Array<LivePanel *> &panels = _basePage->getPanels();
+	for (uint i = 0; i < panels.size(); i++)
+		for (uint k = 0; k < panels[i]->objects.size(); k++)
+			if (panels[i]->objects[k].obj->cls == kObjZoomAmbientSoundObj)
+				return true;
+	return false;
+}
+
+// FUN_0044b9d0: GeneralPurposeAction 13 and the page-opened broadcast
+// silence the ambience and mark the object done; the region it was
+// playing is remembered for the resume
+void DKPengeEngine::finishAmbientSound() {
+	if (_ambientDone || !hasZoomAmbient())
+		return;
+	_ambientDone = true;
+	if (!_ambientName.empty()) {
+		debugC(1, kDebugSound, "DKPenge: ambient sound '%s' finished", _ambientName.c_str());
+		stopWaveChannel(-2, _ambientName);
+	}
+}
+
+// FUN_0044b990: the page-closed broadcast (WM_DESTROY, FUN_0041ddd0) with
+// no other page left open resumes a finished object, replaying the region
+// it had; the next timer tick follows the view if it has moved since
+void DKPengeEngine::resumeAmbientSound() {
+	if (!_ambientDone)
+		return;
+	_ambientDone = false;
+	if (!toggleState(0x12) || !_basePage || _ambientName.empty())
+		return;
+	debugC(1, kDebugSound, "DKPenge: ambient sound '%s' resumed", _ambientName.c_str());
+	playWaveChannel(_basePage->getDir(), _ambientName, -2, true);
 }
 
 // The castle of the Castle Guide: its colour reference bitmap gives every
@@ -3320,6 +3387,10 @@ void DKPengeEngine::focusEditBox(LiveObject *lo, LivePage *page) {
 // A page is about to close: the chest scroll popup saves its answers and,
 // after its OK was pressed, marks the right ones
 void DKPengeEngine::pageClosing(LivePage *page) {
+	// on_close runs while the page still stands (the Dungeon's leaves
+	// quest mode 3 behind); not while the engine is being torn down
+	if (!shouldQuit() && pageAlive(page))
+		runPageEvents(page, kEventClose);
 	if (_editFocusPage == page) {
 		_editFocus = nullptr;
 		_editFocusPage = nullptr;

@@ -137,6 +137,9 @@ public:
 	void updateScrolling(uint32 now);
 	void scrollStripBy(int st);
 	void updateAmbientSound(uint32 now, bool force);
+	bool hasZoomAmbient() const;
+	void finishAmbientSound();
+	void resumeAmbientSound();
 	LiveObject *findZoomCaption(int id, LivePage *page);
 	Quest *getQuest() { return _quest; }
 	Quiz *getQuiz() { return _quiz; }
@@ -297,6 +300,7 @@ private:
 	int _scrollStep;
 	Common::String _ambientName;  // looping wave of the zoom page region in view
 	uint32 _ambientNext;
+	bool _ambientDone;            // finished (silenced) until the last popup closes
 	Audio::SoundHandle _aniAudioHandle;
 	AniDecoder *_ani;
 	Common::Point _aniPos;
