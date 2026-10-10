@@ -110,6 +110,23 @@ public:
 	void addCharacter(int id, int hotspot);
 	void setCharacterZ(int id, int z);
 	void setCharacterAnims(int id, AnimList idle, AnimList bored, AnimList reaction);
+	/** Replaces one of a character's lists (FUN_0040a360: 1 idle, 2 bored, 3 reaction, 4 own). */
+	void setCharacterList(int id, int which, AnimList list);
+	/**
+	 * Switches a character to a list (FUN_0040a790): 1 idle, 2 bored, 3 reaction,
+	 * 4 its own list, 5 the running sequence. The next clip of that list starts
+	 * at once when the character's group is free, else after the current clip.
+	 */
+	void setCharacterState(int id, int state);
+	/**
+	 * Gives the character an own list and starts it (FUN_0040a4e0). The list
+	 * cycles like the idle list until setCharacterState() switches away.
+	 */
+	void playCharacterList(int id, AnimList list);
+	/** Removes the character's current clip and forgets it (FUN_0040a310). */
+	void stopCharacter(int id);
+	/** True while the character's current clip is on screen (FUN_0040a240). */
+	bool isCharacterActive(int id);
 	/** Puts every character into its idle loop. */
 	void resetCharacters();
 
@@ -147,6 +164,7 @@ private:
 		kListIdle = 1,
 		kListBored = 2,
 		kListReaction = 3,
+		kListOwn = 4,
 		kListSequence = 5
 	};
 
@@ -166,7 +184,7 @@ private:
 		int id;                 ///< bit in the animation group masks
 		int hotspot;            ///< hotspot index of its pixels
 		int z;
-		AnimQueue lists[4];     ///< unused, idle, bored, reaction
+		AnimQueue lists[5];     ///< unused, idle, bored, reaction, own
 		int state;              ///< 0 inactive, else the list to play next from (kList*)
 		int mode;               ///< list the current clip came from
 		Anim *current;
@@ -186,6 +204,7 @@ private:
 	void setCursorMode(CursorMode mode);
 	void characterClicked(int hotspot);
 	void characterAnimFinished(Character &c, Anim *anim);
+	Character *findCharacter(int id);
 	void characterPlayNext(Character &c, int list);
 	void sequenceAnimFinished(Anim *anim);
 	void sequenceClear();

@@ -249,8 +249,7 @@ void YardScene::onMouseDown(int hotspot, int x, int y) {
 }
 
 void YardScene::onRightClick(int x, int y) {
-	// TODO: navigator dialog
-	debug(1, "Yard: navigator not implemented");
+	_vm->showNavigator("desk", nullptr);
 }
 
 void YardScene::onKey(const Common::KeyState &key) {

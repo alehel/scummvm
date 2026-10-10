@@ -123,6 +123,20 @@ public:
 	/** Looks up "section:KEY" in lang/common/language.ini (Windows-1252), like the original's LANG_Get. */
 	Common::String getString(const Common::String &key);
 
+	/**
+	 * The right click navigator of the story pages (FUN_00421560): a small
+	 * dialog with previous/next page, help and exit buttons. Either page
+	 * name may be nullptr (button disabled); the args are passed to
+	 * changeScene() for the respective page.
+	 */
+	void showNavigator(const char *next, const char *prev, int nextArg = 0, int prevArg = 0);
+	/**
+	 * Modal message box (FUN_00421310 / FUN_00420f40) with a title line, a
+	 * text and an OK button; "title"/"text" are language.ini keys or plain
+	 * text. Returns when dismissed.
+	 */
+	void messageBox(const Common::String &title, const Common::String &text, int type = 0);
+
 	bool hasFeature(EngineFeature f) const override {
 		return
 		    (f == kSupportsReturnToLauncher);

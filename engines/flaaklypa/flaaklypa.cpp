@@ -121,6 +121,16 @@ void FlaaklypaEngine::endGame() {
 	changeScene(target, 1);
 }
 
+void FlaaklypaEngine::showNavigator(const char *next, const char *prev, int nextArg, int prevArg) {
+	// TODO: the navigate dialog (common/dialogue/navigate)
+	debug(1, "Navigator: next '%s' (%d), prev '%s' (%d)", next ? next : "-", nextArg, prev ? prev : "-", prevArg);
+}
+
+void FlaaklypaEngine::messageBox(const Common::String &title, const Common::String &text, int type) {
+	// TODO: the message box dialog (common/dialogue/msgbox)
+	debug(1, "Message box (%d): '%s' / '%s'", type, getString(title).c_str(), getString(text).c_str());
+}
+
 Common::String FlaaklypaEngine::getString(const Common::String &key) {
 	if (!_language) {
 		_language = new Common::INIFile();

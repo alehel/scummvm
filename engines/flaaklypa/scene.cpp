@@ -207,6 +207,77 @@ void Scene::addCharacter(int id, int hotspot) {
 	_characters.push_back(c);
 }
 
+Scene::Character *Scene::findCharacter(int id) {
+	for (auto &c : _characters)
+		if (c.id == id)
+			return &c;
+	return nullptr;
+}
+
+void Scene::setCharacterList(int id, int which, AnimList list) {
+	Character *c = findCharacter(id);
+	if (!c || which < kListIdle || which > kListOwn)
+		return;
+	c->lists[which].set(list);
+	for (int i = 0; i < c->lists[which].count; i++) {
+		Anim *a = anim(c->lists[which].list[i]);
+		a->setHotspot(c->hotspot);
+		a->setGroup(a->group() | c->id);
+	}
+}
+
+void Scene::setCharacterState(int id, int state) {
+	Character *c = findCharacter(id);
+	if (!c || state < kListIdle || state > kListSequence)
+		return;
+	c->state = state;
+	if (state == kListSequence) {
+		characterPlayNext(*c, kListSequence);
+		return;
+	}
+	// FUN_0040a7c0: start the next clip of the list unless the group is busy
+	const char *name = c->lists[state].current();
+	if (!name)
+		return;
+	Anim *a = anim(name);
+	if (groupBusy(a->group()))
+		return;
+	if (state == kListReaction)
+		setCursorMode(kCursorHidden);
+	takeAnim(a, state);
+	c->lists[state].advance();
+}
+
+void Scene::playCharacterList(int id, AnimList list) {
+	Character *c = findCharacter(id);
+	if (!c)
+		return;
+	setCharacterList(id, kListOwn, list);
+	if (!c->lists[kListOwn].count)
+		return;
+	// FUN_0040a4e0: every character of the clip's group switches to state 4
+	Anim *a = anim(c->lists[kListOwn].current());
+	setGroupState(a->group(), kListOwn);
+	if (groupBusy(a->group()))
+		return;
+	takeAnim(a, kListOwn);
+	c->lists[kListOwn].advance();
+}
+
+void Scene::stopCharacter(int id) {
+	Character *c = findCharacter(id);
+	if (!c)
+		return;
+	if (c->current && c->current->isAdded())
+		c->current->remove();
+	c->current = nullptr;
+}
+
+bool Scene::isCharacterActive(int id) {
+	Character *c = findCharacter(id);
+	return c && c->current && c->current->isAdded();
+}
+
 void Scene::setCharacterZ(int id, int z) {
 	for (auto &c : _characters)
 		if (c.id == id)
@@ -279,7 +350,7 @@ void Scene::characterPlayNext(Character &c, int list) {
 		_seq.advance();
 		return;
 	}
-	if (list < kListIdle || list > kListReaction)
+	if (list < kListIdle || list > kListOwn)
 		return;
 	const char *name = c.lists[list].current();
 	if (!name)
@@ -314,7 +385,7 @@ void Scene::characterAnimFinished(Character &c, Anim *a) {
 		setCursorMode(kCursorNormal);
 		// fall through
 	case kListBored:
-	case 4:
+	case kListOwn:
 	case kListSequence:
 		scheduleBored(c);
 		break;
