@@ -528,6 +528,76 @@ finished, 0x111 -> `450270` timer, 0x112 -> `44fb70` tick, 0x116 ->
   flag `FUN_0040d8a0`) when leaving a running game, Tab to the scene index.
 * Testing: `autokey=t:key[:hold];...` (see "Development aids") presses the
   arrow keys; the start button is at (400, 300).
+## Sub game `lettersort` ("Postsorteringsmaskinen", yard)
+
+Letters arrive through the post office window and are dragged into mail
+bags on the conveyor belt above. Handler `0x43db30` (a jump table, not a
+function in the Ghidra project; 0x103 -> `FUN_0043dc30`, 0x104 ->
+`43e1e0`, 0x105 -> `43e230`, 0x10b drag release -> `43e390`, 0x110 anim
+finished -> `43ea80`, 0x111 the 250 ms timer -> `43f750`, 0x112 ->
+`43f3c0`, 0x116 buttons -> `43e370`). Engine: `lettersort.cpp`.
+
+* Data: 30 letter structs (0xc0 bytes at `0x6745b0`: active, x, y, country,
+  picture 0..11, gold, animation struct with hotspot 100 + index), 10 bag
+  structs (0x168 bytes at `0x672578`: active, x, y, country, fill, gold,
+  bag bitmap, flag bitmap), 9 claw structs (0xc0 bytes at `0x671eb0`:
+  active, x, y, bag, state, gold, clip). Every bitmap and clip name is
+  sprintf'ed into the struct while it is off screen (`ltr<Country>%02d`,
+  `ltrGold01`, `Tiny <Country>` while carried, `bag%d[gold]`, `flg<Country>`,
+  `claw{grab,retry,brown,gold}`, `bagout[gold]`, `level%02d`); the engine
+  does the same with its own `Anim` objects (`Sprite`).
+* Countries: `country.ini` sections in file order (scandinavia, europe,
+  world), each shuffled with `FUN_0040a150` at every game start; level n
+  plays with the first `countries` of the table at `0x4db5a0` (10 levels:
+  bags to lift 5/12/20/29/39/49/59/69/79/-, seconds between bags
+  14/12/11/10/9/8/8/7/7/6, between letters 4/4/4/3/3/2/2/2/2/2, countries
+  3..12; `FUN_0043f2a0` never finishes level 10).
+* Flow: start button (`s1_1_start`, hotspot 1 from the clip, the mask is
+  empty) -> `FUN_0043dea0` -> the clip plays, then `FUN_0043ef00(0)`: level
+  stamp at (626, 63), `stamp` sound, and Solan's delivery clip (`solpost1`
+  at (294, 241); later levels pick one of `solpost1`, `soldrop1` (260, 225),
+  `solopp`, `soldown` (294, 242)). When it ends ten letters drop on the
+  floor (`dropall` sound) and a clip ending in "1" continues with its "2"
+  part. `soljump` / `solrocket` idle clips every 120 s.
+* Per second (`FUN_0043f750`, only while running): a bag every
+  `bagInterval` s at (-57, 126) plus a pusher stroke; a letter every
+  `letterInterval` s while no delivery clip plays; one queued full bag gets
+  a claw. Letters land at random on the floor (28, 311)-(772, 573) (nominal
+  size 161x104, bitmaps are 150x97), never under the mouse; the country is
+  random among those in play with fewer than 11 letters on the floor; a
+  bag's country has fewer than 4 bags on the belt, or, with 22 or more
+  letters down, more than 2 letters waiting. Letter 100 and every 120th
+  after it is gold (fills a bag alone, fits any bag); every 20th bag is
+  gold (a full gold bag queues every bag for the claw).
+* Pusher (`FUN_0043f670`, frame tick): bitmap 164x73 at y 115, x from -221
+  to -23 in one second and back to -137 in the next; `FUN_0043f4f0` shoves
+  the bags (84x62) so each starts at the previous one's right edge. The
+  rightmost bag past x 614 falls off (`bagout` clip at (614, 112)), the game
+  stops, `s1_1_bell` loops for 3 s, then the game over message box and the
+  high score registration (`FUN_0041f9a0`, medals at 2500/5000/10000/20000)
+  whose callback `LAB_0043fd50` resets and shows the start button again.
+* Drag (`FUN_0043e2d0` / `FUN_0043e390`): the letter becomes its "Tiny"
+  bitmap centred on the mouse at z 61. Released below y 188 it is put down
+  centred there (clamped to the floor with +-2 jitter, `drop` sound); above,
+  the bag whose x range holds the mouse x takes it when the flags match or
+  the letter is gold (`drop`, +10, `bag%d` bitmap), otherwise `wrong` and
+  the letter goes back. Letter z order counts 0..59, then all letters drop
+  by 60 and the bell goes just under the lowest. A full bag is queued;
+  the claw (`clawgrab` at (bag x, 48), z -10) retries (`clawretry`) when the
+  bag moved meanwhile, else removes the bag, +100, and lifts (`clawbrown` /
+  `clawgold`). Levels advance when `bagsCleared` reaches the table value.
+* Screen: help (0, 0) and exit (728, 0) buttons, title `lettersort:LONGNAME`
+  centred in (154, 3)-(641, 46) in `Amerigo BT_18_`, score in (46, 232)-
+  (154, 281), `lettersort:POINTS` in (45, 276)-(154, 295) in `Amerigo BT_10_`,
+  `borderleft` (0, 99), `s1_1_frame` (116, 48), bell (677, 324) z -45. z:
+  bags -30 (`0x672574`), flags -15, bagout -31, pusher/stamp -45, Solan
+  -44/-46, letters 0..59. Music `subgame8`.
+* Not done: help dialog, game over message box and high score
+  registration, tournament mode (`FUN_00419490`: immediate start at level
+  difficulty * 3), the "game in progress" abort warning (`FUN_0040d8a0`),
+  the registry value `FUN_0040b940` writes at init, `sound.ini` volumes. A
+  delivery clip that is still playing when the next level starts is
+  restarted (the original only renames the struct).
 
 ### Bitmap fonts (FONT module, `font.cpp`)
 
@@ -761,6 +831,8 @@ start), `autokey=t:key[:hold];...` (key press at t held for hold ms, default
 100; `left`, `right`, `up`, `down`, `space`, `esc`, `tab`, `return`, a
 character, or a string of characters typed one after the other with `~` =
 Escape), `random_seed` (deterministic boards).
+`autoclick=t:x,y;t:x,y,m` (synthetic clicks, `m` = move only, `d` = press
+only, `u` = release only for drags, t in ms after start), `random_seed` (deterministic boards).
 
 ## Mini game checklist
 
@@ -772,7 +844,7 @@ Sub games (`[subgame]`, score based):
 
 | Done | Scene | Title | Started from | Data |
 |---|---|---|---|---|
-| | lettersort | Postsorteringsmaskinen | yard | data |
+| x | lettersort | Postsorteringsmaskinen | yard | data (help, message box, high score open) |
 | | bugzzz | Larveliv i leiren | yard | data |
 | x | sockdrawer | Sokkeskapet | desk | data (message box, high score, help open) |
 | | wheelbarrow | Eplehøsten | pee | data |

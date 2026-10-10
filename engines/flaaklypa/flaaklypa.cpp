@@ -83,6 +83,7 @@ static const char *const kImplementedGames[] = {
 	"whackamole",
 	"butterfly",
 	"wheelbarrow",
+	"lettersort",
 	nullptr
 };
 
@@ -131,7 +132,8 @@ Common::String FlaaklypaEngine::getString(const Common::String &key) {
 }
 
 // Development aid: "autoclick=t:x,y;t:x,y" clicks at the given times (ms
-// after start); "t:x,y,m" only moves the mouse there.
+// after start); "t:x,y,m" only moves the mouse there, "t:x,y,d" only
+// presses the button and "t:x,y,u" only releases it (drags).
 void FlaaklypaEngine::parseAutoClicks() {
 	if (!ConfMan.hasKey("autoclick"))
 		return;
@@ -142,6 +144,7 @@ void FlaaklypaEngine::parseAutoClicks() {
 		char mode = 0;
 		int n = sscanf(item.c_str(), "%u:%d,%d,%c", &c.time, &c.x, &c.y, &mode);
 		c.moveOnly = mode == 'm';
+		c.mode = mode;
 		if (n >= 3)
 			_autoClicks.push_back(c);
 	}
@@ -282,10 +285,14 @@ Common::Error FlaaklypaEngine::run() {
 			_scene->handleEvent(e);
 			if (c.moveOnly)
 				continue;
-			e.type = Common::EVENT_LBUTTONDOWN;
-			_scene->handleEvent(e);
-			e.type = Common::EVENT_LBUTTONUP;
-			_scene->handleEvent(e);
+			if (c.mode != 'u') {
+				e.type = Common::EVENT_LBUTTONDOWN;
+				_scene->handleEvent(e);
+			}
+			if (c.mode != 'd') {
+				e.type = Common::EVENT_LBUTTONUP;
+				_scene->handleEvent(e);
+			}
 		}
 
 		for (uint i = 0; i < _autoKeys.size();) {
