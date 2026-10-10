@@ -84,6 +84,35 @@ private:
 	static int _introCount, _introMask; ///< random pick without repeats, kept across visits like the original
 };
 
+/** Story page 5: the TV room (tvroom, "TV-stua"). */
+class TvroomScene : public Scene {
+public:
+	TvroomScene(FlaaklypaEngine *vm, const SceneDef *def);
+
+	void onInit(int arg) override;
+	void onClose() override;
+	void onMouseDown(int hotspot, int x, int y) override;
+	void onRightClick(int x, int y) override;
+	bool handlesKey(const Common::KeyState &key) override;
+	void onKey(const Common::KeyState &key) override;
+	void onAnimStarted(Anim *anim) override;
+	void onAnimFinished(Anim *anim) override;
+	void onTimer(int id, int data) override;
+	void onSequenceDone() override;
+
+private:
+	int pick(int &count, int &mask, int n);
+	void sequence(AnimList list);
+	void single(const char *name);
+	void setNormalLists();
+	void updateClock();
+
+	int _count005, _countBee, _countMoose, _countMooseClick, _countSolan;
+	AnimList _sequence; ///< the list last started by the page, to tell which one onSequenceDone() reports
+	static int _mask005, _maskBee, _maskMoose, _maskMooseClick, _maskSolan; ///< kept across visits like the original
+	static bool _carPartFound, _glassesFound; ///< stand-ins for the profile
+};
+
 } // End of namespace Flaaklypa
 
 #endif
