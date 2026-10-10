@@ -70,7 +70,7 @@ private:
 		uint32 time;
 		int x, y;
 		bool moveOnly;
-		char mode;            ///< 0 click, 'm' move, 'd' press only, 'u' release only
+		char mode;            ///< 0 click, 'm' move, 'd' press only, 'u' release only, 'r' right click
 	};
 	Common::Array<AutoClick> _autoClicks;
 	struct AutoKey {

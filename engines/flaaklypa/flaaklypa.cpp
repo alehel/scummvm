@@ -86,6 +86,7 @@ static const char *const kImplementedGames[] = {
 	"lettersort",
 	"hustle",
 	"buildabike",
+	"pipeline",
 	nullptr
 };
 
@@ -135,7 +136,8 @@ Common::String FlaaklypaEngine::getString(const Common::String &key) {
 
 // Development aid: "autoclick=t:x,y;t:x,y" clicks at the given times (ms
 // after start); "t:x,y,m" only moves the mouse there, "t:x,y,d" only
-// presses the button and "t:x,y,u" only releases it (drags).
+// presses the button, "t:x,y,u" only releases it (drags) and "t:x,y,r"
+// right clicks.
 void FlaaklypaEngine::parseAutoClicks() {
 	if (!ConfMan.hasKey("autoclick"))
 		return;
@@ -288,11 +290,11 @@ Common::Error FlaaklypaEngine::run() {
 			if (c.moveOnly)
 				continue;
 			if (c.mode != 'u') {
-				e.type = Common::EVENT_LBUTTONDOWN;
+				e.type = c.mode == 'r' ? Common::EVENT_RBUTTONDOWN : Common::EVENT_LBUTTONDOWN;
 				_scene->handleEvent(e);
 			}
 			if (c.mode != 'd') {
-				e.type = Common::EVENT_LBUTTONUP;
+				e.type = c.mode == 'r' ? Common::EVENT_RBUTTONUP : Common::EVENT_LBUTTONUP;
 				_scene->handleEvent(e);
 			}
 		}

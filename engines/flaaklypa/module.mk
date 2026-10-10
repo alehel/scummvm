@@ -17,6 +17,7 @@ MODULE_OBJS = \
 	menu.o \
 	metaengine.o \
 	music.o \
+	pipeline.o \
 	puzzle.o \
 	puzzledata.o \
 	resources.o \
