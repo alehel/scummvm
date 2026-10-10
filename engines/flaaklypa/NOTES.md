@@ -200,7 +200,18 @@ on mouse down. The producers are `FUN_0040c590` (0x105) .. `FUN_0040c770`
 ### Audio
 
 Nearly all clips with sound use Bink RDFT audio inside Smacker (flag bit 27),
-22050 Hz 16 bit, with a one second prebuffer in frame 0. Music and narration
+22050 Hz 16 bit, with a one second prebuffer in frame 0. About 580 of the
+1700 clips carry that extra second past their last frame (mostly silent
+blocks, sometimes the tail of a voice line); narration and music clips end
+their audio with the video instead. The original flags a player done as
+soon as its last frame has been drawn (`FUN_00403160`/`FUN_00403ac0`:
+`FrameNum >= Frames - 1`) and the element update then calls
+`SmackSoundOnOff(0)` (`FUN_00412a60`), so the audio tail is never played.
+`Anim::update()` therefore ends a clip on its video track alone;
+`VideoDecoder::endOfVideo()` would wait for the mixer to drain the tail
+and made every clip with sound last about one second longer (the "slow
+videos" of 2026-10-10). `flaaklypa-work/tools/smkinfo.py` dumps a clip's
+header and per frame audio chunks. Music and narration
 are 4x4 pixel clips. `electric`, `wind` and the like are sound effects
 played as one element sequences.
 
@@ -658,8 +669,7 @@ shuffle cannot be skipped, 0x110 -> `43d160`, 0x111 -> `43d950`, 0x116 ->
 * Not done: message box, high score, help dialog, the "gamec:SUBGAMEABORT"
   confirmation when exiting a running game, tournament mode. The SmackGoto
   frame of the hand is `round(...) + 1` in the original; the port shows the
-  rounded frame (0 based). Clips with Bink audio play slower than their
-  frame rate in the engine (audio clock), which stretches the shuffle.
+  rounded frame (0 based).
 ## Sub game `buildabike` ("Reodors sykkelverksted")
 
 A drag and drop repair shop. Handler `0x4390c0` (not a function in the

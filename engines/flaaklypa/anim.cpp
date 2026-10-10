@@ -174,7 +174,7 @@ void Anim::play() {
 	_playing = true;
 	_lastFrameShown = false;
 	_scene->animStarted(this);
-	debug(2, "Anim %s started", _def->name);
+	debug(2, "Anim %s started t=%u", _def->name, g_system->getMillis());
 }
 
 void Anim::stop() {
@@ -202,14 +202,15 @@ bool Anim::update() {
 			convertFrame(frame);
 	}
 
-	if (_video->endOfVideo() && _def->loop) {
-		_video->rewind();
-		_video->start();
-		return false;
-	}
-
-	if (_video->endOfVideo()) {
-		// Hold the last frame for one frame period before reporting the end.
+	// Only the video track decides when a clip is over. Clips with sound
+	// carry about one second of audio beyond their last frame (the Smacker
+	// prebuffer); VideoDecoder::endOfVideo() would wait for the mixer to
+	// drain it, stretching every clip. The original flags the player done
+	// as soon as the last frame has been drawn and turns its sound off
+	// (SmackSoundOnOff), which stop() below does too.
+	if (_video->getCurFrame() >= (int)_video->getFrameCount() - 1) {
+		// Hold the last frame for one frame period before looping or
+		// reporting the end.
 		if (!_lastFrameShown) {
 			_lastFrameShown = true;
 			_lastFrameTime = g_system->getMillis();
@@ -218,9 +219,15 @@ bool Anim::update() {
 		uint32 frameMs = 1000 / MAX(1, _video->getFrameRate().toInt());
 		if (g_system->getMillis() - _lastFrameTime < frameMs)
 			return false;
+		if (_def->loop) {
+			_video->rewind();
+			_video->start();
+			_lastFrameShown = false;
+			return false;
+		}
 		_video->stop();
 		_playing = false;
-		debug(2, "Anim %s finished", _def->name);
+		debug(2, "Anim %s finished t=%u frame=%d", _def->name, g_system->getMillis(), _video->getCurFrame());
 		return true;
 	}
 	return false;
