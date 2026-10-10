@@ -821,6 +821,77 @@ flowing after a countdown, reaches an open pipe end. Handler `0x448410`
   mode, `sound.ini` volumes. Deviation: the bend's inflow rectangle is
   always drawn up to the corner square (the original stops once the corner
   phase starts, which leaves a one pixel gap at low frame rates).
+## Sub game `beemaze` ("Ludvigs Labyrint", started from `tvroom`)
+
+A Pac-Man style maze game, the BEEMAZE C++ module of the executable.
+Handler `0x42f1b0` (inside Ghidra's `FUN_0042f190`; jump table at
+`0x42f27c`): 0x103 -> `FUN_00432d50` init, 0x104 -> `432f30` close, 0x105
+-> `432c70` mouse down (hotspot 101 = start icon), 0x10c -> `42f2c0` key
+down, 0x10d -> `42f340` key up, 0x110 -> `432d30` anim finished, 0x111 ->
+`432a50` timer, 0x112 -> `42f3c0` tick, 0x116 -> `432d10` buttons (1 exit,
+2 help). Engine: `beemaze.cpp`.
+
+* Maze: 22x16 cells of 32 pixels, cell (0, 0) at screen (48, 74); the
+  703x511 `bitmap/level<n>.bmp` is drawn at (47, 73). Five tables of 16x22
+  ints at `0x4cd7e0` (`kMazes`): 1 start square (2x2, hive drop), 2
+  corridor (items), 3 hive site, 4 wall, 5 bee only, 6 corridor without
+  items; a 6 on the border is a tunnel to the opposite side (`FUN_004314a0`,
+  Ludvig only). Level n uses maze n % 5; `0x4cd7b8` has the arrow / "250
+  points" position per maze (the start square).
+* Level start (`FUN_00431ea0`): 2 + level/5 (max 7) smoke puffers `gun` on
+  random corridor cells (`FUN_00432350`); every other corridor cell gets
+  (`FUN_00432600`, rand % 20) 1: `berries` (10 points), 2: `nut` (20), 3:
+  `mush` (30, speed x1.5 for 10 s), 0: nothing, else `stick` (2). The
+  last start cell in column major order is where Ludvig appears. 1 +
+  level/5 (max 4) `honey` hives on the first four hive sites
+  (`FUN_00432730`). 2 + level/5 (max 7) bees on random non wall cells with
+  x <= 512 (sic) at least 160 px from Ludvig on one axis (`FUN_00432100`).
+  Items at cell + (48, 74) z 101; the game starts 1 s later (timer). All
+  sticks, nuts, berries and mushrooms collected -> next level
+  (`FUN_00431cf0` with the advance flag); a lost life rebuilds the same
+  level with new random items.
+* Ludvig (`FUN_00430e50`, `FUN_004310e0`): 128 px/s (192 with a
+  mushroom), moved in ticks of > 20 ms towards the target cell; there the
+  items are taken (`FUN_00431570`) and the direction held on the arrow
+  keys is taken if that cell is passable (types 6, 1, 2, 3) or a tunnel,
+  else he stops. Key up clears the direction. Sprite sheets
+  `walkcycle` / `honeycycle` / `smokecycle` / `honsmokecycle` (15 frames
+  of 40x52, rows right/down/left/up) drawn into a 40x52 surface at cell +
+  (43, 66) z 200, clipped to the maze rectangle; the frame advances with
+  the movement counter, at most every 26 ms (16 with a mushroom). His
+  last `level` cells (max 25) are kept in a ring (`FUN_00431a70`).
+* Bees (`FUN_0042f520`): speed (0.6, or 0.9 while he carries a hive, +
+  0.1 per round) x 128 px/s in ticks of > 19 ms. A bee at its target cell
+  picks the next one: on Ludvig's trail it follows the trail
+  (`FUN_00430030`), near smoke it flees (`FUN_0042fab0`, away on the longer
+  axis), with a hive carried all bees hunt him with a breadth first search
+  (`FUN_00430370`), otherwise it wanders (`FUN_00430800`: 10 % chance to
+  turn into each side passage, reverse in dead ends; the original turns
+  back when flying right with only the way up open - mirrored). Bees may
+  enter type 5 cells, never tunnels. Collision: both axes < 16 px
+  (`FUN_004329e0`) -> `cry`, life lost (`FUN_00432880`); no lives left ->
+  game over (`FUN_004328e0`).
+* Smoke (`gun`): flag 1 for 10 s, the `smoke` clip floats one cell ahead
+  (`FUN_00430d90`, z 202); bees within 16 px of it sleep 10 s
+  (`bee_sleep`, `FUN_00430c70`) and no collision is checked meanwhile; after
+  10 s the cloud blinks six times at 300 ms. Hive: flag 4, `arrow` clip at
+  the start square; dropping it there gives 250 points and plays
+  `250_points`. Flags in `DAT_00658504`: 1 smoke, 2 mushroom, 4 hive, 8
+  blinking.
+* Screen: lives `life` at (78 + 36 i, 27) z 150, title (`Amerigo BT_14_`)
+  centred in (300, 22)-(501, 54), score (`Amerigo BT_10_`) centred in
+  (625, 32)-(716, 55), buttons `help_0/1` at (2, 2) and `exit_0/1` at
+  (726, 2), `start_icon` (hotspot 101) until the game starts. Music
+  `subgame4`. Ambient clips per maze (lists at `0x4cf948`): the looping
+  ones play from level start, every 5 s each one shot clip gets a 1 in 3
+  chance (`FUN_0042f460`). Sounds `berries_1`, `nuts_1/2`, `mushroom_1`,
+  `smoke_1`, `honey_1` (`FUN_00431a00`, "%s_%d").
+* Not done: the game over message box (`beemaze:GAMEOVER`), high score
+  registration (`FUN_0041f9a0`, its callback puts the start icon back),
+  help dialog, tournament mode (`FUN_00419490`: one life, level from the
+  round), `sound.ini` volumes, the cheat console commands (SHROOMS, ...).
+  Development: `autohold=t:d;t:d` holds (l/r/u/d) or releases (0) an
+  arrow key t ms after the scene starts.
 
 ### Bitmap fonts (FONT module, `font.cpp`)
 
@@ -1055,6 +1126,8 @@ start), `autokey=t:key[:hold];...` (key press at t held for hold ms, default
 100; `left`, `right`, `up`, `down`, `space`, `esc`, `tab`, `return`, a
 character, or a string of characters typed one after the other with `~` =
 Escape), `random_seed` (deterministic boards).
+`autoclick=t:x,y;t:x,y,m` (synthetic clicks, `m` = move only, t in ms after
+start), `autohold` (beemaze: held arrow keys), `random_seed` (deterministic boards).
 
 ## Mini game checklist
 
@@ -1083,6 +1156,9 @@ Sub games (`[subgame]`, score based):
 | x | whackamole | Dra meg baklengs! | house | data2 (message boxes, high score, help open) |
 | | beemaze | Ludvigs Labyrint | tvroom | data |
 | x | buildabike | Reodors sykkelverksted | garage | data (help, message box, high score open) |
+| | whackamole | Dra meg baklengs! | house | data2 |
+| x | beemaze | Ludvigs Labyrint | tvroom | data (message box, high score, help open) |
+| | buildabike | Reodors sykkelverksted | garage | data |
 | | mountain | (no title in language.ini) | morning | data (no sceneDefs entry yet) |
 | | pipeline | Oljeeventyret | outtent | data |
 | x | butterfly | Sommerfugler i magen | pee | data (message box, high score, profile, help, info page open) |
