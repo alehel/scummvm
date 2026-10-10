@@ -10,6 +10,7 @@ MODULE_OBJS = \
 	butterfly.o \
 	console.o \
 	cursor.o \
+	desk.o \
 	dialog.o \
 	flaaklypa.o \
 	font.o \

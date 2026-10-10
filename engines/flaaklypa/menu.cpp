@@ -223,6 +223,8 @@ Scene *createScene(FlaaklypaEngine *vm, const char *name) {
 		return new BugzzzScene(vm, def);
 	if (!scumm_stricmp(name, "intent"))
 		return new IntentScene(vm, def);
+	if (!scumm_stricmp(name, "desk"))
+		return new DeskScene(vm, def);
 	return new Scene(vm, def);
 }
 
