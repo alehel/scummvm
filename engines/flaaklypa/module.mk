@@ -18,6 +18,7 @@ MODULE_OBJS = \
 	hustle.o \
 	menu.o \
 	metaengine.o \
+	morning.o \
 	music.o \
 	pipeline.o \
 	puzzle.o \

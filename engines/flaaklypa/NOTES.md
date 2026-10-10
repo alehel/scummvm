@@ -1223,6 +1223,36 @@ buttons (2 help `FUN_0041e580`, 3 exit `FUN_0040cc30`, 4 album -> scene
   the sub game abort confirmation, the "info" fact page, `sound.ini`
   volumes, the LOVELYFLIES cheat.
 
+## Story page `morning` ("Solan på tokt")
+
+The morning before the ride down Flåklypatoppen (`S07`, handler
+`FUN_00425d60`, `morning.cpp`, `MorningScene`). A cut scene: no cursor
+table, no hotspots in use, no mouse handlers; the right button goes to
+`FUN_00432fd0`, an empty function shared with the bugzzz module (no
+navigator). Music `track7` (restarted even if it already plays) plus a
+random ambience clip (`FUN_0040b0f0`, TODO). Narration `S07AN-NAR-001` and
+`S07AN-LUD-001` are in `lang1/morning`, the rest in `data/morning`.
+
+* Init (`FUN_00425e40`, same for every arg): the bird on the branch is
+  character 0x10 (no hotspot) with idle `birdbreath` and bored `birdidle`;
+  the looping `smoke`, `windmill` and `ripple` clips, the narration and the
+  intro sequence `squirrel`, `S07AN-SOL-001` (Solan cycles off) start.
+* When `squirrel` finishes two timers start: id 0 after 6 s gives the bird
+  its own list `birdleave` (it flies off; the character is removed when the
+  clip ends), id 1 after 23.2 s plays Ludvig's line `S07AN-LUD-001`. When
+  `S07AN-SOL-001` ends the bitmap `bike` is added at its default position
+  (206,325); when the intro sequence is done the cursor is hidden for good.
+* When `S07AN-LUD-001` ends, or on space (the handler returns 1: the intro
+  is not aborted), `FUN_00425f40` asks in a YES/NO message box
+  (`interfaceh:WARNING` / `morning:RIDEDOWN`, type 0xc) whether to help
+  Solan down the mountain: YES (4) starts the sub game `mountain`, any
+  other answer goes to the page `town` (both through `GAME_Start`).
+  Escape goes to the menu (globally in the original).
+* State: none kept across visits; the page has no profile calls.
+* TODO: the ambience clip; the message box answer (the dialog is a stub on
+  this branch, the page assumes YES); the `mountain` sub game itself
+  (`startGame` only warns).
+
 ## Development aids (config keys in the `[flaaklypa]` section)
 
 `start_scene`, `autoshot` / `autoshot_delay` / `autoshot_quit` (screenshot),

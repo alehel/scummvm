@@ -84,6 +84,23 @@ private:
 	static int _introCount, _introMask; ///< random pick without repeats, kept across visits like the original
 };
 
+/** Story page 7, "Solan på tokt": the morning before the ride down the mountain. */
+class MorningScene : public Scene {
+public:
+	MorningScene(FlaaklypaEngine *vm, const SceneDef *def);
+
+	void onInit(int arg) override;
+	bool handlesKey(const Common::KeyState &key) override;
+	void onKey(const Common::KeyState &key) override;
+	void onRightClick(int x, int y) override;
+	void onAnimFinished(Anim *anim) override;
+	void onSequenceDone() override;
+	void onTimer(int id, int data) override;
+
+private:
+	void rideDown();
+};
+
 } // End of namespace Flaaklypa
 
 #endif
