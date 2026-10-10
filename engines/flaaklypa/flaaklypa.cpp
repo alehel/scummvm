@@ -79,6 +79,7 @@ static const char *const kImplementedGames[] = {
 	"sockdrawer",
 	"textinvader",
 	"hopscotch",
+	"audiopairs",
 	nullptr
 };
 

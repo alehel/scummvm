@@ -91,7 +91,7 @@ public:
 	 * Defines an element that has no entry in the scene tables (buttons and
 	 * other bitmaps the original loads through other modules).
 	 */
-	Anim *defineAnim(const char *name, bool smacker, bool transparent, int hotspot, int x, int y, int z = 0);
+	Anim *defineAnim(const char *name, bool smacker, bool transparent, int hotspot, int x, int y, int z = 0, bool visible = true);
 	/** Defines a procedurally drawn element, see Anim::createSurface(). */
 	Anim *defineSurfaceAnim(const char *name, int w, int h, uint32 keyColor, int hotspot = 0);
 

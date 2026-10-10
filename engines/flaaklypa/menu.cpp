@@ -20,6 +20,7 @@
  */
 #include "common/debug.h"
 
+#include "flaaklypa/audiopairs.h"
 #include "flaaklypa/flaaklypa.h"
 #include "flaaklypa/hopscotch.h"
 #include "flaaklypa/puzzle.h"
@@ -185,6 +186,8 @@ Scene *createScene(FlaaklypaEngine *vm, const char *name) {
 		return new SockdrawerScene(vm, def);
 	if (!scumm_stricmp(name, "textinvader"))
 		return new TextinvaderScene(vm, def);
+	if (!scumm_stricmp(name, "audiopairs"))
+		return new AudiopairsScene(vm, def);
 	return new Scene(vm, def);
 }
 

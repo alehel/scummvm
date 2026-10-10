@@ -380,6 +380,76 @@ B/C/D tone sets and Solan's start poses), `lang/hopscotch.bin` (help.ini).
   3000/5000/7000 and 10000 at `0x49e918`), help dialog, the "abort the
   game?" question on exit (`DAT_0054bf98`), profile start level and the
   tournament "PLAYERREADY" box.
+## Sub game `audiopairs` ("Reodors Lydmaskin", house)
+
+A sound memory game on Reodor's cash register. Handler `0x428ae0` (a jump
+table, not a function in the Ghidra project): 0x103 -> `FUN_00428bd0` init,
+0x104 -> `4291b0` close, 0x105 -> `429200` mouse down, 0x10c and 0x112 ->
+`432fd0` (empty), 0x110 -> `429340` anim finished, 0x111 -> `429600` timer,
+0x116 -> `429320` buttons (1 help `41e580`, 2 exit `40cc30`). Engine:
+`audiopairs.cpp`.
+
+* Data: `hotspots.bmp` is all zero; every hotspot comes from an element.
+  20 keys (`FUN_00428e20`, 0xb4 byte structs at `0x5bb038`: int active,
+  Anim (hotspot 10 + index, positions at `0x4cb720`, 5 x 4), int state, int
+  sound). The key bitmaps are `bitmap/<colour><row>.bmp`, colour = state
+  (0 green untried, 1 yellow pressed, 2 red found, 3 black out of play), row
+  = index / 5 (perspective); z = row, hit test mode 2 (rectangle,
+  `FUN_00428ff0`). Machine parts (`FUN_00428d80`): `bitmap/v01..v14` (left
+  machine, positions `0x49d660`) and `h01..h14` (right, `0x49d6d0`), z =
+  index, counts at `DAT_005bbe58/5c`. `pig` at (373, 519) z -10, `lever`
+  (560, 115) z 10, `start` (looping clip on the lever handle, hotspot 3,
+  z 50; in the lang container), `left` (0, 84) z 14, `money` (234, 130)
+  z 25, `right` (360, 0) z 14.
+* Text (`FUN_00407a30` / `FUN_00407930`): labels `audiopairs:LIFE` and
+  `audiopairs:POINTS` in `Amerigo BT_10_`, centred horizontally at the top
+  of (300, 124)-(370, 139) and (433, 124)-(502, 139), z -11 (the 0x100 flag
+  is left on the stack by MSVC, hence Ghidra shows it as a `LANG_Get`
+  argument). Values in `Amerigo BT_18_` centred (0x101) in (300, 134)-
+  (369, 163) and (433, 134)-(502, 163); the scene title centred in
+  (243, 7)-(563, 61). Help/exit buttons via the BUTTON module at (0, 0) and
+  (728, 0).
+* Sounds: five groups `sound`, `music`, `birds`, `farm`, `horn`
+  (`0x4cbc60`), group = level % 5, clips `animation/<group>01..10.smk`
+  (4x4 audio only). They are played through the scene's one spare
+  animation struct (`0x4cbbb8`, the `" "` entry; renamed with `"%s%02d"`,
+  removed when done, `FUN_004292a0`). Parts play `animation/part01..15.smk`
+  as clones (`FUN_00412c20`); part n is played when part n is added or
+  removed (`FUN_00428f00`).
+* State (`DAT_005bbe48`, `FUN_00428f80`): 0 idle, 1 playing, 2 two keys
+  pressed (one shot timer 650 ms = `DAT_005bbe60`), 3 machine clips, 4
+  left parts vanishing, 5 all parts vanishing (periodic timer 150 ms, see
+  the asm: `FUN_0040c480(now + 150, 150, 0)`; `FUN_0040c450` is the
+  time, not a random number).
+* Rules: init shows all 28 parts and all keys green but inactive, plays
+  `start`. Start (hotspot 3, `FUN_004290a0`): score 0, 15 tries, level 0
+  (+ 2 x profile difficulty), state 5: one part (right side first) vanishes
+  per tick until none are left, then a board. Board (`FUN_00429450`): all
+  keys black and inactive, N pairs (`0x49d798`: level 0: 3, 1: 4, ... 6:
+  9, 7+: 10) of random unused sounds on random free keys, `lever` plays.
+  Key press in state 1 (`FUN_00429230`): plays the sound, yellow; the
+  second press starts the 650 ms timer. Timer (`FUN_00429890`): both red
+  when equal, else green. Miss: tries - 1, game over at 0. Hit
+  (`FUN_00429700`): score + 80; if the left machine has 14 parts: level +
+  1, score + 25 x tries (added after the text was drawn), state 3, `left`
+  plays; else a left part is added, and when no green key is left: a new
+  board and tries + 3. `left` done -> `money`; `money` done: if the right
+  machine has 14 parts `right` plays, else `left` is removed, a right part
+  is added and state 4 removes the left parts one per tick; tries + 5.
+  `right` done: everything removed, counts 0, state 1, new board. Game
+  over: state 0, message box `audiopairs:ENDMESSAGE` /
+  `interfaceh:GAMEOVER`, high score `FUN_0041f9a0(0, score, 0x49d7d8 =
+  {2000, 6000, 10000, 14000}, 0)`, `start` plays again unless a profile is
+  active (then the game started automatically after
+  `tournament:PLAYERREADY`).
+* Engine notes: the keys are surface elements (`key00..19`) because several
+  keys share one bitmap; the engine hit tests their opaque pixels where the
+  original tests the rectangle. `Scene::defineAnim()` got a `visible`
+  parameter (default true) for the audio only clips, which have no palette
+  to convert a frame with.
+* Not done: help dialog, game over message box, high score / award
+  registration, profile difficulty, the GAME module "game in progress"
+  flag (`FUN_0040d8a0`), `sound.ini` volumes.
 
 ### Bitmap fonts (FONT module, `font.cpp`)
 
@@ -483,6 +553,9 @@ Sub games (`[subgame]`, score based):
 | x | hopscotch | Solan og Ludvig i Paradis | house | data + data1 (message box, high score, help open) |
 | | audiopairs | Reodors Lydmaskin | house | data |
 | x | textinvader | Ordspillet | goodbye | data2 (message box, high score, help, profiles open) |
+| | hopscotch | Solan og Ludvig i Paradis | house | data |
+| x | audiopairs | Reodors Lydmaskin | house | data (help, message box, high score open) |
+| | textinvader | Ordspillet | goodbye | data2 |
 | | balloonhunt | Solans ballongjakt | outtent | data2 (no sceneDefs entry yet) |
 | | whackamole | Dra meg baklengs! | house | data2 |
 | | beemaze | Ludvigs Labyrint | tvroom | data |
