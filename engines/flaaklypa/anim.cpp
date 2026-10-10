@@ -110,6 +110,11 @@ void Anim::setVolume(int volume) {
 		_video->setVolume((byte)CLIP<int>(volume, 0, 255));
 }
 
+void Anim::setFrameRate(int fps) {
+	if (_video && fps > 0)
+		_video->setRate(Common::Rational(fps) / _video->getFrameRate());
+}
+
 void Anim::convertFrame(const Graphics::Surface *frame) {
 	const byte *palette = _video->getPalette();
 	Graphics::Surface *conv = frame->convertTo(g_engine->_screen->format, palette);

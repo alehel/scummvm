@@ -534,7 +534,7 @@ void Scene::handleEvent(const Common::Event &event) {
 		onRightClick(event.mouse.x, event.mouse.y);
 		break;
 	case Common::EVENT_KEYDOWN:
-		if (event.kbd.keycode == Common::KEYCODE_SPACE)
+		if (event.kbd.keycode == Common::KEYCODE_SPACE && !handlesKey(event.kbd))
 			stopSequence();
 		onKey(event.kbd);
 		break;

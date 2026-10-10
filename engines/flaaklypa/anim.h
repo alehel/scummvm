@@ -77,6 +77,8 @@ public:
 	int frameCount() const;
 	/** Sets the playback volume of a clip, 0..255. */
 	void setVolume(int volume);
+	/** Forces the playback frame rate of a playing clip (SmackFrameRate of the original). */
+	void setFrameRate(int fps);
 
 	int x() const { return _x; }
 	int y() const { return _y; }
