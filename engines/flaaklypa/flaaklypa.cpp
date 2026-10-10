@@ -73,7 +73,7 @@ void FlaaklypaEngine::changeScene(const Common::String &name, int arg) {
 
 void FlaaklypaEngine::startGame(const Common::String &name) {
 	const SceneDef *def = findSceneDef(name.c_str());
-	if (!def || scumm_stricmp(name.c_str(), "puzzle") != 0) {
+	if (!def || (scumm_stricmp(name.c_str(), "puzzle") != 0 && scumm_stricmp(name.c_str(), "pipeline") != 0)) {
 		// TODO: the other sub games and activities
 		warning("Sub game '%s' is not implemented yet", name.c_str());
 		return;
@@ -109,7 +109,7 @@ Common::String FlaaklypaEngine::getString(const Common::String &key) {
 }
 
 // Development aid: "autoclick=t:x,y;t:x,y" clicks at the given times (ms
-// after start); "t:x,y,m" only moves the mouse there.
+// after start); "t:x,y,m" only moves the mouse there, "t:x,y,r" right clicks.
 void FlaaklypaEngine::parseAutoClicks() {
 	if (!ConfMan.hasKey("autoclick"))
 		return;
@@ -120,6 +120,7 @@ void FlaaklypaEngine::parseAutoClicks() {
 		char mode = 0;
 		int n = sscanf(item.c_str(), "%u:%d,%d,%c", &c.time, &c.x, &c.y, &mode);
 		c.moveOnly = mode == 'm';
+		c.rightButton = mode == 'r';
 		if (n >= 3)
 			_autoClicks.push_back(c);
 	}
@@ -210,9 +211,9 @@ Common::Error FlaaklypaEngine::run() {
 			_scene->handleEvent(e);
 			if (c.moveOnly)
 				continue;
-			e.type = Common::EVENT_LBUTTONDOWN;
+			e.type = c.rightButton ? Common::EVENT_RBUTTONDOWN : Common::EVENT_LBUTTONDOWN;
 			_scene->handleEvent(e);
-			e.type = Common::EVENT_LBUTTONUP;
+			e.type = c.rightButton ? Common::EVENT_RBUTTONUP : Common::EVENT_LBUTTONUP;
 			_scene->handleEvent(e);
 		}
 

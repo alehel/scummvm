@@ -69,6 +69,7 @@ private:
 		uint32 time;
 		int x, y;
 		bool moveOnly;
+		bool rightButton;
 	};
 	Common::Array<AutoClick> _autoClicks;
 

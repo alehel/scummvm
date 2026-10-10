@@ -269,6 +269,93 @@ Handler `0x454fb0` (not a function in the Ghidra project; dispatches 0x103 ->
   high score registration (`FUN_0041f9a0`), help dialog, `sound.ini`
   volumes.
 
+## Sub game `pipeline` ("Oljeeventyret", started from `outtent`)
+
+A Pipe Mania style game: an oil well and a refinery (Ben Redic's oil lamp)
+are placed on a 10x8 map and the player rebuilds the pipeline between them
+from the parts in the store on the right before the oil, which starts
+flowing after a countdown, reaches an open pipe end. Handler `0x448410`
+(a jump table, not a function in the Ghidra project): 0x103 ->
+`FUN_00448500`, 0x104 -> `449d80`, 0x105 -> `449e20(hotspot, x, y)`, 0x107
+-> `44a370` (right click), 0x108 -> `44a2c0`, 0x112 -> `44a480`, 0x116 ->
+`44b580` (buttons 0xc help, 0xd exit, 0xe start, 0xf turbo). Engine:
+`pipeline.cpp`.
+
+* Map: 10x8 cells of 56 pixels at (70, 106) (`0x49eb80..88`, `0x67ee80`);
+  hotspot 1 in the mask, 2..8 the seven store slots. Terrain per level in
+  five 80 character strings at `0x49ece8` (digit per cell: 0 free, 1
+  bridge, 2 mountains/water); the map bitmaps `level00..04.bmp` and the
+  per level tables (`0x49ee78` score multiplier 1, 1.1, 1.2, 1.5, 1.5;
+  `0x49ee8c` par time 15, 20, 30, 25, 30 s; well clip `pump`, `well`,
+  `pump`, `well`, `platform` at `0x4dd5c8`) repeat every five levels.
+* Cells (`0x678b28`, 0xdc bytes each): terrain, tile type, rotation, oil
+  units, per side inflow/outflow units (4 x 2), an embedded animation
+  struct (bitmap `<tile>-<rotation>.bmp`, z 3) and a "first piece" flag.
+  Tile table at `0x49eba8` (0x20 bytes: name, openings, pipe width,
+  capacity, openings at rotation 0 as up/right/down/left): 1 straight
+  (2, 56000, up/down), 2 bend (56000, right/down), 3 tee (3, 84000, no
+  down), 4 cross (112000), 5 point (the well: 1 opening, capacity 0), 6
+  the refinery (drawn as a valve, 28000), 7 valve = a cap (28000), 8
+  reservoir (width 34, 224000), 9 vent (112000). Rotation r turns the
+  openings clockwise: opening in direction d iff `exit[(d - r) & 3]`
+  (`FUN_0044ac20`). Store slots hold types 2, 3, 4, 1, 7, 8, 9
+  (`0x49eb8c`). Bridges take only straights, vents and valves.
+* Level start (`FUN_00448b40`): oil speed `(3 - 8 / (level + 4)) * 10000`
+  units/s (level 0 based), countdown `20000 * 10 / (level + 10)` ms, path
+  length `max(10 + 2 level, 20)..20` cells. `FUN_00448c70` tries ten random
+  start/end pairs with A* (`FUN_00448ce0`, `449040`: the start leaves in a
+  random free direction, the end is entered against one, bridges only
+  straight on; nodes at `0x67d030`) and accepts a path of exactly that
+  length, else falls back to a random start and the farthest reachable
+  cell (last node taken off the open list), which is what happens nearly
+  always. `FUN_00449360` lays straights and bends along the parent chain
+  (`FUN_00449c70`), the well pointing at the first piece, the lamp at the
+  last. `FUN_00449590` then adds `2^level` side branches capped by valves
+  (bend -> cross + 2 caps `449650`, bend -> tee + cap `449830` (its retry
+  loop tests the same side twice), straight -> tee/cross `449950`, 1 in 5
+  straights). `FUN_00449a90` moves the parts into the store: each counts 2
+  with probability 1/(level+1) else 1; the first piece after the well
+  stays on levels 0-1 and its cell blinks (`cursor.smk`, z 5) on levels
+  0-3; some straights are swapped for vents/reservoirs while more straights
+  than bridges remain (coin flips).
+* Input: left click on a slot takes a part (count - 1; a held part goes
+  back first), on the map drops it (`FUN_0044a100`, empty cell, terrain
+  rules) or picks up a part without oil (`44a200`), elsewhere returns it
+  to the store (`449ef0`). Right click rotates the held part or a part on
+  the map (`44a370`). The held part (`0x4ddb20`, z 11) snaps to the cell
+  under the mouse (`FUN_00449f30` / `44a2f0`). Sounds `building-1`,
+  `rotating-1..3`, `running-1..4` (looping while the oil flows).
+* Oil (`FUN_0044a480` per frame): after the countdown `FUN_0044a930` pours
+  `(turbo + 1) * speed * dt` units into the well; `FUN_0044a9a0` fills a
+  tile (`44b3f0`: the entry side first, then the other openings, split by
+  `44b2d0`), passes the overflow on to the connected neighbours, returns
+  -1 at an opening with nothing connected (game over), 0 while absorbing,
+  or the leftover once everything behind is full (level complete if the
+  refinery was reached, else game over). Turbo button: the oil starts at
+  once and turbo += 1 up to 10 (meter `turbo.bmp` at (453, 35), bottom
+  up). Score at level end (`44a5f0`): `(par / ms since the oil started *
+  100 * level + parts * 25) * multiplier` (level 0 gives no time points).
+  `44a740` game over: clips stopped, map cleared, store/score/timer blank,
+  `level00` shown; a new game starts at level 0.
+* Drawing (`FUN_0044ac50`): the oil is drawn into the cell's own bitmap
+  (shapes accumulate) as rectangles along each side (inflow from the edge
+  to the centre, outflow from the centre out, pipe width / 2 each side);
+  bends fill the corner square (centre +- 10) with growing triangles once
+  the inflow passed 2/3; then the tile is blitted over it with the pipe
+  interior colour (pixel 28, 28 of `straight-0.bmp`) as key. Timer "mm:ss"
+  since the oil started (negative while counting down) in `Amerigo BT_14_`
+  at (314, 28)-(382, 53), score at (695, 91)-(787, 119), part counts at
+  (757, 158 + 62 i) 26x56. Buttons `help_0/1` (0, 0), `exit_0/1` (728, 0),
+  `start_0/1` (138, 29), `turbo_0/1` (463, 29) with the START/TURBO
+  labels at (146, 34) and (494, 34). Music `subgame16`.
+* Not done: level complete and game over message boxes (`FUN_00421310`,
+  the original waits for them), high score registration (`FUN_0041f9a0`,
+  medals 2500/5000/10000), help dialog, the "game in progress" flag
+  (`FUN_0040d8a0`) that makes leaving ask for confirmation, tournament
+  mode, `sound.ini` volumes. Deviation: the bend's inflow rectangle is
+  always drawn up to the corner square (the original stops once the corner
+  phase starts, which leaves a one pixel gap at low frame rates).
+
 ### Bitmap fonts (FONT module, `font.cpp`)
 
 `common/fonts/<name>.bmp`, 24 bit, 256 glyphs in a strip. The top row marks
@@ -306,7 +393,7 @@ Sub games (`[subgame]`, score based):
 | | beemaze | Ludvigs Labyrint | tvroom | data |
 | | buildabike | Reodors sykkelverksted | garage | data |
 | | mountain | (no title in language.ini) | morning | data (no sceneDefs entry yet) |
-| | pipeline | Oljeeventyret | outtent | data |
+| x | pipeline | Oljeeventyret | outtent | data (message boxes, high score, help open) |
 | | butterfly | Sommerfugler i magen | pee | data |
 | | hustle | Emanuels utfordring | intent | data |
 
