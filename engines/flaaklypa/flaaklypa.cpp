@@ -243,8 +243,11 @@ void FlaaklypaEngine::switchScene() {
 	}
 	debug(1, "Entering scene %s (arg %d)", name.c_str(), arg);
 	_scene = scene;
-	_scene->onInit(arg);
+	// The original resets the cursor while ending the previous scene
+	// (FUN_0040c930) and sends the init event last (FUN_0040c8e0), so a
+	// sequence started by the init keeps the cursor hidden.
 	_scene->showCursor();
+	_scene->onInit(arg);
 }
 
 void FlaaklypaEngine::dispatchEvent(const Common::Event &event) {
