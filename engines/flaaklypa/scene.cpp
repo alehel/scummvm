@@ -85,7 +85,7 @@ Anim *Scene::anim(const char *name) {
 	return a;
 }
 
-Anim *Scene::defineAnim(const char *name, bool smacker, bool transparent, int hotspot, int x, int y, int z, bool visible) {
+Anim *Scene::defineAnim(const char *name, bool smacker, bool transparent, int hotspot, int x, int y, int z, bool visible, bool loop) {
 	Anim *existing = findAnim(name);
 	if (existing)
 		return existing;
@@ -95,7 +95,7 @@ Anim *Scene::defineAnim(const char *name, bool smacker, bool transparent, int ho
 	d->smacker = smacker;
 	d->visible = visible;
 	d->transparent = transparent;
-	d->loop = 0;
+	d->loop = loop;
 	d->hotspot = hotspot;
 	d->x = x;
 	d->y = y;
@@ -201,6 +201,9 @@ bool Scene::AnimQueue::advance() {
 // ---- characters ----------------------------------------------------------
 
 void Scene::addCharacter(int id, int hotspot) {
+	// FUN_0040a2b0 leaves an existing character alone.
+	if (findCharacter(id))
+		return;
 	Character c;
 	c.id = id;
 	c.hotspot = hotspot;
@@ -265,12 +268,18 @@ void Scene::playCharacterList(int id, AnimList list) {
 }
 
 void Scene::stopCharacter(int id) {
-	Character *c = findCharacter(id);
-	if (!c)
+	// FUN_0040a310 removes the clip and clears the slot's in-use flag: the
+	// character no longer exists (resetCharacters() skips it, a new
+	// addCharacter() creates it afresh).
+	for (uint i = 0; i < _characters.size(); i++) {
+		if (_characters[i].id != id)
+			continue;
+		Anim *cur = _characters[i].current;
+		if (cur && cur->isAdded())
+			cur->remove();
+		_characters.remove_at(i);
 		return;
-	if (c->current && c->current->isAdded())
-		c->current->remove();
-	c->current = nullptr;
+	}
 }
 
 bool Scene::isCharacterActive(int id) {

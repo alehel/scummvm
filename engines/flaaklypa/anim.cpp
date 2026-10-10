@@ -32,7 +32,7 @@ namespace Flaaklypa {
 
 Anim::Anim(Scene *scene, const AnimDef *def) : _scene(scene), _def(def),
 	_video(nullptr), _frame(nullptr), _hasKey(false), _keyColor(0),
-	_x(def->x), _y(def->y), _z(def->zOrder), _hotspot(def->hotspot), _hitMask(nullptr), _group(def->group),
+	_x(def->x), _y(def->y), _z(def->zOrder), _hotspot(def->hotspot), _hitMask(nullptr), _hitRadius(0), _group(def->group),
 	_added(false), _playing(false), _removeWhenDone(false), _ownSurface(false), _lastFrameTime(0), _lastFrameShown(false) {
 }
 
@@ -251,6 +251,15 @@ Common::Rect Anim::rect() const {
 int Anim::hitTest(int x, int y) const {
 	if (!_added || !_frame || !_def->visible || _hotspot == 0)
 		return -1;
+	if (_hitRadius > 0) {
+		// FUN_00413750 mode 1: the square [centre - r, centre + r) first,
+		// then the distance to the centre (truncated like the original).
+		const Common::Rect r = rect();
+		int dx = x - (r.left + r.width() / 2), dy = y - (r.top + r.height() / 2);
+		if (dx < -_hitRadius || dx >= _hitRadius || dy < -_hitRadius || dy >= _hitRadius)
+			return 0;
+		return (int)sqrt((double)(dx * dx + dy * dy)) <= _hitRadius ? _hotspot : 0;
+	}
 	if (!rect().contains(x, y))
 		return 0;
 	if (_hitMask) {
