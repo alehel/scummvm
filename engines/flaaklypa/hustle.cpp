@@ -306,7 +306,7 @@ int HustleScene::cupAt(int x, int y) const {
 
 // FUN_0043d560: runs when the clock clip "start_0" has finished.
 void HustleScene::startGame() {
-	_clockStart = g_system->getMillis();
+	_clockStart = g_engine->getGameMillis();
 	_clockRunning = true;
 	_state = kStateBetting;
 	_levelBase = 1;
@@ -327,7 +327,7 @@ bool HustleScene::updateClock() {
 	Anim *hand = anim("hand_0");
 	if (!hand->isAdded())
 		hand->add(Anim::kDefaultPos, Anim::kDefaultPos, -1);
-	float frac = (float)(g_system->getMillis() - _clockStart) * (1.0f / kClockMs);
+	float frac = (float)(g_engine->getGameMillis() - _clockStart) * (1.0f / kClockMs);
 	int frames = hand->frameCount();
 	float f = (float)frames * frac;
 	int frame = (int)(f > 0 ? f + 0.5f : f - 0.5f);

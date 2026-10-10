@@ -291,7 +291,7 @@ void Tooltip::start(int currentHotspot) {
 	_last = currentHotspot;
 	_current = -1;
 	_delay = 1500;
-	_changeTime = g_system->getMillis();
+	_changeTime = g_engine->getGameMillis();
 }
 
 void Tooltip::hotspotChanged(int hotspot) {
@@ -302,13 +302,13 @@ void Tooltip::hotspotChanged(int hotspot) {
 	hide();
 	_last = _current;
 	_current = hotspot;
-	_changeTime = g_system->getMillis();
+	_changeTime = g_engine->getGameMillis();
 }
 
 int Tooltip::poll() {
 	if (_current == _last)
 		return -1;
-	if (g_system->getMillis() < _changeTime + _delay)
+	if (g_engine->getGameMillis() < _changeTime + _delay)
 		return -1;
 	_last = _current;
 	return _current;

@@ -403,7 +403,7 @@ void BugzzzScene::onInit(int arg) {
 	_menuBuilt = false;
 	_scrolling = false;
 	_resetDelta = true;
-	_timeBase = g_system->getMillis();
+	_timeBase = g_engine->getGameMillis();
 	_ticks = _seconds = _spitTicks = 0;
 	_level = _startLevel;
 	_branch = -1;
@@ -572,7 +572,7 @@ void BugzzzScene::addPanels() {
 // FUN_00433c20: slides the panels out and in (60 steps per second along
 // the slide table), then keeps the text areas on them.
 void BugzzzScene::updatePanels() {
-	uint32 now = g_system->getMillis();
+	uint32 now = g_engine->getGameMillis();
 	for (int i = 0; i < kPlayers; i++) {
 		Panel &p = _panels[i];
 		int z = 20 - i;
@@ -630,7 +630,7 @@ void BugzzzScene::updatePanelTexts() {
 void BugzzzScene::switchPanel(int player, const char *name) {
 	_panels[player].state++;
 	_panels[player].next = name;
-	_panels[player].time = g_system->getMillis();
+	_panels[player].time = g_engine->getGameMillis();
 	playSound(kSndClick1 + player);
 }
 
@@ -714,13 +714,13 @@ void BugzzzScene::startScroll() {
 	setText(anim(Common::String::format("lvl%d", c).c_str()), _font10, Common::String::format("%d", next + 1), kAlignCentre | kAlignVCentre);
 	int t = kLevels_[next].time;
 	setText(anim(Common::String::format("time%d", c).c_str()), _font10, Common::String::format("%02d:%02d", t / 60, t % 60), kAlignCentre | kAlignVCentre);
-	_scrollStart = g_system->getMillis();
+	_scrollStart = g_engine->getGameMillis();
 	_scrolling = true;
 }
 
 // FUN_00433e40: 600 pixels down in four seconds.
 void BugzzzScene::updateScroll() {
-	int off = (int)((g_system->getMillis() - _scrollStart) * 600 / 4000);
+	int off = (int)((g_engine->getGameMillis() - _scrollStart) * 600 / 4000);
 	if (off > 600) {
 		off = 600;
 		_scrolling = false;
@@ -1646,12 +1646,12 @@ void BugzzzScene::pressStart() {
 		removeAnim("start_off");
 	addAnim("start_on", Anim::kDefaultPos, Anim::kDefaultPos, kZDialog);
 	_startPressed = true;
-	_startTime = g_system->getMillis() + 150;
+	_startTime = g_engine->getGameMillis() + 150;
 }
 
 // FUN_004343e0
 void BugzzzScene::checkStart() {
-	if (_startPressed && g_system->getMillis() > _startTime) {
+	if (_startPressed && g_engine->getGameMillis() > _startTime) {
 		startGame();
 		_startPressed = false;
 	}
@@ -1868,17 +1868,12 @@ void BugzzzScene::gameOver() {
 }
 
 // FUN_00421310 with OK. The original sets DAT_00661fbc around the ranking
-// box, which makes its frame handler (FUN_004330d0) skip the game; its
-// message box also pauses the game clock (FUN_0040d270 -> FUN_0040c400) and
-// swallows the frame events. The engine keeps updating the scene under a
-// dialog, so the flag covers every box here: the nested frames must not
-// run the game (the level would complete again and open a second box), and
-// the time base is moved on by the time the box was open.
+// box, which makes its frame handler (FUN_004330d0) skip the game. The
+// message box itself freezes the scene and the game clock (FUN_0040d270),
+// as the engine's dialogs do; the flag is kept for the original's logic.
 void BugzzzScene::showMessage(const Common::String &title, const Common::String &text) {
 	_messageBox = true;
-	uint32 start = g_system->getMillis();
 	_vm->messageBox(title, text, MessageBox::kButtonOk);
-	_timeBase += g_system->getMillis() - start;
 	_resetDelta = true;
 	_messageBox = false;
 }
@@ -1930,7 +1925,7 @@ void BugzzzScene::joinPlayer(int p) {
 
 // FUN_00436c70: movement is scaled to 50 frames per second.
 void BugzzzScene::updateDelta() {
-	uint32 now = g_system->getMillis();
+	uint32 now = g_engine->getGameMillis();
 	if (_resetDelta) {
 		_lastFrameTime = now;
 		_resetDelta = false;
@@ -2002,7 +1997,7 @@ void BugzzzScene::onUpdate() {
 	// DAT_00661fbc: nothing runs while a message box is open (see showMessage()).
 	if (_messageBox)
 		return;
-	uint32 now = g_system->getMillis();
+	uint32 now = g_engine->getGameMillis();
 	_ticks = (now - _timeBase) / kTickMs;
 	_seconds = (now - _timeBase) / 1000;
 	_spitTicks = (now - _timeBase) / kSpitTickMs;
@@ -2100,7 +2095,7 @@ void BugzzzScene::parseAutoKeys() {
 }
 
 void BugzzzScene::runAutoKeys() {
-	uint32 elapsed = g_system->getMillis() - _timeBase;
+	uint32 elapsed = g_engine->getGameMillis() - _timeBase;
 	while (!_autoKeys.empty() && elapsed >= _autoKeys[0].time) {
 		AutoKey k = _autoKeys[0];
 		_autoKeys.remove_at(0);

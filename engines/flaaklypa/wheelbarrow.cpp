@@ -226,7 +226,7 @@ void WheelbarrowScene::startGame(int level) {
 	drawLives();
 	setLevel(_level);
 	showBasket(_basketCount);
-	_lastTick = g_system->getMillis();
+	_lastTick = g_engine->getGameMillis();
 	debug(1, "Wheelbarrow: game started at level %d", level);
 }
 
@@ -763,7 +763,7 @@ void WheelbarrowScene::onAnimFinished(Anim *a) {
 void WheelbarrowScene::onUpdate() {
 	if (!_running)
 		return;
-	uint32 now = g_system->getMillis();
+	uint32 now = g_engine->getGameMillis();
 	float dt = (float)(int)(now - _lastTick) * 0.001f;
 	if (dt >= 0.1f)
 		dt = 0.1f;

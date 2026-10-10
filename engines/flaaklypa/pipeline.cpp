@@ -502,7 +502,7 @@ void PipelineScene::startGame() {
 	_score = 0;
 	setupLevel();
 	_playing = true;
-	_levelStart = g_system->getMillis();
+	_levelStart = g_engine->getGameMillis();
 	_selected = -1;
 	_dragDir = 0;
 }
@@ -559,7 +559,7 @@ void PipelineScene::loadLevel() {
 
 // FUN_0044a5f0: the oil has filled the pipeline up to the refinery.
 void PipelineScene::levelComplete() {
-	uint32 now = g_system->getMillis();
+	uint32 now = g_engine->getGameMillis();
 	int elapsed = (int)(now - _waitTime - _levelStart);
 	int m = _level % kMaxLevels;
 	int timePoints = elapsed > 0 ? (int)((double)kParTime[m] / (double)elapsed * (double)(100 * _level)) : 0;
@@ -577,7 +577,7 @@ void PipelineScene::levelComplete() {
 	_level++;
 	setupLevel();
 	_playing = true;
-	_levelStart = g_system->getMillis();
+	_levelStart = g_engine->getGameMillis();
 }
 
 // FUN_0044a740: the oil leaked or the pipeline was closed off.
@@ -1013,7 +1013,7 @@ void PipelineScene::onMouseDown(int hotspot, int x, int y) {
 		return;
 	case kButtonTurbo:
 		if (_playing) {
-			uint32 now = g_system->getMillis();
+			uint32 now = g_engine->getGameMillis();
 			if (now < _waitTime + _levelStart)
 				_waitTime = (int)(now - _levelStart);   // the oil starts at once
 			if (_turbo < kMaxTurbo)
@@ -1192,7 +1192,7 @@ void PipelineScene::onUpdate() {
 			moveDrag(mouse.x, mouse.y);
 	}
 
-	uint32 now = g_system->getMillis();
+	uint32 now = g_engine->getGameMillis();
 	if (!_playing)
 		return;
 	if (_lastTick == 0)

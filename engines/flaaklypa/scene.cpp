@@ -342,7 +342,7 @@ void Scene::takeAnim(Anim *a, int mode) {
 }
 
 void Scene::scheduleBored(Character &c) {
-	c.boredTime = g_system->getMillis() + 15000 + _vm->getRandomNumber(9999);
+	c.boredTime = g_engine->getGameMillis() + 15000 + _vm->getRandomNumber(9999);
 }
 
 void Scene::characterPlayNext(Character &c, int list) {
@@ -401,7 +401,7 @@ void Scene::characterAnimFinished(Character &c, Anim *a) {
 	default:
 		break;
 	}
-	if (c.state == kListIdle && c.lists[kListBored].count && g_system->getMillis() >= c.boredTime)
+	if (c.state == kListIdle && c.lists[kListBored].count && g_engine->getGameMillis() >= c.boredTime)
 		c.state = kListBored;
 	characterPlayNext(c, c.state);
 }
@@ -559,7 +559,7 @@ void Scene::setTimer(int id, uint32 delayMs, int data) {
 	Timer t;
 	t.id = id;
 	t.data = data;
-	t.fireTime = g_system->getMillis() + delayMs;
+	t.fireTime = g_engine->getGameMillis() + delayMs;
 	_timers.push_back(t);
 }
 
@@ -626,6 +626,11 @@ void Scene::handleEvent(const Common::Event &event) {
 	}
 }
 
+void Scene::pauseAnims(bool pause) {
+	for (auto *a : _active)
+		a->pause(pause);
+}
+
 void Scene::dispatchAnimFinished(Anim *a) {
 	if (a->removeWhenDone()) {
 		a->remove();
@@ -639,7 +644,7 @@ void Scene::dispatchAnimFinished(Anim *a) {
 }
 
 void Scene::update() {
-	uint32 now = g_system->getMillis();
+	uint32 now = g_engine->getGameMillis();
 
 	// Take the due timers out first: a callback may open a modal dialog,
 	// which runs nested frames that update this scene again.

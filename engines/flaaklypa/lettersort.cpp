@@ -272,7 +272,7 @@ void LettersortScene::onInit(int arg) {
 	_pusherActive = false;
 	_clawQueue.clear();
 	_lastSecond = 0;
-	_startTime = g_system->getMillis();
+	_startTime = g_engine->getGameMillis();
 
 	// BUTTON module: help (id 3) at (0, 0), exit (id 2) at (728, 0)
 	defineAnim("help_0", false, true, kHotspotHelp, 0, 0, kZButtons)->add(0, 0, kZButtons);
@@ -871,7 +871,7 @@ void LettersortScene::startPusher() {
 	_pusherX = kBeltLeft - 248;
 	_pusherY = kPusherY;
 	_pusherPhase = 1000;
-	_pusherStart = g_system->getMillis();
+	_pusherStart = g_engine->getGameMillis();
 	playSound("pusher", 1);
 	Anim *p = anim("pusher");
 	if (p->isAdded())
@@ -886,7 +886,7 @@ bool LettersortScene::updatePusher() {
 	const int x0 = kBeltLeft - 248;
 	const int xMid = kBeltLeft - 50;
 	const int xEnd = kBeltLeft - 164;
-	float t = (float)(g_system->getMillis() - _pusherStart) * 0.001f;
+	float t = (float)(g_engine->getGameMillis() - _pusherStart) * 0.001f;
 	int x;
 	if (_pusherPhase >= 0 && t >= 1.0f) {
 		_pusherPhase = -1000;
@@ -1092,7 +1092,7 @@ void LettersortScene::onUpdate() {
 		_letters[_dragLetter].sprite.anim->setPos(m.x - _dragOffX, m.y - _dragOffY);
 	}
 
-	int sec = (int)((g_system->getMillis() - _startTime) / 1000);
+	int sec = (int)((g_engine->getGameMillis() - _startTime) / 1000);
 	if (sec != _lastSecond) {
 		_lastSecond = sec;
 		secondTick(sec);

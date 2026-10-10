@@ -278,7 +278,7 @@ int PeeScene::heading(const Common::Point &p0, const Common::Point &p1) {
 }
 
 void PeeScene::onUpdate() {
-	const uint32 now = g_system->getMillis();
+	const uint32 now = g_engine->getGameMillis();
 	const int dt = (int)(now - _lastTick);
 	if (dt >= 1000) {
 		_lastTick = now;

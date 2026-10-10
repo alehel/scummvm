@@ -80,6 +80,8 @@ public:
 	virtual bool handlesKey(const Common::KeyState &key) { return false; }
 
 	void handleEvent(const Common::Event &event);
+	/** Pauses or resumes the clips of all added elements (scene freeze). */
+	void pauseAnims(bool pause);
 	void update();
 	void draw(Graphics::ManagedSurface &dst);
 

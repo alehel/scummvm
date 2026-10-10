@@ -227,7 +227,7 @@ void WhackamoleScene::drawPercent() {
 
 // FUN_0044ea90: remaining time as mm:ss, redrawn every tick in the original.
 void WhackamoleScene::drawTime() {
-	int left = _duration / 1000 - (int)(g_system->getMillis() - _levelStart) / 1000;
+	int left = _duration / 1000 - (int)(g_engine->getGameMillis() - _levelStart) / 1000;
 	Common::String text = Common::String::format("%s: %02d:%02d", _vm->getString("whackamole:TIME").c_str(), left / 60, left % 60);
 	if (text == _timeText)
 		return;
@@ -345,7 +345,7 @@ void WhackamoleScene::startLevel() {
 	_squirrelInterval = _duration / (_levelDef->squirrels + 1);
 	_birds = 0;
 	_squirrels = 0;
-	_levelStart = g_system->getMillis();
+	_levelStart = g_engine->getGameMillis();
 	_nextBird = _levelStart + rnd(_birdInterval);
 	_nextSquirrel = _levelStart + rnd(_squirrelInterval);
 	_balance = 0;
@@ -566,7 +566,7 @@ void WhackamoleScene::onUpdate() {
 	}
 
 	drawTime();
-	uint32 now = g_system->getMillis();
+	uint32 now = g_engine->getGameMillis();
 	if ((int)(now - _levelStart) > _duration) {
 		endLevel();
 		return;

@@ -63,6 +63,8 @@ public:
 	/** SCENE_PlayAnim: adds the clip (default position and z order) if needed and starts it. */
 	void play();
 	void stop();
+	/** Pauses the clip and its sound (scene freeze); a paused clip does not advance. */
+	void pause(bool pause);
 
 	/**
 	 * Turns the element into a procedurally drawn bitmap of the given size:

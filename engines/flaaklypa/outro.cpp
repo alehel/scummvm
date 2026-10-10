@@ -71,12 +71,12 @@ OutroScene::OutroScene(FlaaklypaEngine *vm, const SceneDef *def) : Scene(vm, def
 }
 
 int OutroScene::sceneTime() const {
-	return (int)(g_system->getMillis() - _startTime);
+	return (int)(g_engine->getGameMillis() - _startTime);
 }
 
 void OutroScene::onInit(int arg) {
 	// FUN_004183d0
-	_startTime = g_system->getMillis();
+	_startTime = g_engine->getGameMillis();
 	// FUN_00413910("credits.ini") makes "<lang>/outro/credits.ini",
 	// FUN_0040dc10 loads it (INI module: FUN_0040e2d0 get string,
 	// FUN_0040e3a0 get int).

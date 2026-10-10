@@ -263,6 +263,28 @@ void FlaaklypaEngine::switchScene() {
 	_scene->onInit(arg);
 }
 
+void FlaaklypaEngine::freezeScene(bool freeze) {
+	if (freeze) {
+		if (_freezeDepth++ == 0) {
+			_freezeStart = g_system->getMillis();
+			if (_scene)
+				_scene->pauseAnims(true);
+		}
+	} else if (_freezeDepth > 0) {
+		if (--_freezeDepth == 0) {
+			_frozenTotal += g_system->getMillis() - _freezeStart;
+			if (_scene)
+				_scene->pauseAnims(false);
+		}
+	}
+}
+
+void FlaaklypaEngine::pauseEngineIntern(bool pause) {
+	// The global main menu: stop the game clock too, not only the mixer.
+	Engine::pauseEngineIntern(pause);
+	freezeScene(pause);
+}
+
 void FlaaklypaEngine::dispatchEvent(const Common::Event &event) {
 	if (Common::isMouseEvent(event))
 		_mousePos = event.mouse;
@@ -342,7 +364,13 @@ void FlaaklypaEngine::runFrame() {
 		dispatchEvent(e);
 	}
 
-	_scene->update();
+	// Under a modal dialog the original skips the clip updates
+	// (FUN_0040d110), its clock stands still and the dialog swallows the
+	// scene's frame, timer and input events: the scene is frozen.
+	if (!isSceneFrozen())
+		_scene->update();
+	else
+		_cursor->update();
 	_music->update();
 	_scene->draw(*_screen);
 	if (_dialog)

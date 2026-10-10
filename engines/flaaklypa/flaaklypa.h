@@ -84,6 +84,9 @@ private:
 	};
 	Common::Array<AutoKey> _autoKeys;
 	uint32 _startTime = 0;
+	int _freezeDepth = 0;          ///< nested freezes (FUN_0040d270 counter)
+	uint32 _freezeStart = 0;
+	uint32 _frozenTotal = 0;
 	Common::Point _mousePos;
 	uint32 _autoshotTime = 0;
 	Graphics::FrameLimiter *_limiter = nullptr;
@@ -97,6 +100,7 @@ private:
 protected:
 	// Engine APIs
 	Common::Error run() override;
+	void pauseEngineIntern(bool pause) override;
 
 public:
 	Graphics::Screen *_screen = nullptr;
@@ -163,6 +167,20 @@ public:
 	int messageBox(const Common::String &title, const Common::String &text, int buttons = 0);
 
 	Scene *scene() const { return _scene; }
+
+	/**
+	 * The game clock (FUN_0040c450): milliseconds that stand still while the
+	 * scene is frozen. Scene and game code time everything with it.
+	 */
+	uint32 getGameMillis() const {
+		return (_freezeDepth ? _freezeStart : g_system->getMillis()) - _frozenTotal;
+	}
+	/**
+	 * Freezes the scene under a modal dialog (FUN_0040d270): the game clock
+	 * stops, the scene is not updated and its clips pause. Nests.
+	 */
+	void freezeScene(bool freeze);
+	bool isSceneFrozen() const { return _freezeDepth > 0; }
 	/** The mouse position of the last mouse event (the original's FUN_0040ca10). */
 	Common::Point mousePos() const { return _mousePos; }
 	/** One iteration of the main loop: input, scene update, drawing. Dialogs nest it. */

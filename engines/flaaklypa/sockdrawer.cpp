@@ -534,7 +534,7 @@ void SockdrawerScene::timerRotateDone() {
 	setTimerFrame(0);
 	addAnim("timermiddlestart", Anim::kDefaultPos, Anim::kDefaultPos, kZTimerClips);
 	playAnim("timermiddlestart");
-	_levelStart = g_system->getMillis();
+	_levelStart = g_engine->getGameMillis();
 	_state = kStatePlaying;
 }
 
@@ -600,7 +600,7 @@ void SockdrawerScene::onTimer(int id, int data) {
 	if (allSocksGone()) {
 		// Time bonus: 200 * level * remaining / level time.
 		const Level &lv = kLevelTable[_level];
-		int remaining = (int)(_levelStart + lv.timeMs - g_system->getMillis());
+		int remaining = (int)(_levelStart + lv.timeMs - g_engine->getGameMillis());
 		int bonus = (int)((float)(_level * 200) * (float)remaining / (float)lv.timeMs);
 		addPoints(bonus);
 		nextLevel();
@@ -641,7 +641,7 @@ void SockdrawerScene::onUpdate() {
 // FUN_0044c5d0: the sand runs through 30 frames; false when time is up.
 bool SockdrawerScene::updateTimer() {
 	int timeMs = kLevelTable[_level].timeMs;
-	int elapsed = (int)(g_system->getMillis() - _levelStart);
+	int elapsed = (int)(g_engine->getGameMillis() - _levelStart);
 	if (timeMs < elapsed)
 		return false;
 	int frame = (int)(30.0f / (float)timeMs * (float)elapsed);

@@ -273,7 +273,7 @@ void ButterflyScene::onKey(const Common::KeyState &key) {
 
 // FUN_0043a820: the start clip was clicked.
 void ButterflyScene::startGame() {
-	debug(1, "Butterfly: start clicked at %u ms", g_system->getMillis());
+	debug(1, "Butterfly: start clicked at %u ms", g_engine->getGameMillis());
 	removeAnim("startanim");
 	playAnim("timerstart");
 	showCatcher(true);
@@ -315,7 +315,7 @@ void ButterflyScene::restartTimer() {
 		removeAnim("timermove");
 	addAnim("timermove", Anim::kDefaultPos, Anim::kDefaultPos, 0);
 	playAnim("timermove");
-	_levelStart = g_system->getMillis();
+	_levelStart = g_engine->getGameMillis();
 	_inGame = true;
 }
 
@@ -379,7 +379,7 @@ void ButterflyScene::onAnimFinished(Anim *a) {
 		memset(_caught, 0, sizeof(_caught));
 		_tick = 0;
 		setLevel(0);
-		_lastTick = g_system->getMillis();
+		_lastTick = g_engine->getGameMillis();
 		debug(1, "Butterfly: game starts at %u ms", _lastTick);
 	} else if (n == "timerend") {
 		gameOver();
@@ -456,7 +456,7 @@ void ButterflyScene::catchAt(int x, int y) {
 		if (kLevelTable[_level][1] < _levelPoints) {
 			// Time bonus: the remaining fraction of the level time times 100 * (level + 1).
 			int duration = kLevelTable[_level][0];
-			int remaining = duration + (int)_levelStart - (int)g_system->getMillis();
+			int remaining = duration + (int)_levelStart - (int)g_engine->getGameMillis();
 			_score += (int)((float)remaining / duration * (100 * (_level + 1)));
 			debug(1, "Butterfly: level %d done, score %d", _level + 1, _score);
 			setLevel(MIN(_level + 1, kLevels - 1)); // FUN_0043b200
@@ -542,7 +542,7 @@ void ButterflyScene::turn(Entity &e) {
 		t = -t;
 	setClip(e, e.heading + t);
 	setPlaying(e, shouldRest(e));
-	e.nextChange = g_system->getMillis() + randRange(p[0], p[1]);
+	e.nextChange = g_engine->getGameMillis() + randRange(p[0], p[1]);
 }
 
 // FUN_0043abf0: mode 0 normal, 1 scared by a missed net.
@@ -685,7 +685,7 @@ void ButterflyScene::onUpdate() {
 
 	if (!_inGame)
 		return;
-	uint32 now = g_system->getMillis();
+	uint32 now = g_engine->getGameMillis();
 	if (!updateTimer(now))
 		timeUp();
 	_tick++;

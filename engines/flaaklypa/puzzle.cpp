@@ -459,7 +459,7 @@ void PuzzleScene::updateGems(float dt) {
 }
 
 void PuzzleScene::onUpdate() {
-	uint32 now = g_system->getMillis();
+	uint32 now = g_engine->getGameMillis();
 	float dt = _lastTick ? (now - _lastTick) * 0.1f : 0;
 	_lastTick = now;
 

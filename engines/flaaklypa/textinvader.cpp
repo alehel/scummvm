@@ -192,7 +192,7 @@ void TextinvaderScene::onInit(int arg) {
 
 	playMusic("track22");
 	showStartSign();
-	_lastTick = g_system->getMillis();
+	_lastTick = g_engine->getGameMillis();
 	// TODO: profiles. With an active profile the original shows the
 	// "tournament:PLAYERREADY" message box and starts the game at once
 	// (FUN_0044d720(4, 0, 0)).
@@ -261,7 +261,7 @@ void TextinvaderScene::onMouseDown(int hotspot, int x, int y) {
 	}
 	if (hotspot == kHotspotSign && !_running && !_starting) {
 		// The sign turns round and the lights come on.
-		_startTime = g_system->getMillis();
+		_startTime = g_engine->getGameMillis();
 		_starting = true;
 		_signClip->play();
 		_sounds[kSoundStart]->play();
@@ -304,7 +304,7 @@ void TextinvaderScene::startGame() {
 	for (int i = 0; i < _slotCount; i++)
 		spawnWord(i);
 	updateMeter();
-	_lastTick = g_system->getMillis();
+	_lastTick = g_engine->getGameMillis();
 }
 
 // The original's timers all carry the slot (or a code) as data and never
@@ -593,7 +593,7 @@ void TextinvaderScene::checkLevel() {
 // 0x112 -> FUN_0044d4f0: the words fall; one that reaches the ground is
 // lost.
 void TextinvaderScene::onUpdate() {
-	uint32 now = g_system->getMillis();
+	uint32 now = g_engine->getGameMillis();
 	float dt = (now - _lastTick) * 0.001f;
 	_lastTick = now;
 

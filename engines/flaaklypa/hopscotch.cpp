@@ -402,7 +402,7 @@ void HopscotchScene::setTarget(Jumper &j, int x, int y) {
 		j.dirX = dx / j.dist;
 		j.dirY = dy / j.dist;
 	}
-	j.startTime = g_system->getMillis();
+	j.startTime = g_engine->getGameMillis();
 }
 
 // FUN_0043c610: hops to a square (its top left corner is given).
@@ -659,7 +659,7 @@ void HopscotchScene::drawBoxText(const BitmapFont &font, const Common::String &t
 
 // FUN_0043cb90: five points per full second left on the hourglass.
 int HopscotchScene::timeBonus() const {
-	int left = (int)(level().timeMs + _turnStart - g_system->getMillis());
+	int left = (int)(level().timeMs + _turnStart - g_engine->getGameMillis());
 	return (left / 1000) * 5;
 }
 
@@ -714,7 +714,7 @@ void HopscotchScene::onAnimFinished(Anim *a) {
 		a->remove();
 		addAnim("timer", Anim::kDefaultPos, Anim::kDefaultPos, kZTimer);
 		_timerFrame = -1;
-		_turnStart = g_system->getMillis();
+		_turnStart = g_engine->getGameMillis();
 		setState(kStatePlayer);
 	} else if (a == _sol.anim) {
 		land(_sol);
@@ -748,7 +748,7 @@ void HopscotchScene::onAnimFinished(Anim *a) {
 void HopscotchScene::onUpdate() {
 	if (_messageBox)
 		return;
-	uint32 now = g_system->getMillis();
+	uint32 now = g_engine->getGameMillis();
 	if (_sol.anim && _sol.anim->isPlaying())
 		moveJumper(_sol, now);
 	if (_lud.anim && _lud.anim->isPlaying())

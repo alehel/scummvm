@@ -174,13 +174,18 @@ void Anim::play() {
 	_playing = true;
 	_lastFrameShown = false;
 	_scene->animStarted(this);
-	debug(2, "Anim %s started t=%u", _def->name, g_system->getMillis());
+	debug(2, "Anim %s started t=%u", _def->name, g_engine->getGameMillis());
 }
 
 void Anim::stop() {
 	if (_video && _playing)
 		_video->stop();
 	_playing = false;
+}
+
+void Anim::pause(bool pause) {
+	if (_video && _playing)
+		_video->pauseVideo(pause);
 }
 
 void Anim::setZ(int z) {
@@ -213,11 +218,11 @@ bool Anim::update() {
 		// reporting the end.
 		if (!_lastFrameShown) {
 			_lastFrameShown = true;
-			_lastFrameTime = g_system->getMillis();
+			_lastFrameTime = g_engine->getGameMillis();
 			return false;
 		}
 		uint32 frameMs = 1000 / MAX(1, _video->getFrameRate().toInt());
-		if (g_system->getMillis() - _lastFrameTime < frameMs)
+		if (g_engine->getGameMillis() - _lastFrameTime < frameMs)
 			return false;
 		if (_def->loop) {
 			_video->rewind();
@@ -227,7 +232,7 @@ bool Anim::update() {
 		}
 		_video->stop();
 		_playing = false;
-		debug(2, "Anim %s finished t=%u frame=%d", _def->name, g_system->getMillis(), _video->getCurFrame());
+		debug(2, "Anim %s finished t=%u frame=%d", _def->name, g_engine->getGameMillis(), _video->getCurFrame());
 		return true;
 	}
 	return false;

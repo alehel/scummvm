@@ -277,7 +277,7 @@ bool BeemazeScene::load() {
 
 // FUN_00432d50, the init handler.
 void BeemazeScene::onInit(int arg) {
-	_initTime = g_system->getMillis();
+	_initTime = g_engine->getGameMillis();
 	_running = false;
 	_steps = 0;
 
@@ -651,7 +651,7 @@ void BeemazeScene::startLevelClips() {
 			a->add(Anim::kDefaultPos, Anim::kDefaultPos, kZItems);
 		a->play();
 	}
-	_ambientTime = g_system->getMillis() + kAmbientInterval;
+	_ambientTime = g_engine->getGameMillis() + kAmbientInterval;
 }
 
 // FUN_00431e50
@@ -665,7 +665,7 @@ void BeemazeScene::removeLevelClips() {
 // FUN_0042f460: every five seconds, when no one-shot clip of the maze is
 // playing, each one-shot clip in turn gets a one in three chance to play.
 void BeemazeScene::playAmbientClip() {
-	uint32 now = g_system->getMillis();
+	uint32 now = g_engine->getGameMillis();
 	if ((int32)(now - _ambientTime) < 0)
 		return;
 	_ambientTime = now + kAmbientInterval;
@@ -750,7 +750,7 @@ bool BeemazeScene::onTrail(int x, int y) const {
 // FUN_00430e50: moves Ludvig at 128 pixels per second (192 with a
 // mushroom) in ticks of more than 20 ms and advances the walk cycle.
 void BeemazeScene::movePlayer() {
-	uint32 now = g_system->getMillis();
+	uint32 now = g_engine->getGameMillis();
 	if (_moveTime == 0) {
 		_walkFrame = 0;
 		_lastSteps = 0;
@@ -1002,7 +1002,7 @@ void BeemazeScene::moveBees() {
 		_beeTime = 0;
 		_beeTimeReset = false;
 	}
-	uint32 now = g_system->getMillis();
+	uint32 now = g_engine->getGameMillis();
 	if (_beeTime == 0)
 		_beeTime = now;
 	int dt = now - _beeTime;
@@ -1424,7 +1424,7 @@ void BeemazeScene::parseAutoKeys() {
 }
 
 void BeemazeScene::processAutoKeys() {
-	uint32 elapsed = g_system->getMillis() - _initTime;
+	uint32 elapsed = g_engine->getGameMillis() - _initTime;
 	while (!_autoKeys.empty() && elapsed >= _autoKeys[0].time) {
 		AutoKey k = _autoKeys[0];
 		_autoKeys.remove_at(0);

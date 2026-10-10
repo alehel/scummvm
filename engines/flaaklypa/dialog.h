@@ -38,10 +38,11 @@ class FlaaklypaEngine;
  *
  * The dialog is a bitmap drawn above the scene with push buttons on it.
  * run() loops the engine's frame function, with the input routed to the
- * dialog, until close() is called: the scene underneath keeps animating
- * and gets its timers and frame updates, so callers must guard against
- * re-entrancy. (The original freezes the scene under a message box: see
- * "Dialogs" in NOTES.md.) Bitmaps from common/dialogue/<name>/...
+ * dialog, until close() is called. Meanwhile the scene is frozen like in
+ * the original (FUN_0040d270): it is drawn but not updated, its clips
+ * pause and the game clock stands still, so its timers, frame handlers and
+ * clip callbacks do not run under the dialog. Bitmaps from
+ * common/dialogue/<name>/...
  */
 class Dialog {
 public:

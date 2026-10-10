@@ -526,7 +526,7 @@ void BuildabikeScene::startGame() {
 	// TODO: the difficulty comes from the player profile; 1 without one.
 	_level = 1;
 	_bikesDone = kLevelTable[_level][0];
-	_lastTick = g_system->getMillis();
+	_lastTick = g_engine->getGameMillis();
 	_startTime = _lastTick;
 	_score = 0;
 	updateScoreText(0);
@@ -571,7 +571,7 @@ void BuildabikeScene::startGame() {
 
 // FUN_00438c50
 void BuildabikeScene::gameOver() {
-	uint32 elapsed = g_system->getMillis() - _startTime;
+	uint32 elapsed = g_engine->getGameMillis() - _startTime;
 	_vm->setGameRunning(false);
 	_running = false;
 	_scoreDisplay = (float)_score;
@@ -855,7 +855,7 @@ void BuildabikeScene::onUpdate() {
 	}
 	if (!_running)
 		return;
-	uint32 now = g_system->getMillis();
+	uint32 now = g_engine->getGameMillis();
 	float dt = (float)(now - _lastTick) * 0.001f;
 	updateBikes(dt);
 	if (!_running)

@@ -1246,11 +1246,10 @@ buttons (2 help `FUN_0041e580`, 3 exit `FUN_0040cc30`, 4 album -> scene
 `common/dialogue/<name>/` drawn above the scene over a checkerboard dimmer
 (`FUN_00407160`), with push buttons (normal/pressed/disabled bitmaps, the
 pressed one only while the mouse is over it, a click counts on release over
-the button: `FUN_00406d40`). `run()` nests the engine's `runFrame()`, so
-the scene keeps animating underneath while the input goes to the dialog
-(the original nests its message loop the same way, `FUN_0040d1c0`, but
-freezes the scene, see below). A scene
-change requested while a dialog is open waits until it closes.
+the button: `FUN_00406d40`). `run()` nests the engine's `runFrame()` like
+the original nests its message loop (`FUN_0040d1c0`), with the input going
+to the dialog and the scene frozen (see below). A scene change requested
+while a dialog is open waits until it closes.
 
 * Under a message box the original pauses its game clock
   (`FUN_0040d270(1)` -> `FUN_0040c400`; `FUN_0040c450` is the paused time),
@@ -1258,11 +1257,14 @@ change requested while a dialog is open waits until it closes.
   no modal dialog is open) and its event handler (priority 0x32, run
   before the scene's at 0) returns 1 for everything but 0x104/0x113/0x114,
   so the scene gets no timers, ticks, anim-finished events or input: the
-  scene is frozen. The engine keeps updating the scene under a dialog, so
-  callers guard against re-entrancy (see the sub games' notes). TODO:
-  freeze the scene (clips, timers, a paused scene clock) like the original.
-  The navigator is not modal; its handler swallows the same events while
-  the clips keep playing.
+  scene is frozen. The navigator wrapper the pages call (`FUN_00421560`)
+  raises the same counter and loops until the box closes, so it freezes
+  the scene too; only the music (`FUN_0040b360`) keeps playing. The engine
+  mirrors this with `freezeScene()`: `Dialog::run()` freezes, `runFrame()`
+  then draws the scene without updating it, `Scene::pauseAnims()` pauses
+  the clips (and their sound), and `getGameMillis()`, the clock all scene
+  and game code uses, stands still. The global main menu freezes the scene
+  the same way (`pauseEngineIntern()`).
 * Sub game abort (`FUN_0040cd90`, from `FUN_0040cd70`, the scene change):
   leaving a sub game (type 3) while the "sub game running" flag
   (`FUN_0040d8a0`, `DAT_0054bf98`; `setGameRunning()`) is set asks
