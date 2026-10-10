@@ -23,6 +23,7 @@
 #define DKPENGE_DKPENGE_H
 
 #include "common/array.h"
+#include "common/events.h"
 #include "common/rect.h"
 #include "common/str.h"
 #include "engines/engine.h"
@@ -108,13 +109,19 @@ public:
 	void doTransition(LivePage *page, int mode, int spriteId, int async);
 	void setCursor(const Common::String &name);
 	void showCursor(const Common::String &name);
-	// The document's busy level (doc+0x2cc in the original): while it is
-	// raised the hourglass shows, cursor changes wait and clicks are ignored
+	// The document's busy level (doc+0x2cc in the original): bit 0 marks a
+	// synchronous spell (a click being handled, a page opening), the rest
+	// counts asynchronous work in twos. While it is raised the hourglass
+	// shows, cursor changes wait and clicks are ignored
 	void beginBusy();
 	void endBusy();
 	void setBusy(int level);
 	bool isBusy() const { return _busy != 0; }
 	void resetBusy();
+	void beginSyncBusy();
+	void endSyncBusy();
+	void dropQueuedClicks();
+	void resyncPointer();
 	void walkEnded(LiveObject *lo);
 	// Scripts read the mouse position from a document variable
 	void setMouseVar(const Common::Point &p, LivePanel *panel);
@@ -213,6 +220,9 @@ private:
 	void updateRepeat(uint32 now);
 
 	void handleEvents();
+	void handleEvent(const Common::Event &event);
+	void mouseMoved(const Common::Point &p);
+	void handleRelease(const Common::Point &p);
 	void render();
 	void applyPalette();
 
@@ -255,6 +265,8 @@ private:
 
 	Common::String _cursorName;
 	int _busy;
+	uint32 _busyStart;        // when the current busy spell began
+	Common::Point _mousePos;  // last known pointer position (real or scripted)
 	LiveObject *_walkSprite;   // the sprite of a 3D room walk in progress
 	Common::String _dumpDir;
 	int _dumpCount;

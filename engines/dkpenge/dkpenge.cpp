@@ -55,7 +55,7 @@ namespace DKPenge {
 
 DKPengeEngine::DKPengeEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst),
 		_rnd("dkpenge"), _script(nullptr), _hoverObject(nullptr), _hoverPage(nullptr), _db(nullptr), _res(nullptr), _basePage(nullptr), _dirty(true), _paletteDirty(true), _pendingBasePage(0),
-		_pendingBase(false), _dumpCount(0), _busy(0), _walkSprite(nullptr), _ani(nullptr), _aniNextFrame(0), _quest(nullptr), _quiz(nullptr), _spyChangedFlag(false), _saveSlot(-1), _savedPage(0), _pressedObject(nullptr), _pressedPage(nullptr), _dragging(false), _dragPage(nullptr), _dungeonTimerEnd(0), _scrollObject(nullptr), _scrollPage(nullptr), _scrollNext(0), _scrollStep(1), _ambientNext(0), _castleSection(-1),
+		_pendingBase(false), _dumpCount(0), _busy(0), _busyStart(0), _walkSprite(nullptr), _ani(nullptr), _aniNextFrame(0), _quest(nullptr), _quiz(nullptr), _spyChangedFlag(false), _saveSlot(-1), _savedPage(0), _pressedObject(nullptr), _pressedPage(nullptr), _dragging(false), _dragPage(nullptr), _dungeonTimerEnd(0), _scrollObject(nullptr), _scrollPage(nullptr), _scrollNext(0), _scrollStep(1), _ambientNext(0), _castleSection(-1),
 		_trailNavigating(false), _pendingPopup(0), _scrollBarDrag(false), _scrollBarGrab(0), _editFocus(nullptr), _editFocusPage(nullptr), _pendingTransition(0), _noScreenUpdate(false), _repeatNext(0) {
 	const Common::FSNode gameDataDir(ConfMan.getPath("path"));
 	SearchMan.addSubDirectoryMatching(gameDataDir, "dkcode");
@@ -136,7 +136,9 @@ Common::Error DKPengeEngine::run() {
 					_quest->completeTask(t, ch);
 		_quest->finishStage();
 	}
+	beginSyncBusy();
 	openBasePage(start);
+	endSyncBusy();
 
 	setCursor(_db->getDefaultCursor());
 	CursorMan.showMouse(true);
@@ -202,12 +204,10 @@ Common::Error DKPengeEngine::run() {
 				if ((kind == 'c' || kind == 'p') && !lo)
 					lo = hitTest(pt, &page);
 				lastPt = pt;
+				_mousePos = pt;
 				debugC(1, kDebugScript, "DKPenge: scripted %c %d,%d -> %s", kind, pt.x, pt.y, lo ? objectClassName(lo->obj->cls) : "nothing");
 				if (kind == 'm') {
-					if (_dragging || _dragPage || _scrollBarDrag || (_pressedObject && _pressedObject->obj->cls == kObjCollage))
-						dragTo(pt);
-					else
-						handleMouseMove(pt);
+					mouseMoved(pt);
 				} else if (kind == 's') {
 					saveGameState(pt.x, "harness", false);
 				} else if (kind == 'l') {
@@ -261,64 +261,74 @@ Common::Error DKPengeEngine::run() {
 
 void DKPengeEngine::handleEvents() {
 	Common::Event event;
-	while (_eventMan->pollEvent(event)) {
-		switch (event.type) {
-		case Common::EVENT_LBUTTONDOWN: {
-			// The original drops mouse buttons while the document is busy
-			if (_busy)
-				break;
-			LivePage *page = nullptr;
-			LiveObject *lo = hitTest(event.mouse, &page);
-			if (lo) {
-				debugC(1, kDebugScript, "DKPenge: click on %s '%s' (id %d) at %d,%d", objectClassName(lo->obj->cls),
-				       lo->obj->file.c_str(), lo->obj->id, event.mouse.x, event.mouse.y);
-				pressObject(lo, page, event.mouse);
-			} else if ((page = popupAt(event.mouse)) && page->getType() == kPageDragPopup) {
-				// Drag popups are moved by their background
-				_dragPage = page;
-				_dragOffset = Common::Point(event.mouse.x - page->getBounds().left, event.mouse.y - page->getBounds().top);
-			} else if (_ani) {
-				// Clicking skips a running animation
-				delete _ani;
-				_ani = nullptr;
-				_dirty = true;
-			}
+	while (_eventMan->pollEvent(event))
+		handleEvent(event);
+}
+
+void DKPengeEngine::handleEvent(const Common::Event &event) {
+	if (Common::isMouseEvent(event))
+		_mousePos = event.mouse;
+	switch (event.type) {
+	case Common::EVENT_LBUTTONDOWN: {
+		// The original drops mouse buttons while the document is busy
+		if (_busy)
 			break;
+		LivePage *page = nullptr;
+		LiveObject *lo = hitTest(event.mouse, &page);
+		if (lo) {
+			debugC(1, kDebugScript, "DKPenge: click on %s '%s' (id %d) at %d,%d", objectClassName(lo->obj->cls),
+			       lo->obj->file.c_str(), lo->obj->id, event.mouse.x, event.mouse.y);
+			pressObject(lo, page, event.mouse);
+		} else if ((page = popupAt(event.mouse)) && page->getType() == kPageDragPopup) {
+			// Drag popups are moved by their background
+			_dragPage = page;
+			_dragOffset = Common::Point(event.mouse.x - page->getBounds().left, event.mouse.y - page->getBounds().top);
+		} else if (_ani) {
+			// Clicking skips a running animation
+			delete _ani;
+			_ani = nullptr;
+			_dirty = true;
 		}
-		case Common::EVENT_LBUTTONUP:
-			if (!_busy)
-				releaseMouse(event.mouse);
-			break;
-		case Common::EVENT_WHEELUP:
-		case Common::EVENT_WHEELDOWN: {
-			// The wheel scrolls the list or help text of the topmost page
-			LivePage *top = _popups.empty() ? _basePage : _popups.back();
-			int pos, maxPos, pageSize;
-			if (top && top->getScrollState(pos, maxPos, pageSize)) {
-				top->setScrollPos(pos + (event.type == Common::EVENT_WHEELUP ? -1 : 1));
-				_dirty = true;
-			}
-			break;
-		}
-		case Common::EVENT_MOUSEMOVE:
-			if (_dragging || _dragPage || _scrollBarDrag || (_pressedObject && _pressedObject->obj->cls == kObjCollage))
-				dragTo(event.mouse);
-			else
-				handleMouseMove(event.mouse);
-			break;
-		case Common::EVENT_KEYDOWN:
-			if (event.kbd.keycode == Common::KEYCODE_ESCAPE && _ani) {
-				delete _ani;
-				_ani = nullptr;
-				_dirty = true;
-			} else {
-				typeKey(event.kbd.ascii, event.kbd.keycode);
-			}
-			break;
-		default:
-			break;
-		}
+		break;
 	}
+	case Common::EVENT_LBUTTONUP:
+		if (!_busy)
+			releaseMouse(event.mouse);
+		break;
+	case Common::EVENT_WHEELUP:
+	case Common::EVENT_WHEELDOWN: {
+		// The wheel scrolls the list or help text of the topmost page
+		LivePage *top = _popups.empty() ? _basePage : _popups.back();
+		int pos, maxPos, pageSize;
+		if (top && top->getScrollState(pos, maxPos, pageSize)) {
+			top->setScrollPos(pos + (event.type == Common::EVENT_WHEELUP ? -1 : 1));
+			_dirty = true;
+		}
+		break;
+	}
+	case Common::EVENT_MOUSEMOVE:
+		mouseMoved(event.mouse);
+		break;
+	case Common::EVENT_KEYDOWN:
+		if (event.kbd.keycode == Common::KEYCODE_ESCAPE && _ani) {
+			delete _ani;
+			_ani = nullptr;
+			_dirty = true;
+		} else {
+			typeKey(event.kbd.ascii, event.kbd.keycode);
+		}
+		break;
+	default:
+		break;
+	}
+}
+
+// A pointer move: drags what is held, otherwise tracks the object under it
+void DKPengeEngine::mouseMoved(const Common::Point &p) {
+	if (_dragging || _dragPage || _scrollBarDrag || (_pressedObject && _pressedObject->obj->cls == kObjCollage))
+		dragTo(p);
+	else
+		handleMouseMove(p);
 }
 
 LiveObject *DKPengeEngine::hitTest(const Common::Point &p, LivePage **pageOut) {
@@ -501,9 +511,12 @@ void DKPengeEngine::openPopup(uint index) {
 	for (uint i = 0; i < _popups.size(); i++)
 		if (_popups[i]->getIndex() == index)
 			return;
+	// The open page action (FUN_0045e000) holds the synchronous busy bit
+	beginSyncBusy();
 	LivePage *page = new LivePage();
 	if (!page->open(*_db, *_res, index, Common::Point(0, 0))) {
 		delete page;
+		endSyncBusy();
 		return;
 	}
 	_popups.push_back(page);
@@ -514,6 +527,7 @@ void DKPengeEngine::openPopup(uint index) {
 	_dirty = true;
 	render();
 	runPageEvents(page, kEventOpen);
+	endSyncBusy();
 }
 
 void DKPengeEngine::closePopup(uint index) {
@@ -1125,7 +1139,16 @@ void DKPengeEngine::updateRepeat(uint32 now) {
 // Otherwise the release goes to the object under the pointer, whether or
 // not the press was on it (FUN_0044f2c0), and hotspots and buttons fire
 // their click from it.
+// The panel's mouse release handler (FUN_0047ebe0) holds the synchronous
+// busy bit for everything a release sets off, so the hourglass shows while
+// a click is handled and clicks made meanwhile are thrown away
 void DKPengeEngine::releaseMouse(const Common::Point &p) {
+	beginSyncBusy();
+	handleRelease(p);
+	endSyncBusy();
+}
+
+void DKPengeEngine::handleRelease(const Common::Point &p) {
 	setMouseVar(p, _pressedObject ? _pressedObject->panel : nullptr);
 	LiveObject *lo = _pressedObject;
 	LivePage *page = _pressedPage;
@@ -1988,30 +2011,33 @@ void DKPengeEngine::beginBusy() {
 	if (_busy == 0) {
 		showCursor("Watch");
 		_system->updateScreen();
+		_busyStart = _system->getMillis();
 	}
 	_busy += 2;
 	debugC(2, kDebugScript, "DKPenge: busy level %d", _busy);
 }
 
 // FUN_00439150: lowers the busy level by two; back at zero the pointer is
-// re-synchronised (FUN_00438e70 sends the window under it a mouse move,
-// which restores the cursor the page wants there)
+// re-synchronised
 void DKPengeEngine::endBusy() {
 	for (int i = 0; i < 2 && _busy; i++)
 		_busy--;
-	if (_busy == 0)
-		showCursor(_cursorName);
 	debugC(2, kDebugScript, "DKPenge: busy level %d", _busy);
+	if (_busy == 0)
+		resyncPointer();
 }
 
-// FUN_004369b0: loading a base page zeroes the busy level
+// Loading a base page zeroes the asynchronous part of the busy level (the
+// Castle Guide zoom raises it twice and only the page change ends it); a
+// synchronous spell around the load keeps its bit
 void DKPengeEngine::resetBusy() {
 	_walkSprite = nullptr;
-	if (!_busy)
+	if (!(_busy & ~1))
 		return;
-	_busy = 0;
-	showCursor(_cursorName);
-	debugC(2, kDebugScript, "DKPenge: busy level 0 (page load)");
+	_busy &= 1;
+	if (!_busy)
+		showCursor(_cursorName);
+	debugC(2, kDebugScript, "DKPenge: busy level %d (page load)", _busy);
 }
 
 // A 3D room walk ended without leaving the page (FUN_0040f190)
@@ -2025,14 +2051,77 @@ void DKPengeEngine::walkEnded(LiveObject *lo) {
 
 // FUN_00439190: sets the busy level outright
 void DKPengeEngine::setBusy(int level) {
-	if (_busy == 0 && level != 0) {
+	bool wasBusy = _busy != 0;
+	if (!wasBusy && level != 0) {
 		showCursor("Watch");
 		_system->updateScreen();
-	} else if (_busy != 0 && level == 0) {
-		showCursor(_cursorName);
+		_busyStart = _system->getMillis();
 	}
 	_busy = level;
 	debugC(2, kDebugScript, "DKPenge: busy level %d", _busy);
+	if (wasBusy && level == 0)
+		resyncPointer();
+}
+
+// FUN_004390c0: a synchronous spell (a click being handled, a page opening
+// or changing) sets bit 0 of the busy level and shows the hourglass at
+// once; the spell's start is stamped for the click filter
+void DKPengeEngine::beginSyncBusy() {
+	if (_busy == 0) {
+		showCursor("Watch");
+		_system->updateScreen();
+	}
+	_busy |= 1;
+	_busyStart = _system->getMillis();
+	debugC(2, kDebugScript, "DKPenge: busy level %d (sync)", _busy);
+}
+
+// FUN_004390e0: clears bit 0; with the level back at zero the original
+// stamps the end of the spell (doc+0x2c4), throws away the clicks made in
+// between and re-synchronises the pointer
+void DKPengeEngine::endSyncBusy() {
+	_busy &= ~1;
+	if (_busy)
+		return;
+	debugC(2, kDebugScript, "DKPenge: busy level 0 after a %u ms spell", _system->getMillis() - _busyStart);
+	dropQueuedClicks();
+	resyncPointer();
+}
+
+// The window procedure (FUN_0041bca0, WM_LBUTTONDOWN/UP) drops a button
+// message whose time falls inside the last busy spell. ScummVM events carry
+// no time, but nothing is polled during a spell, so the buttons still
+// queued when it ends are the ones made during it; the other events are
+// handled as usual
+void DKPengeEngine::dropQueuedClicks() {
+	Common::Event event;
+	int dropped = 0;
+	while (_eventMan->pollEvent(event)) {
+		switch (event.type) {
+		case Common::EVENT_LBUTTONDOWN:
+		case Common::EVENT_LBUTTONUP:
+		case Common::EVENT_RBUTTONDOWN:
+		case Common::EVENT_RBUTTONUP:
+			_mousePos = event.mouse;
+			dropped++;
+			break;
+		default:
+			handleEvent(event);
+			break;
+		}
+	}
+	if (dropped)
+		debugC(1, kDebugScript, "DKPenge: dropped %d mouse buttons pressed while busy", dropped);
+}
+
+// FUN_00438e70: with the busy level back at zero the window under the
+// pointer gets a mouse move, so the cursor and the roll-over state match
+// what is under it now (a page may have opened or closed there)
+void DKPengeEngine::resyncPointer() {
+	if (_busy)
+		return;
+	showCursor(_cursorName);
+	mouseMoved(_mousePos);
 }
 
 void DKPengeEngine::handleMouseMove(const Common::Point &p) {
@@ -2668,6 +2757,9 @@ void DKPengeEngine::flushPendingPage() {
 	_pendingScroll = Common::Point(0, 0);
 	int transition = _pendingTransition;
 	_pendingTransition = 0;
+	// The change page action (FUN_0045a100) holds the synchronous busy bit
+	// until the new page is up, transition included, then re-syncs the pointer
+	beginSyncBusy();
 	Graphics::Surface old;
 	bool play = _basePage && beginTransition(transition, old);
 	openBasePage(_pendingBasePage, scroll);
@@ -2680,6 +2772,7 @@ void DKPengeEngine::flushPendingPage() {
 		_pendingPopup = 0;
 		openPopup(popup);
 	}
+	endSyncBusy();
 }
 
 // A room page opened: its scenario hotspot (mode 0) starts the question
