@@ -1223,6 +1223,58 @@ buttons (2 help `FUN_0041e580`, 3 exit `FUN_0040cc30`, 4 album -> scene
   the sub game abort confirmation, the "info" fact page, `sound.ini`
   volumes, the LOVELYFLIES cheat.
 
+## Story page `desk` ("Reodors stue")
+
+Reodor's workshop, story page 2 (navigator: next `house`, previous `yard`).
+Handler `0x424640` (0x103 -> `FUN_00424750`, 0x105 -> `4249b0`, 0x107 ->
+`424c80`, 0x10c -> `424ca0`, 0x110 -> `424cf0`, 0x111 -> `424d90`, 0x11e
+navigator result -> `424dc0`, 0x11f -> `424d30`). Engine: `desk.cpp`.
+
+* Init: music `track2`, characters Solan (id 1, hotspot 1, z 5), Ludvig
+  (id 2, hotspot 2, z 10) and Reodor (id 4, hotspot 3); the characters'
+  hotspots are 1..3 on this page, not 251..253. `carpart` bitmap (hotspot
+  55, z -10) while profile key 0 is 0. Init arg 1: characters idle; arg 2
+  (back from `pee`): Solan and Reodor idle, single clip `S02AN-SS-007b`;
+  else Reodor idle and the intro sequence `S02AN-SS-001a..e` (about 75 s,
+  `001b` alone is 847 frames). The wall clock (`FUN_004248c0`) shows the
+  real time: `long` (minute hand, frame = minute, z -11) and `short`
+  (hour hand, frame = minute / 12 + (hour % 12) * 5, z -10) are 60 frame
+  clips held on one frame; a periodic 1 s timer (data 0) refreshes them.
+* After the intro sequence (0x11f with the intro list) a one shot 10 s
+  timer (data 1) plays the narration `S02AN-NAR-001`, but only while a
+  counter read from the profile (`FUN_00411370`) is below 2. Any click or
+  key kills that timer (`FUN_00424c60`).
+* Hotspots (mask unless noted): 51 sock cabinet -> `sockdrawer` (the
+  original compares against a global set to 0x33 at the end of init),
+  53 -> `bouquet`, 54 -> `colorfill` (not in the mask or any element of
+  this page: unreachable), 55 `carpart` -> profile key 0 = 1, award dialog,
+  remove it. 101 Reodor and Ludvig at the table: one of three sequences
+  (`003a/004a/004b/004b2/004c`, `003c/006a/006b/004b2/004c`,
+  `005a1/005a2/005b/004b2/005c`), 102: one of `010/011a/011b/014`,
+  `010/012a/012b/014`, `010/013a/013b/014`, 110: one of the single clips
+  `021`/`022`/`023` (all three picked with `FUN_0040a150`: in order the
+  first three times, then random without repeats; the counters are reset
+  on every visit, the masks are globals). Single clips: 103 `015`, 104
+  `016`, 106 `017`, 113 `024`, 115 `026`, 116 `027`, 117 `028`, 118 `arc`
+  (not in the mask: unreachable), 119 `chime`, 121 `bear`; 108 sequence
+  `019/019a/020`. 120: `S02AN-SS-007a` (Solan goes out to pee), when it
+  finishes the counter in profile key 1 is incremented and the page
+  changes to `pee`. 151..169 are fact pages (fact module, not handled by
+  the page handler).
+* Space removes `S02AN-NAR-001` / `S02AN-NAR-002` (the framework aborts
+  the sequence). Right click: navigator `house` / `yard`; when the result
+  is 0x7d2 (back to the yard) and profile key 1 is still 0, the
+  navigator closes, `S02AN-NAR-002` plays instead and key 1 is
+  incremented, else the default navigator handling (`FUN_00421730`).
+* Engine notes: the original's 0x11f carries the finished list; the
+  engine's `onSequenceDone()` has none, so the scene remembers whether the
+  intro is the running sequence (a space abort sends no 0x11f in the
+  original either). Profile key 1 is a static member for now.
+* Not done: profile (key 0 car part found, key 1 counter, the visit
+  counter gating the narration), award dialog, fact module, the
+  navigator's 0x7d2 override (needs a result callback from
+  `showNavigator()`).
+
 ## Development aids (config keys in the `[flaaklypa]` section)
 
 `start_scene`, `autoshot` / `autoshot_delay` / `autoshot_quit` (screenshot),

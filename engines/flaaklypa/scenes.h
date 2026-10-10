@@ -84,6 +84,33 @@ private:
 	static int _introCount, _introMask; ///< random pick without repeats, kept across visits like the original
 };
 
+/** Story page 2: the desk ("Reodors stue"). */
+class DeskScene : public Scene {
+public:
+	DeskScene(FlaaklypaEngine *vm, const SceneDef *def);
+
+	void onInit(int arg) override;
+	void onMouseDown(int hotspot, int x, int y) override;
+	void onRightClick(int x, int y) override;
+	void onKey(const Common::KeyState &key) override;
+	void onAnimFinished(Anim *anim) override;
+	void onSequenceDone() override;
+	void onTimer(int id, int data) override;
+
+private:
+	void updateClock();
+	int pickWithoutRepeats(int &count, int &mask, int n);
+	/** playSequence / playSingle, remembering that the intro is no longer running. */
+	void startSequence(AnimList list);
+	void startSingle(const char *name);
+
+	int _pick101Count, _pick102Count, _pick110Count; ///< reset every visit
+	static int _pick101Mask, _pick102Mask, _pick110Mask; ///< kept across visits like the original's globals
+	static int _narrationCount; ///< profile key 1 in the original (TODO)
+	bool _introRunning;
+	int _longFrame, _shortFrame; ///< clock hand frames currently shown
+};
+
 } // End of namespace Flaaklypa
 
 #endif

@@ -10,6 +10,7 @@ MODULE_OBJS = \
 	bugzzz.o \
 	console.o \
 	cursor.o \
+	desk.o \
 	flaaklypa.o \
 	font.o \
 	gem3d.o \
