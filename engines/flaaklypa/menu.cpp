@@ -31,6 +31,7 @@
 #include "flaaklypa/buildabike.h"
 #include "flaaklypa/pipeline.h"
 #include "flaaklypa/puzzle.h"
+#include "flaaklypa/sceneindex.h"
 #include "flaaklypa/scenes.h"
 #include "flaaklypa/sockdrawer.h"
 #include "flaaklypa/textinvader.h"
