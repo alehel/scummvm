@@ -1223,6 +1223,41 @@ buttons (2 help `FUN_0041e580`, 3 exit `FUN_0040cc30`, 4 album -> scene
   the sub game abort confirmation, the "info" fact page, `sound.ini`
   volumes, the LOVELYFLIES cheat.
 
+## Story page `garage` ("Verkstedet")
+
+Reodor's workshop with Solan, Ludvig and Reodor; the second page of the
+story (navigator: next `morning`, previous `tvroom`). Handler `0x424e10`
+(init `FUN_00424e70`, mouse down `FUN_00424f50`, right click
+`FUN_00425140`; no key, close or anim-finished handling). Engine:
+`garage.cpp` (`GarageScene`). Music `track6` (restarted on every visit:
+`FUN_0040b1f0(name, 1)`). Intro: the single clip `S06AN-SS-001` (57 s) on
+`arg == 0`; a return from a sub game (`arg == 1`) just resets the
+characters. There are no multi clip sequences on this page, every click
+plays one clip, and no state machine.
+
+* Characters (ids 1 Solan, 4 Reodor, 2 Ludvig, z 0): their hotspots are
+  the pixels of their own clips, 11 / 10 / 12 (not 251..253). Solan has a
+  reaction list (`S06AN-SOL-001/002`); Reodor and Ludvig only idle and
+  bored lists (`S06AN-ROD-B01..03` / `003..005`, `S06AN-LUD-B01..03` /
+  `001..006`), so clicking them does nothing.
+* Hotspots: 1 sub game `buildabike`, 9 activity `sliding`; 2 `acid`, 3
+  `pump`, 4 `cog1`, 5 `engine`, 6 `cog2`, 7 `polish`, 8 `turntable`
+  (machine clips, z -10); 20 `S06AN-SS-005`, 21 `S06AN-SS-004`, 23
+  `S06AN-SS-002`, 25 `S06AN-SS-003`, 26 `S06AN-SS-007`; 22 one of
+  `S06AN-SS-008a/b` and 24 one of `S06AN-SS-009a/b` picked with
+  `FUN_0040a150` (in order on the first two clicks of a visit, then at
+  random without repeating until both have played; the counters are reset
+  on init, the masks are kept); 27 the hidden car part (`bitmap/carpart.bmp`
+  at 650,179, z -10, element hotspot); 200..213 the fact pages of
+  `lang/garage/fact.ini` (listed as `factopedia` in the cursor table).
+* State across visits: the car part flag (profile key 0 of the page in the
+  original, a static here) and the two variant masks.
+* TODO: profile get/set of the car part, the award dialog
+  (`FUN_0041c150`), the fact pages (the fact module `FUN_0041dbf0`
+  intercepts hotspots 200..213 in the original; the engine only logs
+  them). Escape to the menu is done by the page although the original does
+  it globally (`FUN_0040d300`).
+
 ## Development aids (config keys in the `[flaaklypa]` section)
 
 `start_scene`, `autoshot` / `autoshot_delay` / `autoshot_quit` (screenshot),

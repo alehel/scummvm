@@ -12,6 +12,7 @@ MODULE_OBJS = \
 	cursor.o \
 	flaaklypa.o \
 	font.o \
+	garage.o \
 	gem3d.o \
 	hopscotch.o \
 	lettersort.o \

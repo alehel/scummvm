@@ -84,6 +84,24 @@ private:
 	static int _introCount, _introMask; ///< random pick without repeats, kept across visits like the original
 };
 
+/** Story page 6: the garage (verkstedet). */
+class GarageScene : public Scene {
+public:
+	GarageScene(FlaaklypaEngine *vm, const SceneDef *def);
+
+	void onInit(int arg) override;
+	void onMouseDown(int hotspot, int x, int y) override;
+	void onRightClick(int x, int y) override;
+	void onKey(const Common::KeyState &key) override;
+
+private:
+	int pickVariant(int &count, int &mask, int n);
+
+	int _count008, _count009;            ///< picks of the two clip pairs this visit (reset on init)
+	static int _mask008, _mask009;       ///< variants played since the last full round, kept across visits
+	static bool _carPartFound;           ///< TODO: profile key 0 of the page
+};
+
 } // End of namespace Flaaklypa
 
 #endif
