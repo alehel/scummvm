@@ -954,6 +954,7 @@ PageRecord *Database::readRecord(uint index) {
 	uint32 trailer = s.readUint32BE();
 	rec->icon = trailer & 0xffff;
 	rec->title = getString(trailer >> 16);
+	debugC(3, kDebugDatabase, "DKPenge: record %u type %d template %d pos %d,%d dir '%s' panels %d '%s'", index, rec->type, rec->id, rec->pos.x, rec->pos.y, rec->dir.c_str(), n, rec->title.c_str());
 	return rec;
 }
 
@@ -1257,6 +1258,10 @@ bool Database::load(const Common::Path &filename) {
 
 	debugC(1, kDebugDatabase, "DKPenge: loaded database '%s' (%s): %u strings, %u templates, %u records, start page %u",
 	       _title.c_str(), _version.c_str(), _strings.size(), _templates.size(), _offsets.size(), getStartPage());
+	// At the highest database debug level every record is listed up front
+	if (gDebugLevel >= 3 && DebugMan.isDebugChannelEnabled(kDebugDatabase))
+		for (uint i = 0; i < _offsets.size(); i++)
+			getRecord(i);
 	return true;
 }
 
