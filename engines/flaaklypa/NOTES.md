@@ -269,6 +269,65 @@ Handler `0x454fb0` (not a function in the Ghidra project; dispatches 0x103 ->
   high score registration (`FUN_0041f9a0`), help dialog, `sound.ini`
   volumes.
 
+## Sub game `sockdrawer` ("Sokkeskapet", from `desk`)
+
+A memory game: a cabinet with 5x4 hatches hides pairs of socks. Handler
+`0x44b640` (jump table; 0x103 -> `FUN_0044b720`, 0x104 -> `44c0b0`, 0x105
+-> `44c0e0`, 0x110 -> `44c190`, 0x111 -> `44c400`, 0x112 -> `44c560`, 0x116
+-> `429320`, the generic help/exit button handler). Engine: `sockdrawer.cpp`.
+
+* Data: 20 drawer records of 0x160 bytes at `0x680030`: has-sock (+0),
+  closed (+4), hatch variant (+8, `rand() % 1`, always 0), the hatch
+  animation struct (+0xc, name `drawer<variant+1>open` / `...close`,
+  transparent clip at x = 189 + 114 col, y = 118 + 114 row, z 10), sock type
+  (+0xb4) and the sock bitmap struct (+0xb8, `bitmap/Sock<type+1>.bmp` at
+  hatch + (15, 13), z 0). Globals: score `0x680020`, level `0x680024`,
+  state `0x680028` (0 idle, 1 closing hatches, 2 opening the empty ones,
+  3 playing), level start time `0x67ee90`, hourglass frame `0x67ee94`,
+  pending timer `0x681bb0`. Hotspots: 3 = the small "start" cabinet (the
+  `start` / `points` clips at (33, 172)), 101..120 = hatches (mask).
+* Level table at `0x49ef48`, 15 x {socks, kinds, ms}: {4,3,20000}
+  {6,4,35000} {8,5,50000} {10,6,75000} {12,7,950000 (sic)} {14,8,110000}
+  {16,9,110000} {18,10,90000} {20,12,80000} {20,14,70000} {20,16,60000}
+  {20,18,60000} {20,20,50000} {20,22,50000} {20,24,40000}; the level stops
+  at 14. Each pair picks a random kind among the first `kinds` entries of
+  the order table `0x49effc` (0 1 2 6 7 9 10 13 16 18 5 8 11 12 14 17 3 4
+  15 19 20 21 22 23) not already in the cabinet (100 tries, then the first
+  free one) and two random empty drawers (100 tries, then the first free).
+* Flow: init adds every hatch as the first frame of its `open` clip (the
+  original passes `closed == 0`, so the hatches look closed), `start` (z
+  -10, covers the score) and `points` (z -21), the title in `Amerigo BT_18_`
+  centred in (335, 44)-(601, 86) and the score in `Amerigo BT_14_` in (55,
+  192)-(122, 216), the hourglass bottom `timerbottom32`, music `subgame3`.
+  Click on the cabinet in state 0: score/level 0, close all open hatches
+  (sound `allclose`), state 1, play `start`. When no hatch clip plays
+  (`FUN_0044bb80` after every hatch clip): state 1 -> remove socks, place
+  the pairs, open the empty hatches (`allopen`), state 2 -> play
+  `timerrotate` (z -20); when it ends: `timertop00` + `timerbottom02`,
+  play `timermiddlestart` (z -21) then the looping `timermiddlerunning`,
+  level clock starts, state 3.
+* Rules (`FUN_0044c130` click, `44bfb0` hatch opened, `44c400` timer): a
+  closed hatch opens (`oneopen`) while fewer than two socks show. Once two
+  show, a 400 ms timer is set and an equal pair scores 25 at once (`points`
+  clip, score text). At the timer: unequal -> both close (`oneclose`);
+  equal -> both socks vanish (hatches stay open); all gone -> bonus
+  `(int)(200 * level * remaining / time)`, level + 1, close all, state 1.
+* Timer (`FUN_0044c5d0` every frame): frame = `(int)(30 / time * elapsed)`,
+  `timertop<f>` at (45, 359) and `timerbottom<f+2>` at (46, 473) are
+  re-added when it changes. elapsed > time: remove the running clip, bottom
+  back to frame 32, play `timermiddleend`; when it ends (`44c380`): message
+  box `sockdrawer:ENDMESSAGE` / `interfaceh:GAMEOVER`, high score
+  registration `FUN_0041f9a0(0, score, {2500, 5000, 10000, 20000}, cb)`;
+  the callback closes all hatches and re-adds `start`.
+* Buttons `help_0/1` at (0, 0) and `exit_0/1` at (728, 0), hotspots 31/32.
+* Engine notes: hatches, socks, hourglass frames and the four sound clips
+  are `Anim` objects owned by the scene with mutable `AnimDef`s (the
+  original sprintf()s into the name field); the sounds are played as single
+  elements instead of `SCENE_PlayAnimClone` clones.
+* Not done: message box, high score registration, help dialog, the
+  "sub game in progress" flag (`FUN_0040d8a0`, abort confirmation on exit),
+  tournament mode (`FUN_00419490`), `sound.ini` volumes.
+
 ### Bitmap fonts (FONT module, `font.cpp`)
 
 `common/fonts/<name>.bmp`, 24 bit, 256 glyphs in a strip. The top row marks
@@ -296,7 +355,7 @@ Sub games (`[subgame]`, score based):
 |---|---|---|---|---|
 | | lettersort | Postsorteringsmaskinen | yard | data |
 | | bugzzz | Larveliv i leiren | yard | data |
-| | sockdrawer | Sokkeskapet | desk | data |
+| x | sockdrawer | Sokkeskapet | desk | data (message box, high score, help open) |
 | | wheelbarrow | Eplehøsten | pee | data |
 | | hopscotch | Solan og Ludvig i Paradis | house | data |
 | | audiopairs | Reodors Lydmaskin | house | data |
