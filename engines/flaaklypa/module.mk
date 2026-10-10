@@ -23,6 +23,7 @@ MODULE_OBJS = \
 	lettersort.o \
 	menu.o \
 	metaengine.o \
+	morning.o \
 	music.o \
 	pipeline.o \
 	puzzle.o \
