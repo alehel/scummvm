@@ -632,15 +632,19 @@ void Scene::dispatchAnimFinished(Anim *a) {
 void Scene::update() {
 	uint32 now = g_system->getMillis();
 
+	// Take the due timers out first: a callback may open a modal dialog,
+	// which runs nested frames that update this scene again.
+	Common::Array<Timer> due;
 	for (Common::List<Timer>::iterator it = _timers.begin(); it != _timers.end();) {
 		if (now >= it->fireTime) {
-			Timer t = *it;
+			due.push_back(*it);
 			it = _timers.erase(it);
-			onTimer(t.id, t.data);
 		} else {
 			++it;
 		}
 	}
+	for (const auto &t : due)
+		onTimer(t.id, t.data);
 
 	// Iterate over a copy: callbacks add and remove elements.
 	Common::Array<Anim *> active = _active;
