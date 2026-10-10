@@ -6,7 +6,7 @@ tables, z-sorted Smacker/bitmap elements, animation sequences, the two
 characters with idle/bored/reaction lists, timers, music, and Bink audio in
 Smacker files (added to `video/smk_decoder.cpp`). The first sub game,
 `puzzle` ("Solines smykkeskrin", see below), is playable. Not done: dialogs
-(navigator, help, fact, award, message box), profiles and high scores, scene
+(help, fact, award; the navigator and message box exist), profiles and high scores, scene
 index, other story pages, the other sub games, racing.
 
 ## The game
@@ -1223,6 +1223,34 @@ buttons (2 help `FUN_0041e580`, 3 exit `FUN_0040cc30`, 4 album -> scene
   the sub game abort confirmation, the "info" fact page, `sound.ini`
   volumes, the LOVELYFLIES cheat.
 
+## Dialogs (`dialog.cpp`)
+
+`Dialog` is the modal box of the DIALOG/BUTTON modules: a bitmap from
+`common/dialogue/<name>/` drawn above the scene over a checkerboard dimmer
+(`FUN_00407160`), with push buttons (normal/pressed/disabled bitmaps, the
+pressed one only while the mouse is over it, a click counts on release over
+the button: `FUN_00406d40`). `run()` nests the engine's `runFrame()`, so
+the scene keeps animating underneath while the input goes to the dialog
+(the original nests its message loop the same way, `FUN_0040d1c0`). A scene
+change requested while a dialog is open waits until it closes.
+
+* **Message box** (`FUN_00421310` → `FUN_00420f40`/`FUN_00421070`):
+  `msgbox/backdrop.bmp` (386x564) is cut into nine parts at 16/58/364/501
+  and tiled to 342 + margins wide and to the text height (`FUN_00420b00`).
+  Title in `Amerigo BT_14_` centred at y 9..40, text in `Comic Sans MS_10_`
+  word wrapped at 330 pixels, buttons `button_0`/`button_1` labelled in the
+  default `Amerigo BT_10_`, right aligned 87 pixels apart in the order of
+  the table at 0x4b02c0: CLOSE 16, CANCEL 2, OK 1, NO 8, YES 4 (Enter picks
+  the first of CLOSE/OK/YES, Escape the first of CANCEL/NO). The engine call
+  is `messageBox(title, text, buttons)`; buttons 0 means OK.
+* **Navigator** (`FUN_00421560` → `FUN_004215b0`), opened by a right click
+  on a story page: `navigate/backdrop.bmp` at mouse - (82, 62), hit mask
+  `hotspot.bmp`, buttons prev (2001, at 4,25), next (2002, 91,27), help
+  (2003, 59,5), exit (2004, 59,71); prev/next disabled when the page has
+  none. A click outside the buttons, a right click, Enter or Escape close
+  it; the arrow keys press prev/help/next/exit. Exit leaves for the menu;
+  help is still TODO (`FUN_0041e580`, the help dialog).
+
 ## Development aids (config keys in the `[flaaklypa]` section)
 
 `start_scene`, `autoshot` / `autoshot_delay` / `autoshot_quit` (screenshot),
@@ -1231,9 +1259,9 @@ only, `u` = release only for drags, `r` = right click, t in ms after
 start), `autokey=t:key[:hold];...` (key press at t held for hold ms, default
 100; `left`, `right`, `up`, `down`, `space`, `esc`, `tab`, `return`, a
 character, or a string of characters typed one after the other with `~` =
-Escape), `random_seed` (deterministic boards).
-`autoclick=t:x,y;t:x,y,m` (synthetic clicks, `m` = move only, t in ms after
-start), `autohold` (beemaze: held arrow keys), `random_seed` (deterministic boards).
+Escape), `random_seed` (deterministic boards), `autohold` (beemaze: held
+arrow keys), `test_msgbox=<title>|<text>` (opens a message box with OK and
+Cancel one second after the start; language.ini keys or plain text).
 
 ## Mini game checklist
 

@@ -135,6 +135,8 @@ public:
 	void showWaitCursor();
 	void hideCursor();
 	void showCursor();
+	/** Re-applies the cursor of the current mode and hotspot (after a dialog). */
+	void refreshCursor() { _lastHotspot = -1; updateCursor(); }
 
 	// ---- timers
 	void setTimer(int id, uint32 delayMs, int data = 0);

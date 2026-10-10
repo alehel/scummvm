@@ -21,6 +21,7 @@
 #include "flaaklypa/flaaklypa.h"
 #include "flaaklypa/console.h"
 #include "flaaklypa/cursor.h"
+#include "flaaklypa/dialog.h"
 #include "flaaklypa/detection.h"
 #include "flaaklypa/music.h"
 #include "flaaklypa/resources.h"
@@ -122,13 +123,17 @@ void FlaaklypaEngine::endGame() {
 }
 
 void FlaaklypaEngine::showNavigator(const char *next, const char *prev, int nextArg, int prevArg) {
-	// TODO: the navigate dialog (common/dialogue/navigate)
 	debug(1, "Navigator: next '%s' (%d), prev '%s' (%d)", next ? next : "-", nextArg, prev ? prev : "-", prevArg);
+	NavigatorDialog dlg(this, next, prev, nextArg, prevArg);
+	dlg.run();
 }
 
-void FlaaklypaEngine::messageBox(const Common::String &title, const Common::String &text, int type) {
-	// TODO: the message box dialog (common/dialogue/msgbox)
-	debug(1, "Message box (%d): '%s' / '%s'", type, getString(title).c_str(), getString(text).c_str());
+int FlaaklypaEngine::messageBox(const Common::String &title, const Common::String &text, int buttons) {
+	debug(1, "Message box (%d): '%s' / '%s'", buttons, getString(title).c_str(), getString(text).c_str());
+	if (!buttons)
+		buttons = MessageBox::kButtonOk;
+	MessageBox dlg(this, getString(title), getString(text), buttons);
+	return dlg.run();
 }
 
 Common::String FlaaklypaEngine::getString(const Common::String &key) {
@@ -242,6 +247,96 @@ void FlaaklypaEngine::switchScene() {
 	_scene->showCursor();
 }
 
+void FlaaklypaEngine::dispatchEvent(const Common::Event &event) {
+	if (Common::isMouseEvent(event))
+		_mousePos = event.mouse;
+	if (_dialog)
+		_dialog->handleEvent(event);
+	else
+		_scene->handleEvent(event);
+}
+
+void FlaaklypaEngine::runFrame() {
+	Common::Event e;
+
+	if (_autoshotTime && g_system->getMillis() >= _autoshotTime) {
+		_autoshotTime = 0;
+		Common::DumpFile out;
+		if (out.open(Common::Path(ConfMan.get("autoshot"), '/'))) {
+			Image::writePNG(out, *_screen->surfacePtr());
+			out.close();
+			debug(1, "Wrote screenshot %s", ConfMan.get("autoshot").c_str());
+		}
+		if (ConfMan.getBool("autoshot_quit"))
+			quitGame();
+	}
+
+	// Development aid: "test_msgbox=<title>|<text>" opens a message box one
+	// second after the start (language.ini keys or plain text).
+	if (!_dialog && _scene && ConfMan.hasKey("test_msgbox") && g_system->getMillis() - _startTime > 1000) {
+		Common::String spec = ConfMan.get("test_msgbox");
+		ConfMan.removeKey("test_msgbox", ConfMan.getActiveDomainName());
+		uint bar = spec.findFirstOf('|');
+		int r = messageBox(spec.substr(0, bar), bar == Common::String::npos ? "" : spec.substr(bar + 1), MessageBox::kButtonOk | MessageBox::kButtonCancel);
+		debug(1, "Message box returned %d", r);
+	}
+
+	// A scene change requested under a dialog waits until the dialog is gone
+	// (the navigator closes itself before it changes the page).
+	if (!_nextScene.empty() && !_dialog)
+		switchScene();
+	if (!_scene) {
+		quitGame();
+		return;
+	}
+
+	while (g_system->getEventManager()->pollEvent(e))
+		dispatchEvent(e);
+
+	while (!_autoClicks.empty() && g_system->getMillis() - _startTime >= _autoClicks[0].time) {
+		AutoClick c = _autoClicks[0];
+		_autoClicks.remove_at(0);
+		debug(1, "Auto click at %d,%d", c.x, c.y);
+		g_system->warpMouse(c.x, c.y);
+		e.mouse = Common::Point(c.x, c.y);
+		e.type = Common::EVENT_MOUSEMOVE;
+		dispatchEvent(e);
+		if (c.moveOnly)
+			continue;
+		if (c.mode != 'u') {
+			e.type = c.mode == 'r' ? Common::EVENT_RBUTTONDOWN : Common::EVENT_LBUTTONDOWN;
+			dispatchEvent(e);
+		}
+		if (c.mode != 'd') {
+			e.type = c.mode == 'r' ? Common::EVENT_RBUTTONUP : Common::EVENT_LBUTTONUP;
+			dispatchEvent(e);
+		}
+	}
+
+	for (uint i = 0; i < _autoKeys.size();) {
+		if (g_system->getMillis() - _startTime < _autoKeys[i].time) {
+			i++;
+			continue;
+		}
+		AutoKey k = _autoKeys[i];
+		_autoKeys.remove_at(i);
+		debug(1, "Auto key %d '%c' %s", k.key, k.ascii ? (char)k.ascii : ' ', k.down ? "down" : "up");
+		e.type = k.down ? Common::EVENT_KEYDOWN : Common::EVENT_KEYUP;
+		e.kbd = Common::KeyState(k.key, k.ascii);
+		dispatchEvent(e);
+	}
+
+	_scene->update();
+	_music->update();
+	_scene->draw(*_screen);
+	if (_dialog)
+		_dialog->draw(*_screen);
+
+	_limiter->delayBeforeSwap();
+	_screen->update();
+	_limiter->startFrame();
+}
+
 Common::Error FlaaklypaEngine::run() {
 	// The game draws 24-bit backdrops; ask for a 32-bit screen and let the
 	// backend pick the closest supported format.
@@ -260,78 +355,17 @@ Common::Error FlaaklypaEngine::run() {
 		_randomSource.setSeed(ConfMan.getInt("random_seed"));
 	parseAutoClicks();
 	parseAutoKeys();
-	uint32 startTime = g_system->getMillis();
+	_startTime = g_system->getMillis();
 
 	// Development aid: "autoshot=<file>" with "autoshot_delay=<ms>" writes a
 	// PNG of the screen after the delay; "autoshot_quit=true" then exits.
-	uint32 autoshotTime = 0;
 	if (ConfMan.hasKey("autoshot"))
-		autoshotTime = g_system->getMillis() + (ConfMan.hasKey("autoshot_delay") ? ConfMan.getInt("autoshot_delay") : 5000);
+		_autoshotTime = g_system->getMillis() + (ConfMan.hasKey("autoshot_delay") ? ConfMan.getInt("autoshot_delay") : 5000);
 
-	Common::Event e;
-	Graphics::FrameLimiter limiter(g_system, 60);
-	while (!shouldQuit()) {
-		if (autoshotTime && g_system->getMillis() >= autoshotTime) {
-			autoshotTime = 0;
-			Common::DumpFile out;
-			if (out.open(Common::Path(ConfMan.get("autoshot"), '/'))) {
-				Image::writePNG(out, *_screen->surfacePtr());
-				out.close();
-				debug(1, "Wrote screenshot %s", ConfMan.get("autoshot").c_str());
-			}
-			if (ConfMan.getBool("autoshot_quit"))
-				quitGame();
-		}
+	_limiter = new Graphics::FrameLimiter(g_system, 60);
 
-		if (!_nextScene.empty())
-			switchScene();
-		if (!_scene)
-			return Common::kNoGameDataFoundError;
-
-		while (g_system->getEventManager()->pollEvent(e))
-			_scene->handleEvent(e);
-
-		while (!_autoClicks.empty() && g_system->getMillis() - startTime >= _autoClicks[0].time) {
-			AutoClick c = _autoClicks[0];
-			_autoClicks.remove_at(0);
-			debug(1, "Auto click at %d,%d", c.x, c.y);
-			g_system->warpMouse(c.x, c.y);
-			e.mouse = Common::Point(c.x, c.y);
-			e.type = Common::EVENT_MOUSEMOVE;
-			_scene->handleEvent(e);
-			if (c.moveOnly)
-				continue;
-			if (c.mode != 'u') {
-				e.type = c.mode == 'r' ? Common::EVENT_RBUTTONDOWN : Common::EVENT_LBUTTONDOWN;
-				_scene->handleEvent(e);
-			}
-			if (c.mode != 'd') {
-				e.type = c.mode == 'r' ? Common::EVENT_RBUTTONUP : Common::EVENT_LBUTTONUP;
-				_scene->handleEvent(e);
-			}
-		}
-
-		for (uint i = 0; i < _autoKeys.size();) {
-			if (g_system->getMillis() - startTime < _autoKeys[i].time) {
-				i++;
-				continue;
-			}
-			AutoKey k = _autoKeys[i];
-			_autoKeys.remove_at(i);
-			debug(1, "Auto key %d '%c' %s", k.key, k.ascii ? (char)k.ascii : ' ', k.down ? "down" : "up");
-			e.type = k.down ? Common::EVENT_KEYDOWN : Common::EVENT_KEYUP;
-			e.kbd = Common::KeyState(k.key, k.ascii);
-			_scene->handleEvent(e);
-		}
-
-		_scene->update();
-		_music->update();
-		_scene->draw(*_screen);
-
-		limiter.delayBeforeSwap();
-		_screen->update();
-		limiter.startFrame();
-	}
+	while (!shouldQuit())
+		runFrame();
 
 	return Common::kNoError;
 }

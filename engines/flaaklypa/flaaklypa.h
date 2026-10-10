@@ -32,6 +32,8 @@
 #include "common/util.h"
 #include "engines/engine.h"
 #include "engines/savestate.h"
+#include "common/events.h"
+#include "graphics/framelimiter.h"
 #include "graphics/screen.h"
 
 #include "flaaklypa/detection.h"
@@ -43,6 +45,7 @@ class INIFile;
 namespace Flaaklypa {
 
 class Cursor;
+class Dialog;
 class Music;
 class Resources;
 class Scene;
@@ -80,8 +83,13 @@ private:
 		bool down;
 	};
 	Common::Array<AutoKey> _autoKeys;
+	uint32 _startTime = 0;
+	Common::Point _mousePos;
+	uint32 _autoshotTime = 0;
+	Graphics::FrameLimiter *_limiter = nullptr;
 
 	void switchScene();
+	void dispatchEvent(const Common::Event &event);
 	void parseAutoClicks();
 	void parseAutoKeys();
 
@@ -94,6 +102,7 @@ public:
 	Resources *_resources = nullptr;
 	Cursor *_cursor = nullptr;
 	Music *_music = nullptr;
+	Dialog *_dialog = nullptr;     ///< the modal dialog receiving the input, if any
 
 public:
 	FlaaklypaEngine(OSystem *syst, const ADGameDescription *gameDesc);
@@ -132,10 +141,17 @@ public:
 	void showNavigator(const char *next, const char *prev, int nextArg = 0, int prevArg = 0);
 	/**
 	 * Modal message box (FUN_00421310 / FUN_00420f40) with a title line, a
-	 * text and an OK button; "title"/"text" are language.ini keys or plain
-	 * text. Returns when dismissed.
+	 * word wrapped text and the buttons given by the MessageBox::kButton*
+	 * flags (0 = OK); "title"/"text" are language.ini keys or plain text.
+	 * Returns the flag of the button pressed.
 	 */
-	void messageBox(const Common::String &title, const Common::String &text, int type = 0);
+	int messageBox(const Common::String &title, const Common::String &text, int buttons = 0);
+
+	Scene *scene() const { return _scene; }
+	/** The mouse position of the last mouse event (the original's FUN_0040ca10). */
+	Common::Point mousePos() const { return _mousePos; }
+	/** One iteration of the main loop: input, scene update, drawing. Dialogs nest it. */
+	void runFrame();
 
 	bool hasFeature(EngineFeature f) const override {
 		return
