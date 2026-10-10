@@ -73,7 +73,7 @@ void FlaaklypaEngine::changeScene(const Common::String &name, int arg) {
 
 void FlaaklypaEngine::startGame(const Common::String &name) {
 	const SceneDef *def = findSceneDef(name.c_str());
-	if (!def || scumm_stricmp(name.c_str(), "puzzle") != 0) {
+	if (!def || (scumm_stricmp(name.c_str(), "puzzle") != 0 && scumm_stricmp(name.c_str(), "bugzzz") != 0)) {
 		// TODO: the other sub games and activities
 		warning("Sub game '%s' is not implemented yet", name.c_str());
 		return;

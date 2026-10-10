@@ -3,6 +3,7 @@ MODULE := engines/flaaklypa
 MODULE_OBJS = \
 	anim.o \
 	archive.o \
+	bugzzz.o \
 	console.o \
 	cursor.o \
 	flaaklypa.o \
@@ -16,6 +17,7 @@ MODULE_OBJS = \
 	resources.o \
 	scene.o \
 	scenedata.o \
+	sound.o \
 	yard.o
 
 # This module can be built as a plugin
