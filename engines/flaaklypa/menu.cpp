@@ -27,6 +27,7 @@
 #include "flaaklypa/scenes.h"
 #include "flaaklypa/sockdrawer.h"
 #include "flaaklypa/textinvader.h"
+#include "flaaklypa/whackamole.h"
 
 namespace Flaaklypa {
 
@@ -188,6 +189,8 @@ Scene *createScene(FlaaklypaEngine *vm, const char *name) {
 		return new TextinvaderScene(vm, def);
 	if (!scumm_stricmp(name, "audiopairs"))
 		return new AudiopairsScene(vm, def);
+	if (!scumm_stricmp(name, "whackamole"))
+		return new WhackamoleScene(vm, def);
 	return new Scene(vm, def);
 }
 

@@ -528,6 +528,74 @@ table: 0x103 -> `FUN_0044c740`, 0x104 -> `44cf70`, 0x105 -> `44d720`,
   With a profile the original shows `tournament:PLAYERREADY` and starts at
   once. Not done: profiles/difficulty, help dialog, game over message box,
   high score, `sound.ini` volumes.
+## Sub game `whackamole` ("Dra meg baklengs!", add-on set 2)
+
+A whack-a-mole with birds: they peek out of seven bird houses and five nests
+in an old tree and want the larva (the mouse cursor) before they disappear
+again; a squirrel shows up too and must not be fed. Started from `house`.
+Handler `0x44d980` (not a function in the Ghidra project; dispatches 0x103 ->
+`FUN_0044e1f0`, 0x104 -> `44e300`, 0x105 -> `44da80`, 0x108/0x109 ->
+`44ed00`, 0x110 -> `44e350`, 0x111 -> `44ecd0`, 0x112 -> `44e740`, 0x116 ->
+`44ece0`). Engine: `whackamole.cpp`.
+
+* Elements: 14 arrays of 12 animation structs (houses 1..7, nests 1..5,
+  hotspot = index + 1): bird `a` (comes out), `b1`/`b2`/`b3` (waits), `c`
+  (goes back in) at `0x4debb8`, `0x4df398`, `0x4dfb78`, `0x4e0358`,
+  `0x4e0b38`; the mirrored bird `ar`..`cr` at `0x4e1318`..`0x4e3298`;
+  `squirrel a`/`b1`/`c` at `0x4e3a78`, `0x4e4258`, `0x4e4a38`; the looping
+  chirp `b1.s` at `0x4e5218`. The unmirrored bird clips of houses 1, 2, 6 and
+  all nests have a `.lst` suffix in their file names. Then the clone scratch
+  element `" "` (`0x4e5b60`, used to play `false` and `thank you on bird
+  language1/2` as clones), `forest loop` (unused), `startbuttn` (bitmap,
+  hotspot 34, (203, 238)), `cursor` (the looping larva, 32x32).
+* Level table `0x4e59f8`, 18 x 5 ints `{birds, squirrels, waitRange, unused,
+  duration ms}` (`kLevels`): 21..72 birds, 6..51 squirrels, waits 3/2/1,
+  60/50/40 s. `FUN_0044df80`: level n uses entry (n - 1) % 18; from level
+  19 on the duration is halved and rounded down to 5 s.
+* Start (`FUN_0044df40`, click on hotspot 34 while not running): remove the
+  sign, points = 0, level 1. Per level: bird interval = duration / (birds +
+  1), squirrel interval = duration / (squirrels + 1), next bird at start +
+  interval * shown + rand(interval), likewise squirrels; fed = appeared = 0;
+  the system cursor is hidden (`FUN_0040ef90(0)`, `FUN_0040f140(0)`) and the
+  larva clip (z 250) follows the mouse at (x - 25, y - 16).
+* Tick (`FUN_0044e740`): redraw the time (`"%s: %02d:%02d"` of
+  `whackamole:TIME`), end the level when start + duration has passed,
+  otherwise spawn (`FUN_0044e830` / `FUN_0044ea30`): a free hole out of 10
+  random tries, bird `a` or `ar` (50 %, `rand(1000) < 500`) or `squirrel a`
+  at z 10, waits = rand(waitRange) + 1, birds count as appeared.
+* Anim finished (`FUN_0044e350`): the clip is removed; `c`/`cr`/`squirrel c`
+  clear the hole's busy flag; after `a`/`b*` a bird plays a random `b1`..`b3`
+  (and the chirp through `SCENE_PlayAnim`) while waits > 0, else `c` (chirp
+  removed); the squirrel plays `b1` or `c` the same way.
+* Click on hole 1..12 while not busy (`FUN_0044da80`): squirrel present ->
+  it goes to `squirrel c` (busy), sound `false`, appeared + 1 (a miss);
+  bird present (also when it is already going back in) -> `c`/`cr` (busy),
+  `thank you on bird language1/2`, fed + 1, points + 13, larva hidden for
+  250 ms (`FUN_0044ec50`: the computed `(15000 - points) * 250 / 10000` is
+  only sign tested; no hiding from 15000 points on; timer id 0 shows it
+  again). A hit on a bird that is already in `c` from its own timeout still
+  counts and does not restart the clip.
+* Level end (`FUN_0044eb30`): percent = fed * 100 / appeared (`FUN_0044df10`);
+  >= 70 (`7000 * 0.01`): message `whackamole:WELLDONE` / `NEXTLEVEL`, points
+  += (int)percent * 29, next level. Else game over: message
+  `interfaceh:GAMEOVER` / `whackamole:GAMEOVER`, high score
+  `FUN_0041f9a0(0, points, {2500, 5000, 10000, 20000} at 0x49f0f8, 0)`, the
+  start sign comes back (not in tournament mode).
+* Screen: texts in `Amerigo BT_14_`, centred text areas (z 11) at
+  (618, 175)-(753, 204) points, (619, 224)-(754, 248) percent, (622, 271)-
+  (714, 288) level, (620, 297)-(717, 321) time, all `"%s: %d"`. Buttons
+  `help out/in` at (2, 1) and `exit out/in` at (726, 2), z 200. Music
+  `ambient10`. `sound.ini`: sound 0.449, speech 1, music 0.3.
+* Engine notes: the framework drops clicks while its cursor is hidden, so a
+  cursor table mapping every hotspot to the empty cursor (`kNoCursor`) is
+  used during a level instead; the larva is positioned in `onUpdate()` since
+  the framework only reports mouse moves on hotspot changes. The sound
+  clones are defined with `defineAnim()` and made invisible (audio only
+  clips have no palette and must not be decoded for drawing).
+* Not done: the message boxes (next level starts at once), high score
+  registration, help dialog, `SUBGAMEABORT` confirmation on leaving a
+  running game (`FUN_0040d8a0` flag), tournament mode auto start,
+  `sound.ini` volumes.
 
 ## Development aids (config keys in the `[flaaklypa]` section)
 
@@ -557,7 +625,7 @@ Sub games (`[subgame]`, score based):
 | x | audiopairs | Reodors Lydmaskin | house | data (help, message box, high score open) |
 | | textinvader | Ordspillet | goodbye | data2 |
 | | balloonhunt | Solans ballongjakt | outtent | data2 (no sceneDefs entry yet) |
-| | whackamole | Dra meg baklengs! | house | data2 |
+| x | whackamole | Dra meg baklengs! | house | data2 (message boxes, high score, help open) |
 | | beemaze | Ludvigs Labyrint | tvroom | data |
 | | buildabike | Reodors sykkelverksted | garage | data |
 | | mountain | (no title in language.ini) | morning | data (no sceneDefs entry yet) |

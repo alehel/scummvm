@@ -20,6 +20,7 @@ MODULE_OBJS = \
 	scenedata.o \
 	sockdrawer.o \
 	textinvader.o \
+	whackamole.o \
 	yard.o
 
 # This module can be built as a plugin
