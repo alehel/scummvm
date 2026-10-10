@@ -75,7 +75,7 @@ public:
 
 	/**
 	 * Cleans an INI value like the original's loader (FUN_0040dc10 /
-	 * FUN_0040e160): strips one pair of enclosing quotes and expands the
+	 * FUN_0040e160): strips a leading and a trailing quote and expands the
 	 * escapes \n \t \" \\ and \0.
 	 */
 	static Common::String iniValue(const Common::String &raw);

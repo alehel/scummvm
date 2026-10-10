@@ -23,6 +23,7 @@
 #include "common/textconsole.h"
 
 #include "flaaklypa/flaaklypa.h"
+#include "flaaklypa/dialog.h"
 #include "flaaklypa/hopscotch.h"
 #include "flaaklypa/music.h"
 #include "flaaklypa/resources.h"
@@ -78,7 +79,7 @@ static const float kDirectionThreshold = 0.5f;
 
 HopscotchScene::HopscotchScene(FlaaklypaEngine *vm, const SceneDef *def) : Scene(vm, def),
 	_grid(0), _gridAnim(nullptr), _scoreBox(nullptr), _score(0), _level(0), _round(0),
-	_turnStart(0), _state(kStateIdle), _timerFrame(-1), _inProgress(false) {
+	_turnStart(0), _state(kStateIdle), _timerFrame(-1), _messageBox(false) {
 	for (int i = 0; i < kMaxCells; i++)
 		_cells[i] = nullptr;
 	for (int i = 0; i < kMaxSequence; i++)
@@ -237,7 +238,7 @@ void HopscotchScene::onButton(int id) {
 		debug(1, "Hopscotch: help not implemented");
 		break;
 	case kButtonExit:
-		// TODO: FUN_0040cc30 asks "gamec:SUBGAMEABORT" while a game is in progress.
+		// FUN_0040cc30 (asks "gamec:SUBGAMEABORT" while a game runs)
 		_vm->endGame();
 		break;
 	case kButtonStart:
@@ -478,7 +479,7 @@ int HopscotchScene::deltaDirection(float dx, float dy) {
 void HopscotchScene::startGame() {
 	if (_state != kStateIdle)
 		return;
-	_inProgress = true;
+	_vm->setGameRunning(true);
 	resetScore();
 	int level = 0;
 	// TODO: with a profile the start level is three times the profile's
@@ -619,15 +620,20 @@ void HopscotchScene::clickCell(int x, int y) {
 
 // FUN_0043cd90: time ran out.
 void HopscotchScene::gameOver() {
-	_inProgress = false;
-	// TODO: message box "interfaceh:GAMEOVER" / "hopscotch:GAMEOVER"
-	// (FUN_00421310) and the high score registration FUN_0041f9a0(0, score,
-	// medal table 0x49e918 = 3000/5000/7000/10000, 0).
+	_vm->setGameRunning(false);
 	debug(1, "Hopscotch: game over, %d points", _score);
+	// The state is still the player's turn with the time up: the original's
+	// box swallows the frame events, here onUpdate() skips while it is open
+	// (else every nested frame would end the game again).
+	_messageBox = true;
+	_vm->messageBox("interfaceh:GAMEOVER", "hopscotch:GAMEOVER", MessageBox::kButtonOk);
+	_messageBox = false;
 	resetTimer();
 	setState(kStateIdle);
 	resetJumper(_lud);
 	resetJumper(_sol);
+	// TODO: high score registration FUN_0041f9a0(0, score, medal table
+	// 0x49e918 = 3000/5000/7000/10000, 0).
 	// Without a profile the score box shows the title again.
 	drawBoxText(_font10, _vm->getString("hopscotch:SCENENAME"));
 }
@@ -740,6 +746,8 @@ void HopscotchScene::onAnimFinished(Anim *a) {
 
 // FUN_0043cbc0 (0x112).
 void HopscotchScene::onUpdate() {
+	if (_messageBox)
+		return;
 	uint32 now = g_system->getMillis();
 	if (_sol.anim && _sol.anim->isPlaying())
 		moveJumper(_sol, now);

@@ -23,6 +23,7 @@
 #include "common/textconsole.h"
 
 #include "flaaklypa/flaaklypa.h"
+#include "flaaklypa/dialog.h"
 #include "flaaklypa/sockdrawer.h"
 
 namespace Flaaklypa {
@@ -438,7 +439,8 @@ void SockdrawerScene::addPoints(int n) {
 // FUN_0044c0e0
 void SockdrawerScene::onMouseDown(int hotspot, int x, int y) {
 	if (hotspot == kHotspotExit) {
-		// Button 2 -> FUN_0040cc30: back to the parent scene.
+		// Button 2 -> FUN_0040cc30: back to the parent scene (asks
+		// "gamec:SUBGAMEABORT" while a game runs).
 		_vm->endGame();
 		return;
 	}
@@ -450,8 +452,7 @@ void SockdrawerScene::onMouseDown(int hotspot, int x, int y) {
 	}
 	if (hotspot == kHotspotStart) {
 		if (_state == kStateIdle) {
-			// TODO: FUN_0040d8a0(1) marks a sub game in progress so that
-			// leaving asks "gamec:SUBGAMEABORT" first.
+			_vm->setGameRunning(true);
 			resetGame();
 			startRound();
 			playAnim("start");
@@ -562,13 +563,14 @@ void SockdrawerScene::timerStartDone() {
 
 // FUN_0044c380: time is up.
 void SockdrawerScene::gameOver() {
-	// FUN_0040d8a0(0): no sub game in progress any more.
+	_vm->setGameRunning(false);
 	_state = kStateIdle;
-	// TODO: message box FUN_00421310 with getString("sockdrawer:ENDMESSAGE")
-	// (not in language.ini) and getString("interfaceh:GAMEOVER"), then the
-	// high score registration FUN_0041f9a0(0, score, kMedals, callback).
-	debug(1, "Sockdrawer: game over at level %d with %d points (%s / %s)", _level, _score,
-	      _vm->getString("interfaceh:GAMEOVER").c_str(), _vm->getString("sockdrawer:ENDMESSAGE").c_str());
+	debug(1, "Sockdrawer: game over at level %d with %d points", _level, _score);
+	// Modal: the state is idle, so the pair timer and the hatches do nothing
+	// in the nested frames.
+	_vm->messageBox("interfaceh:GAMEOVER", "sockdrawer:ENDMESSAGE", MessageBox::kButtonOk);
+	// TODO: the high score registration FUN_0041f9a0(0, score, kMedals,
+	// callback).
 	// The callback (0x44c3e0) of the high score dialog: close the hatches
 	// and show the start cabinet again.
 	closeAllDrawers();

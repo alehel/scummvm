@@ -66,6 +66,7 @@ private:
 	Scene *_scene;
 	Common::String _nextScene;
 	int _nextSceneArg;
+	bool _gameRunning = false;     ///< DAT_0054bf98, see setGameRunning()
 	Common::INIFile *_language;
 
 	struct AutoClick {
@@ -88,6 +89,7 @@ private:
 	Graphics::FrameLimiter *_limiter = nullptr;
 
 	void switchScene();
+	bool confirmLeave();
 	void dispatchEvent(const Common::Event &event);
 	void parseAutoClicks();
 	void parseAutoKeys();
@@ -121,12 +123,26 @@ public:
 		return _randomSource.getRandomNumber(maxNum);
 	}
 
-	/** Leaves the current scene for another one at the end of the frame (GAME_Start). */
-	void changeScene(const Common::String &name, int arg = 0);
+	/**
+	 * Leaves the current scene for another one at the end of the frame
+	 * (FUN_0040cd70). Leaving a sub game while setGameRunning(true) first
+	 * asks "gamec:SUBGAMEABORT"; returns false when the player stays.
+	 */
+	bool changeScene(const Common::String &name, int arg = 0);
 	/** Starts a sub game or activity from a story page. */
 	void startGame(const Common::String &name);
-	/** Leaves the current scene for its parent in the scene table (sub game exit, navigator exit). */
-	void endGame();
+	/**
+	 * Leaves the current scene for its parent in the scene table (FUN_0040cc30:
+	 * sub game exit, navigator exit). Returns false when the player chose to
+	 * stay in a running sub game.
+	 */
+	bool endGame();
+	/**
+	 * Marks a sub game round as running (FUN_0040d8a0, DAT_0054bf98): while
+	 * set, leaving the sub game asks for confirmation first.
+	 */
+	void setGameRunning(bool running) { _gameRunning = running; }
+	bool isGameRunning() const { return _gameRunning; }
 
 	/** Looks up "section:KEY" in lang/common/language.ini (Windows-1252), like the original's LANG_Get. */
 	Common::String getString(const Common::String &key);

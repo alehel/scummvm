@@ -259,6 +259,7 @@ private:
 	void levelDone();                   ///< FUN_00436db0
 	bool anyoneAlive() const;           ///< FUN_00436c20
 	void gameOver();                    ///< FUN_00434530
+	void showMessage(const Common::String &title, const Common::String &text);
 	void backToMenu();                  ///< FUN_00436cd0
 	void playerClicked(int player);     ///< FUN_00437a10
 	void joinPlayer(int player);        ///< FUN_00437b50
@@ -341,6 +342,7 @@ private:
 	bool _running;
 	bool _timeOut;
 	bool _gameOverDone;
+	bool _messageBox;      ///< DAT_00661fbc: a message box is open
 	bool _startPressed;
 	uint32 _startTime;
 	int _level, _startLevel;

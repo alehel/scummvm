@@ -32,6 +32,7 @@
 
 #include "flaaklypa/flaaklypa.h"
 #include "flaaklypa/music.h"
+#include "flaaklypa/dialog.h"
 #include "flaaklypa/whackamole.h"
 
 namespace Flaaklypa {
@@ -88,7 +89,7 @@ static const int kLarvaOffsetX = 25;          ///< the larva clip is drawn at mo
 static const int kLarvaOffsetY = 16;
 
 WhackamoleScene::WhackamoleScene(FlaaklypaEngine *vm, const SceneDef *def) : Scene(vm, def),
-	_highlighted(0), _running(false), _balance(0), _appeared(0), _fed(0), _points(0), _level(0),
+	_highlighted(0), _running(false), _messageBox(false), _balance(0), _appeared(0), _fed(0), _points(0), _level(0),
 	_duration(0), _levelStart(0), _levelDef(&kLevels[0]), _birdInterval(1), _squirrelInterval(1),
 	_birds(0), _squirrels(0), _nextBird(0), _nextSquirrel(0), _cursorHidden(false) {
 	static const char *const kSuffixes[kKindCount] = {
@@ -316,8 +317,8 @@ void WhackamoleScene::startGame() {
 	removeAllClips();
 	_level = 0;
 	_points = 0;
-	// FUN_0040d8a0(1): marks a sub game as running so that leaving the
-	// scene asks "gamec:SUBGAMEABORT" first. TODO once the message box exists.
+	// FUN_0040d8a0(1): leaving the scene now asks "gamec:SUBGAMEABORT" first.
+	_vm->setGameRunning(true);
 	_running = true;
 	drawPoints();
 	drawPercent();
@@ -376,21 +377,23 @@ void WhackamoleScene::endLevel() {
 	drawPercent();
 	float p = percent();
 	if (p >= (float)kPercentThreshold * 0.01f) {
-		// TODO: message box "whackamole:WELLDONE" / "whackamole:NEXTLEVEL"
-		// (FUN_00421310) before the next level starts.
-		debug(1, "Whackamole: level %d cleared with %d %%: %s %s", _level, (int)p,
-		      _vm->getString("whackamole:WELLDONE").c_str(), _vm->getString("whackamole:NEXTLEVEL").c_str());
+		debug(1, "Whackamole: level %d cleared with %d %%", _level, (int)p);
+		// The game is still running and the level time is up: onUpdate()
+		// skips while the box is open (the original's box swallows the
+		// frame events), else every nested frame would end the level again.
+		_messageBox = true;
+		_vm->messageBox("whackamole:WELLDONE", "whackamole:NEXTLEVEL", MessageBox::kButtonOk);
+		_messageBox = false;
 		_points += (int)p * kPointsPerPercent;
 		startLevel();
 		return;
 	}
 	_running = false;
-	// FUN_0040d8a0(0): sub game no longer running.
-	// TODO: message box "interfaceh:GAMEOVER" / "whackamole:GAMEOVER" and
-	// high score registration FUN_0041f9a0(0, points, medals at 0x49f0f8
-	// = {2500, 5000, 10000, 20000}, 0).
-	debug(1, "Whackamole: game over at level %d with %d %%, %d points: %s", _level, (int)p, _points,
-	      _vm->getString("whackamole:GAMEOVER").c_str());
+	_vm->setGameRunning(false);
+	debug(1, "Whackamole: game over at level %d with %d %%, %d points", _level, (int)p, _points);
+	_vm->messageBox("interfaceh:GAMEOVER", "whackamole:GAMEOVER", MessageBox::kButtonOk);
+	// TODO: high score registration FUN_0041f9a0(0, points, medals at
+	// 0x49f0f8 = {2500, 5000, 10000, 20000}, 0).
 	// In tournament mode (FUN_00419490) the start sign does not come back.
 	addAnim("startbuttn", Anim::kDefaultPos, Anim::kDefaultPos, kZButtons);
 }
@@ -549,7 +552,7 @@ void WhackamoleScene::onAnimFinished(Anim *a) {
 // FUN_0044e740 (frame tick) plus FUN_0044ed00 (the larva follows the mouse;
 // the original gets every mouse move, the framework only hotspot changes).
 void WhackamoleScene::onUpdate() {
-	if (!_running)
+	if (!_running || _messageBox)
 		return;
 
 	Anim *larva = anim("cursor");

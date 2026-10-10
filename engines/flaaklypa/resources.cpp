@@ -40,8 +40,11 @@ static const char *const kDataDirs[] = { "lang3", "data3", "lang2", "data2", "la
 
 Common::String Resources::iniValue(const Common::String &raw) {
 	Common::String s = raw;
-	if (s.size() >= 2 && s.firstChar() == '"' && s.lastChar() == '"')
-		s = Common::String(s.c_str() + 1, s.size() - 2);
+	// FUN_0040e0c0 drops a leading and a trailing quote independently
+	if (!s.empty() && s.firstChar() == '"')
+		s.deleteChar(0);
+	if (!s.empty() && s.lastChar() == '"')
+		s.deleteLastChar();
 	Common::String out;
 	for (uint i = 0; i < s.size(); i++) {
 		char c = s[i];

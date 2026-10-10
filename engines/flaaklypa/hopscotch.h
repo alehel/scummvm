@@ -200,7 +200,7 @@ private:
 	uint32 _turnStart;         ///< DAT_0066ea44
 	int _state;                ///< DAT_0066ea48
 	int _timerFrame;
-	bool _inProgress;          ///< DAT_0054bf98, "ask before leaving" flag of the GAME module
+	bool _messageBox;          ///< the game over box is open (see gameOver())
 };
 
 } // End of namespace Flaaklypa

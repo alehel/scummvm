@@ -24,6 +24,7 @@
 #include "common/textconsole.h"
 
 #include "flaaklypa/butterfly.h"
+#include "flaaklypa/dialog.h"
 #include "flaaklypa/flaaklypa.h"
 #include "flaaklypa/resources.h"
 
@@ -339,11 +340,12 @@ void ButterflyScene::timeUp() {
 
 // FUN_0043b990, the "timerend" branch.
 void ButterflyScene::gameOver() {
-	// TODO: FUN_0040d8a0(0) clears the "sub game running" flag that makes
-	// leaving ask for confirmation (gamec:SUBGAMEABORT).
+	_vm->setGameRunning(false);
 	showCatcher(false);
-	// TODO: message box interfaceh:GAMEOVER with butterfly:ENDMESSAGE.
 	debug(1, "Butterfly: game over, %d points, level %d", _score, _level + 1);
+	// Modal: timeUp() has stopped the game (_inGame), so the nested frames
+	// only move the net; "timerend" has finished and does not fire again.
+	_vm->messageBox("interfaceh:GAMEOVER", "butterfly:ENDMESSAGE", MessageBox::kButtonOk);
 	removeAll(_butterflies);
 	removeAll(_enemies);
 	// TODO: profile item 7 (FUN_0041b740(7, species, 0x10, 0)) stores the
@@ -370,7 +372,8 @@ void ButterflyScene::onAnimFinished(Anim *a) {
 	if (n == "timerstart") {
 		// FUN_0043b990: the game starts.
 		a->remove();
-		// TODO: FUN_0040d8a0(1) "sub game running" flag; album button disabled (state 2).
+		_vm->setGameRunning(true);
+		// TODO: album button disabled (FUN_00406720(4, 2)).
 		_levelPoints = _score = _level = 0;
 		_levelStart = 0;
 		memset(_caught, 0, sizeof(_caught));

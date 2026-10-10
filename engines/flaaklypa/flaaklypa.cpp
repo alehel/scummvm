@@ -67,9 +67,23 @@ Common::String FlaaklypaEngine::getGameId() const {
 	return _gameDescription->gameId;
 }
 
-void FlaaklypaEngine::changeScene(const Common::String &name, int arg) {
+bool FlaaklypaEngine::changeScene(const Common::String &name, int arg) {
+	if (!confirmLeave())
+		return false;
 	_nextScene = name;
 	_nextSceneArg = arg;
+	return true;
+}
+
+// FUN_0040cd90: leaving a sub game with a round in progress asks first;
+// only Yes leaves (and clears the flag).
+bool FlaaklypaEngine::confirmLeave() {
+	if (!_scene || !_scene->def() || _scene->def()->type != kSceneSubGame || !_gameRunning)
+		return true;
+	// TODO: tournament mode (FUN_00419490 / FUN_00419410) leaves at once.
+	int r = messageBox("interfaceh:WARNING", "gamec:SUBGAMEABORT", MessageBox::kButtonYes | MessageBox::kButtonNo);
+	_gameRunning = r != MessageBox::kButtonYes;
+	return !_gameRunning;
 }
 
 // Sub games and activities that have a scene class (see createScene()).
@@ -110,13 +124,13 @@ void FlaaklypaEngine::startGame(const Common::String &name) {
 	changeScene(name, 0);
 }
 
-void FlaaklypaEngine::endGame() {
+bool FlaaklypaEngine::endGame() {
 	// FUN_0040cc30: always the parent from the scene table, whatever screen
 	// the scene was started from; arg 1 (skip the intro) when the parent is
 	// a story page.
 	Common::String target = _scene && _scene->def()->parent ? _scene->def()->parent : "menu";
 	const SceneDef *parent = findSceneDef(target.c_str());
-	changeScene(target, parent && parent->type == kSceneStory ? 1 : 0);
+	return changeScene(target, parent && parent->type == kSceneStory ? 1 : 0);
 }
 
 void FlaaklypaEngine::showNavigator(const char *next, const char *prev, int nextArg, int prevArg) {
@@ -221,6 +235,8 @@ void FlaaklypaEngine::switchScene() {
 	Common::String name = _nextScene;
 	int arg = _nextSceneArg;
 	_nextScene.clear();
+	// Leaving always clears it in the original too (Yes in confirmLeave()).
+	_gameRunning = false;
 
 	if (_scene) {
 		_scene->onClose();

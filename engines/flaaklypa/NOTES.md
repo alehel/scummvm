@@ -276,9 +276,11 @@ Handler `0x454fb0` (not a function in the Ghidra project; dispatches 0x103 ->
   path cells (engine: Catmull-Rom). `rotate` is the looping sound while a
   gem is selected, faded in and out (out three times faster). Buttons
   `help_0/1` at (2, 1) and `exit_0/1` at (726, 2). Music `track20`.
-* Not done: the game over message box (`puzzle:GAMEOVER` / `puzzle:LOOSE`),
-  high score registration (`FUN_0041f9a0`), help dialog, `sound.ini`
-  volumes.
+* Game over message box `puzzle:GAMEOVER` / `puzzle:LOOSE` (OK), then
+  `lid2`; the pending flag is cleared before the box (its nested frames run
+  the tick again).
+* Not done: high score registration (`FUN_0041f9a0`), help dialog,
+  `sound.ini` volumes.
 
 ## Sub game `sockdrawer` ("Sokkeskapet", from `desk`)
 
@@ -335,9 +337,11 @@ A memory game: a cabinet with 5x4 hatches hides pairs of socks. Handler
   are `Anim` objects owned by the scene with mutable `AnimDef`s (the
   original sprintf()s into the name field); the sounds are played as single
   elements instead of `SCENE_PlayAnimClone` clones.
-* Not done: message box, high score registration, help dialog, the
-  "sub game in progress" flag (`FUN_0040d8a0`, abort confirmation on exit),
-  tournament mode (`FUN_00419490`), `sound.ini` volumes.
+* Game over (`FUN_0044c380`): state 0, message box `interfaceh:GAMEOVER` /
+  `sockdrawer:ENDMESSAGE`. The start cabinet sets the "sub game running"
+  flag (`FUN_0040d8a0`), so leaving a running game asks first.
+* Not done: high score registration, help dialog, tournament mode
+  (`FUN_00419490`), `sound.ini` volumes.
 ## Sub game `hopscotch` ("Solan og Ludvig i Paradis", add-on set 1)
 
 A Simon says game on a hopscotch grid. Handler `0x43bbd0` (jump table, not a
@@ -386,10 +390,12 @@ B/C/D tone sets and Solan's start poses), `lang/hopscotch.bin` (help.ini).
   pressed bitmap, the release anywhere fires 0x116. The buttons' pixels have
   their id as hotspot and the scene handler ignores clicks on 1, 2 and 10.
   The engine keeps this button logic inside `hopscotch.cpp`.
-* Not done: the game over message box (`interfaceh:GAMEOVER` with
-  `hopscotch:GAMEOVER`), high score registration (`FUN_0041f9a0`, medals
-  3000/5000/7000 and 10000 at `0x49e918`), help dialog, the "abort the
-  game?" question on exit (`DAT_0054bf98`), profile start level and the
+* Game over (`FUN_0043cd90`): message box `interfaceh:GAMEOVER` /
+  `hopscotch:GAMEOVER`, then the hourglass, state and jumpers are reset; the
+  frame tick is skipped while the box is open (the state is still the
+  player's turn with the time up). Start sets the "sub game running" flag.
+* Not done: high score registration (`FUN_0041f9a0`, medals 3000/5000/7000
+  and 10000 at `0x49e918`), help dialog, profile start level and the
   tournament "PLAYERREADY" box.
 ## Sub game `audiopairs` ("Reodors Lydmaskin", house)
 
@@ -460,9 +466,8 @@ table, not a function in the Ghidra project): 0x103 -> `FUN_00428bd0` init,
   original tests the rectangle. `Scene::defineAnim()` got a `visible`
   parameter (default true) for the audio only clips, which have no palette
   to convert a frame with.
-* Not done: help dialog, game over message box, high score / award
-  registration, profile difficulty, the GAME module "game in progress"
-  flag (`FUN_0040d8a0`), `sound.ini` volumes.
+* Not done: help dialog, high score / award registration, profile
+  difficulty, `sound.ini` volumes.
 ## Sub game `wheelbarrow` ("Eplehøsten", started from `pee`)
 
 Catch the apples that ripen on the roof. Handler `0x44ed50` (not a function
@@ -531,12 +536,11 @@ finished, 0x111 -> `450270` timer, 0x112 -> `44fb70` tick, 0x116 ->
   (85, 135) and (715, 110)-(795, 135), z 200. Music `subgame18`, ambient
   loop `birds`. `sound.ini` volumes are not applied.
 * Game over (`FUN_00450180`): Solan neutral, pie/pickup/putdown removed,
-  then (not done) the message box `wheelbarrow:GAMEOVER` via
-  `interfaceh:GAMEOVER` and the high score registration `FUN_0041f9a0`
+  then the message box `interfaceh:GAMEOVER` / `wheelbarrow:GAMEOVER` and
+  (not done) the high score registration `FUN_0041f9a0`
   (`wheelbarrow:LONGNAME`, medals 2500/5000/10000/15000); without a
-  profile the start button returns and the apples are cleared. Also not
-  done: the help dialog, the "abort the game?" box (`gamec:SUBGAMEABORT`,
-  flag `FUN_0040d8a0`) when leaving a running game, Tab to the scene index.
+  profile the start button returns and the apples are cleared. Not done:
+  the help dialog, Tab to the scene index.
 * Testing: `autokey=t:key[:hold];...` (see "Development aids") presses the
   arrow keys; the start button is at (400, 300).
 ## Sub game `lettersort` ("Postsorteringsmaskinen", yard)
@@ -603,10 +607,9 @@ finished -> `43ea80`, 0x111 the 250 ms timer -> `43f750`, 0x112 ->
   `borderleft` (0, 99), `s1_1_frame` (116, 48), bell (677, 324) z -45. z:
   bags -30 (`0x672574`), flags -15, bagout -31, pusher/stamp -45, Solan
   -44/-46, letters 0..59. Music `subgame8`.
-* Not done: help dialog, game over message box and high score
-  registration, tournament mode (`FUN_00419490`: immediate start at level
-  difficulty * 3), the "game in progress" abort warning (`FUN_0040d8a0`),
-  the registry value `FUN_0040b940` writes at init, `sound.ini` volumes. A
+* Not done: help dialog, high score registration, tournament mode
+  (`FUN_00419490`: immediate start at level difficulty * 3), the registry
+  value `FUN_0040b940` writes at init, `sound.ini` volumes. A
   delivery clip that is still playing when the next level starts is
   restarted (the original only renames the struct).
 ## Sub game `hustle` ("Emanuels utfordring")
@@ -666,8 +669,7 @@ shuffle cannot be skipped, 0x110 -> `43d160`, 0x111 -> `43d950`, 0x116 ->
 * Buttons (BUTTON module, z 1, hotspot = id, fire on release): `help_0/1` at
   (0, 0), `exit_0/1` at (728, 0), 7 at (693, 404) with only a hover bitmap
   `bet_1`. The buttons highlight on the frame tick.
-* Not done: message box, high score, help dialog, the "gamec:SUBGAMEABORT"
-  confirmation when exiting a running game, tournament mode. The SmackGoto
+* Not done: high score, help dialog, tournament mode. The SmackGoto
   frame of the hand is `round(...) + 1` in the original; the port shows the
   rounded frame (0 based).
 ## Sub game `buildabike` ("Reodors sykkelverksted")
@@ -742,8 +744,10 @@ Ghidra project; jump table: 0x103 -> `FUN_004391a0` init, 0x104 ->
   as in the original); store counts 11x14 z 18 centred. Health bar: the
   PROGRESS object at (512, 162), `energy.bmp` cut to health / max, following
   at 50/s. `points` label (lang bitmap) at (511, 128). Music `subgame8`.
-* Not done: help dialog, game over message box, high score / medals, the
-  profile difficulty, the "MAJKA" cheat (fills the store), the belt items'
+* Game over (`FUN_00438c50`): message box `interfaceh:GAMEOVER` with
+  `buildabike:ENDMESSAGE` formatted with the minutes, seconds and score.
+* Not done: help dialog, high score / medals, the profile difficulty, the
+  "MAJKA" cheat (fills the store), the belt items'
   hit rectangle margin (`0x49dbf0`), `sound.ini` volumes.
 ## Sub game `pipeline` ("Oljeeventyret", started from `outtent`)
 
@@ -824,11 +828,12 @@ flowing after a countdown, reaches an open pipe end. Handler `0x448410`
   (757, 158 + 62 i) 26x56. Buttons `help_0/1` (0, 0), `exit_0/1` (728, 0),
   `start_0/1` (138, 29), `turbo_0/1` (463, 29) with the START/TURBO
   labels at (146, 34) and (494, 34). Music `subgame16`.
-* Not done: level complete and game over message boxes (`FUN_00421310`,
-  the original waits for them), high score registration (`FUN_0041f9a0`,
-  medals 2500/5000/10000), help dialog, the "game in progress" flag
-  (`FUN_0040d8a0`) that makes leaving ask for confirmation, tournament
-  mode, `sound.ini` volumes. Deviation: the bend's inflow rectangle is
+* Message boxes: `pipeline:LEVELCOMPLETE` / `pipeline:LEVELMESSAGE` before
+  the next level is built, `interfaceh:GAMEOVER` / `pipeline:ENDMESSAGE`
+  at game over (both OK, the oil is stopped meanwhile).
+* Not done: high score registration (`FUN_0041f9a0`, medals
+  2500/5000/10000), help dialog, tournament mode, `sound.ini` volumes.
+  Deviation: the bend's inflow rectangle is
   always drawn up to the corner square (the original stops once the corner
   phase starts, which leaves a one pixel gap at low frame rates).
 ## Sub game `beemaze` ("Ludvigs Labyrint", started from `tvroom`)
@@ -896,8 +901,10 @@ down, 0x10d -> `42f340` key up, 0x110 -> `432d30` anim finished, 0x111 ->
   ones play from level start, every 5 s each one shot clip gets a 1 in 3
   chance (`FUN_0042f460`). Sounds `berries_1`, `nuts_1/2`, `mushroom_1`,
   `smoke_1`, `honey_1` (`FUN_00431a00`, "%s_%d").
-* Not done: the game over message box (`beemaze:GAMEOVER`), high score
-  registration (`FUN_0041f9a0`, its callback puts the start icon back),
+* Game over (`FUN_004328e0`): message box `interfaceh:GAMEOVER` /
+  `beemaze:GAMEOVER`, then the maze is cleared.
+* Not done: high score registration (`FUN_0041f9a0`, its callback puts the
+  start icon back),
   help dialog, tournament mode (`FUN_00419490`: one life, level from the
   round), `sound.ini` volumes, the cheat console commands (SHROOMS, ...).
   Development: `autohold=t:d;t:d` holds (l/r/u/d) or releases (0) an
@@ -989,8 +996,18 @@ only scene besides racing that uses WAV files.
 * Music `subgame2`; volumes from `sound.ini` (`sound=0.69`). Buttons
   `help_0/1` (hotspot 31) and `exit_0/1` (32) over the `Help` / `Exit`
   bitmaps (z 90).
-* Not done: the message boxes (level complete, time out, ranking), the
-  high score registration (`FUN_0041f9a0`, medals 500/1000/1500 at
+* Message boxes (all OK): level complete (`FUN_00436db0`: title
+  `bugzzz:TITLEMSG` with the level, text `SPLAYERMSG` or `MPLAYERMSG` with
+  the leading colour) before the scroll, time out (`TIMEOUT` /
+  `TIMEOUTMSG`) before the level restarts, the ranking (`RANKTITLE`, one
+  `RANKFORMAT` line per player) at a multi player game over. The original
+  sets `DAT_00661fbc` around the ranking box, which makes its frame handler
+  skip; the engine sets it (`_messageBox`) around all three, since its
+  nested frames would complete the level again, and moves the time base on
+  by the time the box was open (the original's game clock pauses under a
+  dialog). `bugzzz_required=0` completes every level at once (box test).
+* Not done: the high score registration (`FUN_0041f9a0`, medals
+  500/1000/1500 at
   `0x4d7200`), the help dialog, tournament mode (`FUN_00419490`: one life,
   no joining), the unused "frags" and five way spit debug modes, Tab to the
   scene index. The woodpecker's first branch is added at z 10 (the original
@@ -1074,8 +1091,8 @@ table: 0x103 -> `FUN_0044c740`, 0x104 -> `44cf70`, 0x105 -> `44d720`,
   then the start sign again (without a profile).
 * Difficulty comes from the profile (`FUN_004194a0`); without one it is 0.
   With a profile the original shows `tournament:PLAYERREADY` and starts at
-  once. Not done: profiles/difficulty, help dialog, game over message box,
-  high score, `sound.ini` volumes.
+  once. Not done: profiles/difficulty, help dialog, high score,
+  `sound.ini` volumes.
 ## Sub game `whackamole` ("Dra meg baklengs!", add-on set 2)
 
 A whack-a-mole with birds: they peek out of seven bird houses and five nests
@@ -1140,10 +1157,10 @@ Handler `0x44d980` (not a function in the Ghidra project; dispatches 0x103 ->
   the framework only reports mouse moves on hotspot changes. The sound
   clones are defined with `defineAnim()` and made invisible (audio only
   clips have no palette and must not be decoded for drawing).
-* Not done: the message boxes (next level starts at once), high score
-  registration, help dialog, `SUBGAMEABORT` confirmation on leaving a
-  running game (`FUN_0040d8a0` flag), tournament mode auto start,
-  `sound.ini` volumes.
+* The frame tick is skipped while the next level box is open (the level
+  time is still up then).
+* Not done: high score registration, help dialog, tournament mode auto
+  start, `sound.ini` volumes.
 ## Sub game `butterfly` ("Sommerfugler i magen") and its album `buttercol`
 
 Catch butterflies with a net on a meadow; wasps and bees cost points. Handler
@@ -1219,8 +1236,8 @@ buttons (2 help `FUN_0041e580`, 3 exit `FUN_0040cc30`, 4 album -> scene
   profiles exist. After game over the start clip is shown again (the
   original stays in the end state behind its dialogs). `debug(3)` dumps all
   entity positions once a second.
-* Not done: message box, help dialog, profile storage, high score / medals,
-  the sub game abort confirmation, the "info" fact page, `sound.ini`
+* Not done: help dialog, profile storage, high score / medals, the album
+  button's disabled state during a game, the "info" fact page, `sound.ini`
   volumes, the LOVELYFLIES cheat.
 
 ## Dialogs (`dialog.cpp`)
@@ -1231,9 +1248,31 @@ buttons (2 help `FUN_0041e580`, 3 exit `FUN_0040cc30`, 4 album -> scene
 pressed one only while the mouse is over it, a click counts on release over
 the button: `FUN_00406d40`). `run()` nests the engine's `runFrame()`, so
 the scene keeps animating underneath while the input goes to the dialog
-(the original nests its message loop the same way, `FUN_0040d1c0`). A scene
+(the original nests its message loop the same way, `FUN_0040d1c0`, but
+freezes the scene, see below). A scene
 change requested while a dialog is open waits until it closes.
 
+* Under a message box the original pauses its game clock
+  (`FUN_0040d270(1)` -> `FUN_0040c400`; `FUN_0040c450` is the paused time),
+  skips the clip playback (`FUN_0040d110` calls `FUN_00413200` only while
+  no modal dialog is open) and its event handler (priority 0x32, run
+  before the scene's at 0) returns 1 for everything but 0x104/0x113/0x114,
+  so the scene gets no timers, ticks, anim-finished events or input: the
+  scene is frozen. The engine keeps updating the scene under a dialog, so
+  callers guard against re-entrancy (see the sub games' notes). TODO:
+  freeze the scene (clips, timers, a paused scene clock) like the original.
+  The navigator is not modal; its handler swallows the same events while
+  the clips keep playing.
+* Sub game abort (`FUN_0040cd90`, from `FUN_0040cd70`, the scene change):
+  leaving a sub game (type 3) while the "sub game running" flag
+  (`FUN_0040d8a0`, `DAT_0054bf98`; `setGameRunning()`) is set asks
+  `interfaceh:WARNING` / `gamec:SUBGAMEABORT` with Yes/No; only Yes leaves
+  (and clears the flag). Engine: `changeScene()` / `endGame()` return false
+  when the player stays. TODO: tournament mode leaves at once
+  (`FUN_00419410`).
+* `getString()` mirrors the INI reader of the original (`FUN_0040e0c0`,
+  `FUN_0040e160`): one leading and one trailing quote are dropped and
+  `\"`, `\\`, `\n`, `\t`, `\0` expanded.
 * **Message box** (`FUN_00421310` → `FUN_00420f40`/`FUN_00421070`):
   `msgbox/backdrop.bmp` (386x564) is cut into nine parts at 16/58/364/501
   and tiled to 342 + margins wide and to the text height (`FUN_00420b00`).
@@ -1872,37 +1911,37 @@ Sub games (`[subgame]`, score based):
 
 | Done | Scene | Title | Started from | Data |
 |---|---|---|---|---|
-| x | lettersort | Postsorteringsmaskinen | yard | data (help, message box, high score open) |
+| x | lettersort | Postsorteringsmaskinen | yard | data (help, high score open) |
 | | bugzzz | Larveliv i leiren | yard | data |
-| x | sockdrawer | Sokkeskapet | desk | data (message box, high score, help open) |
+| x | sockdrawer | Sokkeskapet | desk | data (high score, help open) |
 | | lettersort | Postsorteringsmaskinen | yard | data |
-| x | bugzzz | Larveliv i leiren | yard | data (message boxes, high score, help open) |
+| x | bugzzz | Larveliv i leiren | yard | data (high score, help open) |
 | | sockdrawer | Sokkeskapet | desk | data |
 | | wheelbarrow | Eplehøsten | pee | data |
-| x | hopscotch | Solan og Ludvig i Paradis | house | data + data1 (message box, high score, help open) |
+| x | hopscotch | Solan og Ludvig i Paradis | house | data + data1 (high score, help open) |
 | | sockdrawer | Sokkeskapet | desk | data |
-| x | wheelbarrow | Eplehøsten | pee | data (message box, high score, help open) |
+| x | wheelbarrow | Eplehøsten | pee | data (high score, help open) |
 | | hopscotch | Solan og Ludvig i Paradis | house | data |
 | | audiopairs | Reodors Lydmaskin | house | data |
-| x | textinvader | Ordspillet | goodbye | data2 (message box, high score, help, profiles open) |
+| x | textinvader | Ordspillet | goodbye | data2 (high score, help, profiles open) |
 | | hopscotch | Solan og Ludvig i Paradis | house | data |
-| x | audiopairs | Reodors Lydmaskin | house | data (help, message box, high score open) |
+| x | audiopairs | Reodors Lydmaskin | house | data (help, high score open) |
 | | textinvader | Ordspillet | goodbye | data2 |
 | | balloonhunt | Solans ballongjakt | outtent | data2 (no sceneDefs entry yet) |
-| x | whackamole | Dra meg baklengs! | house | data2 (message boxes, high score, help open) |
+| x | whackamole | Dra meg baklengs! | house | data2 (high score, help open) |
 | | beemaze | Ludvigs Labyrint | tvroom | data |
-| x | buildabike | Reodors sykkelverksted | garage | data (help, message box, high score open) |
+| x | buildabike | Reodors sykkelverksted | garage | data (help, high score open) |
 | | whackamole | Dra meg baklengs! | house | data2 |
-| x | beemaze | Ludvigs Labyrint | tvroom | data (message box, high score, help open) |
+| x | beemaze | Ludvigs Labyrint | tvroom | data (high score, help open) |
 | | buildabike | Reodors sykkelverksted | garage | data |
 | | mountain | (no title in language.ini) | morning | data (no sceneDefs entry yet) |
 | | pipeline | Oljeeventyret | outtent | data |
-| x | butterfly | Sommerfugler i magen | pee | data (message box, high score, profile, help, info page open) |
-| x | pipeline | Oljeeventyret | outtent | data (message boxes, high score, help open) |
+| x | butterfly | Sommerfugler i magen | pee | data (high score, profile, help, info page open) |
+| x | pipeline | Oljeeventyret | outtent | data (high score, help open) |
 | | butterfly | Sommerfugler i magen | pee | data |
 | | hustle | Emanuels utfordring | intent | data |
 | | butterfly | Sommerfugler i magen | pee | data |
-| x | hustle | Emanuels utfordring | intent | data (message box, high score, help open) |
+| x | hustle | Emanuels utfordring | intent | data (high score, help open) |
 
 Activities (`[activity]`, open ended):
 
@@ -1915,7 +1954,7 @@ Activities (`[activity]`, open ended):
 | | jigsaw | Puslespillet | yard | data |
 | | mahjong | Mah Jongg | outtent | data2 |
 | | draughts | Damm | tvroom | data |
-| x | puzzle | Solines Smykkeskrin | intent | data2 (message box, high score, help open) |
+| x | puzzle | Solines Smykkeskrin | intent | data2 (high score, help open) |
 | | sliding | Skyvepusslespillet | garage | data |
 | | chess | Sjakk | intent | data |
 | | movieplayer | Filmfremviser | tvstation | data |

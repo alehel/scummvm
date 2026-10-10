@@ -145,7 +145,6 @@ private:
 	int _moves[kMaxMoves];     ///< DAT_00670d3c
 	int _moveCount;            ///< DAT_00670c68
 	int _forcedFps;            ///< SmackFrameRate override, 0 = default
-	bool _inProgress;          ///< DAT_0054bf98: exiting would abort a running game
 	const char *_shuffle[kMaxMoves + 4];
 	const char *_result[3];
 

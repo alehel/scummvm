@@ -24,6 +24,7 @@
 #include "common/textconsole.h"
 
 #include "flaaklypa/flaaklypa.h"
+#include "flaaklypa/dialog.h"
 #include "flaaklypa/lettersort.h"
 #include "flaaklypa/resources.h"
 
@@ -323,9 +324,8 @@ void LettersortScene::resetGame() {
 
 // FUN_0043dea0: the start button was pressed.
 void LettersortScene::startGame() {
-	// The original also reads a registry value here and marks a game as
-	// in progress (FUN_0040d8a0), which makes leaving the scene ask for
-	// confirmation. TODO: that "gamec:SUBGAMEABORT" message box.
+	// The original also reads a registry value here (FUN_0040b8b0).
+	_vm->setGameRunning(true);
 	resetGame();
 	loadCountries();
 	_bagZ = kZBagDefault;
@@ -1068,10 +1068,13 @@ void LettersortScene::bellTick() {
 	if (_bellCount >= 0)
 		return;
 	anim("s1_1_bell")->stop();
-	// TODO: message box "interfaceh:GAMEOVER" / "lettersort:GAMEOVER" and
-	// the high score registration FUN_0041f9a0 (medals at 2500, 5000,
-	// 10000 and 20000 points), whose callback LAB_0043fd50 follows.
+	_vm->setGameRunning(false);
 	debug(1, "Lettersort: game over, %d points (%d letters sorted, %d bags lifted)", _score, _lettersSorted, _bagsCleared);
+	// Modal: the game has stopped (_running) and the bell no longer plays,
+	// so the nested frames do not come back here.
+	_vm->messageBox("interfaceh:GAMEOVER", "lettersort:GAMEOVER", MessageBox::kButtonOk);
+	// TODO: the high score registration FUN_0041f9a0 (medals at 2500, 5000,
+	// 10000 and 20000 points), whose callback LAB_0043fd50 follows.
 	gameOverDone();
 }
 

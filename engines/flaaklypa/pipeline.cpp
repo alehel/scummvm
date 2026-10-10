@@ -23,6 +23,7 @@
 #include "common/textconsole.h"
 
 #include "flaaklypa/flaaklypa.h"
+#include "flaaklypa/dialog.h"
 #include "flaaklypa/pipeline.h"
 #include "flaaklypa/resources.h"
 
@@ -495,8 +496,7 @@ void PipelineScene::drawOil(const Cell &c, Graphics::ManagedSurface &s) {
 
 // FUN_00448880: the Start button.
 void PipelineScene::startGame() {
-	// TODO: FUN_0040d8a0(1) marks a game in progress so that leaving asks
-	// "gamec:SUBGAMEABORT" first.
+	_vm->setGameRunning(true);
 	_inGame = true;
 	_level = 0;
 	_score = 0;
@@ -570,9 +570,10 @@ void PipelineScene::levelComplete() {
 	returnPiece();
 	if (!_runningSound.empty() && isAnimPlaying(_runningSound.c_str()))
 		anim(_runningSound.c_str())->stop();
-	// TODO: message box "pipeline:LEVELCOMPLETE" / "pipeline:LEVELMESSAGE"
-	// (FUN_00421310); the original waits for it before the next level.
 	debug(1, "Pipeline: level %d complete, +%d points (%d for time), score %d", _level + 1, points, timePoints, _score);
+	// The next level waits for the box; _playing is false meanwhile, so the
+	// nested frames do not pump oil (onUpdate()).
+	_vm->messageBox("pipeline:LEVELCOMPLETE", "pipeline:LEVELMESSAGE", MessageBox::kButtonOk);
 	_level++;
 	setupLevel();
 	_playing = true;
@@ -581,7 +582,7 @@ void PipelineScene::levelComplete() {
 
 // FUN_0044a740: the oil leaked or the pipeline was closed off.
 void PipelineScene::gameOver() {
-	// TODO: FUN_0040d8a0(0) clears the game in progress flag.
+	_vm->setGameRunning(false);
 	_inGame = false;
 	_playing = false;
 	const char *clips[] = { "pump", "well", "platform", "lamp", "cursor" };
@@ -593,10 +594,11 @@ void PipelineScene::gameOver() {
 	if (!_runningSound.empty() && isAnimPlaying(_runningSound.c_str()))
 		anim(_runningSound.c_str())->stop();
 	returnPiece();
-	// TODO: message box "interfaceh:GAMEOVER" / "pipeline:ENDMESSAGE" and
-	// the high score registration FUN_0041f9a0(0, score, {2500, 5000,
-	// 10000, 20000}, 0).
 	debug(1, "Pipeline: game over on level %d with %d points", _level + 1, _score);
+	// Modal; _playing is false, the board stays until the box is closed.
+	_vm->messageBox("interfaceh:GAMEOVER", "pipeline:ENDMESSAGE", MessageBox::kButtonOk);
+	// TODO: the high score registration FUN_0041f9a0(0, score, {2500, 5000,
+	// 10000, 20000}, 0).
 
 	for (int i = 0; i < kCells; i++)
 		_cells[i].anim->remove();
@@ -1002,7 +1004,7 @@ void PipelineScene::onMouseDown(int hotspot, int x, int y) {
 		debug(1, "Pipeline: help not implemented");
 		return;
 	case kButtonExit:
-		// TODO: FUN_0040cc30 asks for confirmation while a game runs.
+		// FUN_0040cc30 (asks "gamec:SUBGAMEABORT" while a game runs)
 		_vm->endGame();
 		return;
 	case kButtonStart:
