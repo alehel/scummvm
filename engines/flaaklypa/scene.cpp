@@ -108,6 +108,12 @@ Anim *Scene::defineAnim(const char *name, bool smacker, bool transparent, int ho
 	return a;
 }
 
+Anim *Scene::defineSurfaceAnim(const char *name, int w, int h, uint32 keyColor, int hotspot) {
+	Anim *a = defineAnim(name, false, true, hotspot, 0, 0, 0);
+	a->createSurface(w, h, keyColor);
+	return a;
+}
+
 void Scene::addAnim(const char *name, int x, int y, int z) {
 	anim(name)->add(x, y, z);
 }
@@ -573,6 +579,7 @@ void Scene::update() {
 		dispatchAnimFinished(a);
 	}
 
+	onUpdate();
 	_vm->_cursor->update();
 }
 

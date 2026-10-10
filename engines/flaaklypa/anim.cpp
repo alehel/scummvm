@@ -33,7 +33,7 @@ namespace Flaaklypa {
 Anim::Anim(Scene *scene, const AnimDef *def) : _scene(scene), _def(def),
 	_video(nullptr), _frame(nullptr), _hasKey(false), _keyColor(0),
 	_x(def->x), _y(def->y), _z(def->zOrder), _hotspot(def->hotspot), _group(def->group),
-	_added(false), _playing(false), _removeWhenDone(false), _lastFrameTime(0), _lastFrameShown(false) {
+	_added(false), _playing(false), _removeWhenDone(false), _ownSurface(false), _lastFrameTime(0), _lastFrameShown(false) {
 }
 
 Anim::~Anim() {
@@ -41,6 +41,8 @@ Anim::~Anim() {
 }
 
 void Anim::load() {
+	if (_ownSurface)
+		return;
 	Resources *res = _scene->resources();
 	const Common::String &sceneName = _scene->name();
 	if (_def->smacker) {
@@ -65,9 +67,47 @@ void Anim::load() {
 void Anim::unload() {
 	delete _video;
 	_video = nullptr;
+	if (_ownSurface)
+		return;
 	delete _frame;
 	_frame = nullptr;
 	_hasKey = false;
+}
+
+void Anim::createSurface(int w, int h, uint32 keyColor) {
+	unload();
+	delete _frame;
+	_frame = new Graphics::ManagedSurface(w, h, g_engine->_screen->format);
+	_frame->fillRect(Common::Rect(0, 0, w, h), keyColor);
+	_keyColor = keyColor;
+	_hasKey = true;
+	_ownSurface = true;
+}
+
+int Anim::frameCount() const {
+	return _video ? _video->getFrameCount() : 0;
+}
+
+void Anim::showFrame(int n) {
+	if (!_added)
+		add(_def->x, _def->y, _def->zOrder);
+	if (!_video)
+		return;
+	stop();
+	n = CLIP<int>(n, 0, (int)_video->getFrameCount() - 1);
+	if (_video->getCurFrame() > n)
+		_video->rewind();
+	// Decode forward; the clips used this way are short.
+	const Graphics::Surface *frame = nullptr;
+	while (_video->getCurFrame() < n && !_video->endOfVideo())
+		frame = _video->decodeNextFrame();
+	if (frame && _def->visible)
+		convertFrame(frame);
+}
+
+void Anim::setVolume(int volume) {
+	if (_video)
+		_video->setVolume((byte)CLIP<int>(volume, 0, 255));
 }
 
 void Anim::convertFrame(const Graphics::Surface *frame) {

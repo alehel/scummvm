@@ -73,6 +73,8 @@ public:
 	virtual void onAnimFinished(Anim *anim) {}
 	virtual void onTimer(int id, int data) {}
 	virtual void onSequenceDone() {}
+	/** Called once per frame after the animations have been advanced. */
+	virtual void onUpdate() {}
 
 	void handleEvent(const Common::Event &event);
 	void update();
@@ -90,6 +92,8 @@ public:
 	 * other bitmaps the original loads through other modules).
 	 */
 	Anim *defineAnim(const char *name, bool smacker, bool transparent, int hotspot, int x, int y, int z = 0);
+	/** Defines a procedurally drawn element, see Anim::createSurface(). */
+	Anim *defineSurfaceAnim(const char *name, int w, int h, uint32 keyColor, int hotspot = 0);
 
 	// ---- sequences (the "anim list" player of the CHAR module)
 	/** Plays the animation as a one element sequence (cursor hidden while it runs). */

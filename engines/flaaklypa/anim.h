@@ -64,6 +64,20 @@ public:
 	void play();
 	void stop();
 
+	/**
+	 * Turns the element into a procedurally drawn bitmap of the given size:
+	 * the scene draws into surface() and the element keeps it across
+	 * add() / remove(). Pixels of the key colour are transparent.
+	 */
+	void createSurface(int w, int h, uint32 keyColor);
+	Graphics::ManagedSurface *surface() { return _frame; }
+
+	/** Shows frame n of a clip without playing it (SmackGoto of the original). */
+	void showFrame(int n);
+	int frameCount() const;
+	/** Sets the playback volume of a clip, 0..255. */
+	void setVolume(int volume);
+
 	int x() const { return _x; }
 	int y() const { return _y; }
 	int z() const { return _z; }
@@ -110,6 +124,7 @@ private:
 	int _hotspot;
 	uint32 _group;
 	bool _added, _playing, _removeWhenDone;
+	bool _ownSurface;        ///< _frame was made by createSurface() and survives unload()
 	uint32 _lastFrameTime;   ///< when the last frame was decoded (to hold it for its duration)
 	bool _lastFrameShown;
 };

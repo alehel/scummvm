@@ -32,8 +32,10 @@
 #include "common/events.h"
 #include "common/scummsys.h"
 #include "common/system.h"
+#include "common/tokenizer.h"
 #include "engines/util.h"
 #include "common/file.h"
+#include "common/formats/ini-file.h"
 #include "graphics/framelimiter.h"
 #include "graphics/pixelformat.h"
 #include "image/png.h"
@@ -43,12 +45,13 @@ namespace Flaaklypa {
 FlaaklypaEngine *g_engine;
 
 FlaaklypaEngine::FlaaklypaEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst),
-	_gameDescription(gameDesc), _randomSource("Flaaklypa"), _scene(nullptr), _nextSceneArg(0) {
+	_gameDescription(gameDesc), _randomSource("Flaaklypa"), _scene(nullptr), _nextSceneArg(0), _language(nullptr) {
 	g_engine = this;
 }
 
 FlaaklypaEngine::~FlaaklypaEngine() {
 	delete _scene;
+	delete _language;
 	delete _music;
 	delete _cursor;
 	delete _resources;
@@ -69,8 +72,57 @@ void FlaaklypaEngine::changeScene(const Common::String &name, int arg) {
 }
 
 void FlaaklypaEngine::startGame(const Common::String &name) {
-	// TODO: sub games and activities
-	warning("Sub game '%s' is not implemented yet", name.c_str());
+	const SceneDef *def = findSceneDef(name.c_str());
+	if (!def || scumm_stricmp(name.c_str(), "puzzle") != 0) {
+		// TODO: the other sub games and activities
+		warning("Sub game '%s' is not implemented yet", name.c_str());
+		return;
+	}
+	if (_scene)
+		_returnScene = _scene->name();
+	changeScene(name, 0);
+}
+
+void FlaaklypaEngine::endGame() {
+	Common::String target = _returnScene;
+	if (target.empty() && _scene && _scene->def()->parent)
+		target = _scene->def()->parent;
+	if (target.empty())
+		target = "menu";
+	_returnScene.clear();
+	changeScene(target, 1);
+}
+
+Common::String FlaaklypaEngine::getString(const Common::String &key) {
+	if (!_language) {
+		_language = new Common::INIFile();
+		if (!_resources->loadIni("common", "language.ini", *_language))
+			warning("common/language.ini not found");
+	}
+	uint colon = key.findFirstOf(':');
+	if (colon == Common::String::npos)
+		return key;
+	Common::String value;
+	if (_language->getKey(key.substr(colon + 1), key.substr(0, colon), value))
+		return value;
+	return key;
+}
+
+// Development aid: "autoclick=t:x,y;t:x,y" clicks at the given times (ms
+// after start); "t:x,y,m" only moves the mouse there.
+void FlaaklypaEngine::parseAutoClicks() {
+	if (!ConfMan.hasKey("autoclick"))
+		return;
+	Common::StringTokenizer tok(ConfMan.get("autoclick"), ";");
+	while (!tok.empty()) {
+		Common::String item = tok.nextToken();
+		AutoClick c;
+		char mode = 0;
+		int n = sscanf(item.c_str(), "%u:%d,%d,%c", &c.time, &c.x, &c.y, &mode);
+		c.moveOnly = mode == 'm';
+		if (n >= 3)
+			_autoClicks.push_back(c);
+	}
 }
 
 void FlaaklypaEngine::switchScene() {
@@ -114,6 +166,10 @@ Common::Error FlaaklypaEngine::run() {
 	_music = new Music();
 
 	changeScene(ConfMan.hasKey("start_scene") ? ConfMan.get("start_scene") : "menu", 0);
+	if (ConfMan.hasKey("random_seed"))
+		_randomSource.setSeed(ConfMan.getInt("random_seed"));
+	parseAutoClicks();
+	uint32 startTime = g_system->getMillis();
 
 	// Development aid: "autoshot=<file>" with "autoshot_delay=<ms>" writes a
 	// PNG of the screen after the delay; "autoshot_quit=true" then exits.
@@ -143,6 +199,22 @@ Common::Error FlaaklypaEngine::run() {
 
 		while (g_system->getEventManager()->pollEvent(e))
 			_scene->handleEvent(e);
+
+		while (!_autoClicks.empty() && g_system->getMillis() - startTime >= _autoClicks[0].time) {
+			AutoClick c = _autoClicks[0];
+			_autoClicks.remove_at(0);
+			debug(1, "Auto click at %d,%d", c.x, c.y);
+			g_system->warpMouse(c.x, c.y);
+			e.mouse = Common::Point(c.x, c.y);
+			e.type = Common::EVENT_MOUSEMOVE;
+			_scene->handleEvent(e);
+			if (c.moveOnly)
+				continue;
+			e.type = Common::EVENT_LBUTTONDOWN;
+			_scene->handleEvent(e);
+			e.type = Common::EVENT_LBUTTONUP;
+			_scene->handleEvent(e);
+		}
 
 		_scene->update();
 		_music->update();
