@@ -25,6 +25,7 @@
 #include "common/tokenizer.h"
 
 #include "flaaklypa/beemaze.h"
+#include "flaaklypa/dialog.h"
 #include "flaaklypa/flaaklypa.h"
 #include "flaaklypa/resources.h"
 
@@ -400,6 +401,7 @@ void BeemazeScene::onAnimFinished(Anim *a) {
 
 // FUN_00432c90
 void BeemazeScene::startGame() {
+	_vm->setGameRunning(true);
 	_running = true;
 	_lives = kMaxLives;
 	_level = 0;
@@ -492,15 +494,18 @@ void BeemazeScene::loseLife() {
 
 // FUN_004328e0
 void BeemazeScene::gameOver() {
-	// TODO: message box "beemaze:GAMEOVER" (FUN_00421310) and the high score
-	// registration FUN_0041f9a0(0, score, ...); its callback (0x4329c0) puts
-	// the start icon back.
 	debug(1, "Beemaze: game over, %d points", _score);
+	_vm->setGameRunning(false);
+	// Modal: loseLife() has stopped the game, so the nested frames leave the
+	// maze alone (onUpdate() and the game timers check _running).
+	_vm->messageBox("interfaceh:GAMEOVER", "beemaze:GAMEOVER", MessageBox::kButtonOk);
 	restartLevel();
 	killGameTimers();
 	_running = false;
 	clearItems();
 	clearBees();
+	// TODO: the high score registration FUN_0041f9a0(0, score, ...); its
+	// callback (0x4329c0) puts the start icon back.
 	addAnim("start_icon", Anim::kDefaultPos, Anim::kDefaultPos, kZLives);
 }
 

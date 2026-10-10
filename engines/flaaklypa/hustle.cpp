@@ -24,6 +24,7 @@
 #include "common/textconsole.h"
 
 #include "flaaklypa/flaaklypa.h"
+#include "flaaklypa/dialog.h"
 #include "flaaklypa/hustle.h"
 #include "flaaklypa/resources.h"
 
@@ -59,7 +60,7 @@ const int HustleScene::kMedals[4] = { 5000, 40000, 160000, 220000 };
 HustleScene::HustleScene(FlaaklypaEngine *vm, const SceneDef *def) : Scene(vm, def),
 	_cupsMask(nullptr), _barBitmap(nullptr), _green(0), _state(kStateIdle), _clockRunning(false),
 	_clockStart(0), _handFrame(-1), _levelBase(1), _levelIndex(0), _bananas(0), _bet(0), _rounds(0),
-	_moveCount(0), _forcedFps(0), _inProgress(false), _sliderY(0), _sliderH(0), _sliderRange(0),
+	_moveCount(0), _forcedFps(0), _sliderY(0), _sliderH(0), _sliderRange(0),
 	_sliderValue(0), _sliderPixel(0), _dragging(false), _highlighted(0), _pressedButton(0), _betButton(false) {
 	for (int i = 0; i < kMaxMoves; i++)
 		_moves[i] = 0;
@@ -316,7 +317,7 @@ void HustleScene::startGame() {
 	setSliderValue(0);
 	updateClock();
 	playAnim("clockloop");
-	_inProgress = true;
+	_vm->setGameRunning(true);
 }
 
 // FUN_0043d5e0: the clock hand ("hand_0", 60 frames) follows the elapsed
@@ -418,11 +419,13 @@ void HustleScene::gameOver(int bananas) {
 		removeAnim("clockloop");
 	showBetButton(false);
 	_forcedFps = 0;
-	_inProgress = false;
-	Common::String text = _vm->getString(bananas > kMinBet ? "hustle:TIMEOUT" : "hustle:NOMONEY");
-	// TODO: message box "interfaceh:GAMEOVER" with the text, then the high
-	// score registration FUN_0041f9a0(0, bananas, kMedals, 0).
-	debug(1, "Hustle: game over, %d bananas: %s / %s", bananas, _vm->getString("interfaceh:GAMEOVER").c_str(), text.c_str());
+	_vm->setGameRunning(false);
+	debug(1, "Hustle: game over, %d bananas", bananas);
+	// Modal: the state is idle, so neither the cups nor the bet button react
+	// in the nested frames. The clock timer keeps ticking as it does after
+	// the box in the original (it only stops itself when the time is up).
+	_vm->messageBox("interfaceh:GAMEOVER", bananas > kMinBet ? "hustle:TIMEOUT" : "hustle:NOMONEY", MessageBox::kButtonOk);
+	// TODO: high score registration FUN_0041f9a0(0, bananas, kMedals, 0).
 }
 
 // ---- events --------------------------------------------------------------
@@ -475,7 +478,7 @@ void HustleScene::buttonPressed(int id) {
 		// TODO: help dialog (FUN_0041e580, lang/hustle/help.ini)
 		debug(1, "Hustle: help not implemented");
 	} else if (id == kHotspotExit) {
-		// TODO: FUN_0040cc30 asks "gamec:SUBGAMEABORT" while _inProgress
+		// FUN_0040cc30 (asks "gamec:SUBGAMEABORT" while a game runs)
 		_vm->endGame();
 	} else if (id == kHotspotBet && _state == kStateBetting) {
 		placeBet();

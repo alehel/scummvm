@@ -24,6 +24,7 @@
 
 #include "flaaklypa/flaaklypa.h"
 #include "flaaklypa/resources.h"
+#include "flaaklypa/dialog.h"
 #include "flaaklypa/wheelbarrow.h"
 
 namespace Flaaklypa {
@@ -202,8 +203,8 @@ void WheelbarrowScene::hideStartScreen() {
 // the apples it held when the last game ended (the original does not reset
 // that counter either).
 void WheelbarrowScene::startGame(int level) {
-	// FUN_0040d8a0(1): the original then asks "gamec:SUBGAMEABORT" before
-	// leaving the scene. TODO: that confirmation box.
+	// FUN_0040d8a0(1): leaving now asks "gamec:SUBGAMEABORT" first.
+	_vm->setGameRunning(true);
 	hideStartScreen();
 	clearApples();
 	_solan.anim->remove();
@@ -231,6 +232,7 @@ void WheelbarrowScene::startGame(int level) {
 
 // FUN_00450180
 void WheelbarrowScene::gameOver() {
+	_vm->setGameRunning(false);
 	_running = false;
 	setSpawnTimer(-1);
 	setSolan(kNeutral);
@@ -240,10 +242,12 @@ void WheelbarrowScene::gameOver() {
 		removeAnim("pickup");
 	if (isAnimAdded("putdown"))
 		removeAnim("putdown");
-	// TODO: message box "wheelbarrow:GAMEOVER" (through "interfaceh:GAMEOVER")
-	// and the high score registration FUN_0041f9a0("wheelbarrow:LONGNAME",
-	// score, medals 2500/5000/10000/15000).
 	debug(1, "Wheelbarrow: game over, %d points, level %d", _score, _level);
+	// Modal: the game has stopped (_running, no spawn timer), the nested
+	// frames leave Solan and the apples alone.
+	_vm->messageBox("interfaceh:GAMEOVER", "wheelbarrow:GAMEOVER", MessageBox::kButtonOk);
+	// TODO: the high score registration FUN_0041f9a0("wheelbarrow:LONGNAME",
+	// score, medals 2500/5000/10000/15000).
 	// Without a profile the start button comes back.
 	showStartScreen();
 	clearApples();

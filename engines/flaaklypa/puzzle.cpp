@@ -23,6 +23,7 @@
 #include "common/textconsole.h"
 
 #include "flaaklypa/flaaklypa.h"
+#include "flaaklypa/dialog.h"
 #include "flaaklypa/puzzle.h"
 #include "flaaklypa/resources.h"
 
@@ -465,10 +466,11 @@ void PuzzleScene::onUpdate() {
 	if (_gameOverPending && !_busy) {
 		_gameOverTimer += dt;
 		if (_gameOverTimer > kGameOverDelay) {
-			// TODO: message box "puzzle:GAMEOVER" / "puzzle:LOOSE" and the
-			// high score registration of the original.
 			debug(1, "Puzzle: game over, %d points", _finalScore);
+			// Cleared before the box: the nested frames run this again.
 			_gameOverPending = false;
+			_vm->messageBox("puzzle:GAMEOVER", "puzzle:LOOSE", MessageBox::kButtonOk);
+			// TODO: the high score registration FUN_0041f9a0(0, score, 0, 0).
 			_busy = true;
 			playAnim("lid2");
 		}

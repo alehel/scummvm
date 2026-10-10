@@ -25,6 +25,7 @@
 
 #include "flaaklypa/flaaklypa.h"
 #include "flaaklypa/resources.h"
+#include "flaaklypa/dialog.h"
 #include "flaaklypa/textinvader.h"
 
 namespace Flaaklypa {
@@ -295,6 +296,7 @@ void TextinvaderScene::startGame() {
 	_slotCount = 1;
 	_maxLen = 1;
 	showScoreSign();
+	_vm->setGameRunning(true);
 	_running = true;
 	redrawAll();
 	for (int i = 0; i < kMaxSlots; i++)
@@ -557,13 +559,16 @@ void TextinvaderScene::gameOver() {
 		return;
 	for (int i = 0; i < kMaxSlots; i++)
 		removeWord(i);
+	_vm->setGameRunning(false);
 	_running = false;
-	// TODO: message box "textinvader:GAMEOVER" (title "interfaceh:GAMEOVER",
-	// FUN_00421310) and the high score registration FUN_0041f9a0(0, score,
-	// table 0x49f0a0, 0). With a profile the original then waits for the
-	// dialogs (button 4 -> FUN_0044c950 restarts); without one the start
-	// sign comes back.
-	debug(1, "Textinvader: game over, %d points (%s)", _score, _vm->getString("textinvader:GAMEOVER").c_str());
+	debug(1, "Textinvader: game over, %d points", _score);
+	// Modal: with _running false the nested frames neither move nor spawn
+	// words; onUpdate() returns once this comes back from its slot loop.
+	_vm->messageBox("interfaceh:GAMEOVER", "textinvader:GAMEOVER", MessageBox::kButtonOk);
+	// TODO: the high score registration FUN_0041f9a0(0, score, table
+	// 0x49f0a0, 0). With a profile the original then waits for the dialogs
+	// (button 4 -> FUN_0044c950 restarts); without one the start sign comes
+	// back.
 	showStartSign();
 }
 

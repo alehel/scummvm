@@ -22,6 +22,7 @@
 #include "common/textconsole.h"
 
 #include "flaaklypa/audiopairs.h"
+#include "flaaklypa/dialog.h"
 #include "flaaklypa/flaaklypa.h"
 #include "flaaklypa/resources.h"
 
@@ -454,7 +455,7 @@ void AudiopairsScene::setState(int state) {
 
 // FUN_004290a0: the start button on the lever.
 void AudiopairsScene::startGame() {
-	// TODO: FUN_0040d8a0(1) marks a game in progress for the GAME module.
+	_vm->setGameRunning(true);
 	if (isAnimAdded("start"))
 		removeAnim("start");
 	_score = 0;
@@ -491,11 +492,12 @@ void AudiopairsScene::pairFound() {
 }
 
 void AudiopairsScene::gameOver() {
-	// TODO: FUN_0040d8a0(0); message box "audiopairs:ENDMESSAGE" with the
-	// title "interfaceh:GAMEOVER" (FUN_00421310); high score registration
-	// FUN_0041f9a0(0, score, kAwards, 0).
 	debug(1, "Audiopairs: game over, %d points", _score);
+	_vm->setGameRunning(false);
 	setState(kStateIdle);
+	// Modal: the nested frames only see the idle state (no timer is armed).
+	_vm->messageBox("interfaceh:GAMEOVER", "audiopairs:ENDMESSAGE", MessageBox::kButtonOk);
+	// TODO: high score registration FUN_0041f9a0(0, score, kAwards, 0).
 	// Without a profile the start button comes back for another game.
 	playAnim("start");
 }

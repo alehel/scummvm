@@ -23,6 +23,7 @@
 #include "common/textconsole.h"
 
 #include "flaaklypa/buildabike.h"
+#include "flaaklypa/dialog.h"
 #include "flaaklypa/flaaklypa.h"
 #include "flaaklypa/resources.h"
 
@@ -520,6 +521,7 @@ float BuildabikeScene::bikeTime() const {
 
 // FUN_00439620
 void BuildabikeScene::startGame() {
+	_vm->setGameRunning(true);
 	_running = true;
 	// TODO: the difficulty comes from the player profile; 1 without one.
 	_level = 1;
@@ -570,6 +572,7 @@ void BuildabikeScene::startGame() {
 // FUN_00438c50
 void BuildabikeScene::gameOver() {
 	uint32 elapsed = g_system->getMillis() - _startTime;
+	_vm->setGameRunning(false);
 	_running = false;
 	_scoreDisplay = (float)_score;
 	drawText(_scoreText, Common::String::format("%03d %03d", _score / 1000, _score % 1000), true);
@@ -587,9 +590,12 @@ void BuildabikeScene::gameOver() {
 
 	Common::String msg = Common::String::format(_vm->getString("buildabike:ENDMESSAGE").c_str(),
 	                                            elapsed / 60000, (elapsed / 1000) % 60, _score);
-	// TODO: message box "interfaceh:GAMEOVER" with msg, high score
-	// registration FUN_0041f9a0(0, score, {2500, 5000, 10000, 20000}, 0).
-	debug(1, "Buildabike: game over after %u ms, score %d: %s", elapsed, _score, msg.c_str());
+	debug(1, "Buildabike: game over after %u ms, score %d", elapsed, _score);
+	// Modal: _running is already false, so the nested frames leave the game
+	// alone (onUpdate() and tickBike()'s caller check it).
+	_vm->messageBox("interfaceh:GAMEOVER", msg, MessageBox::kButtonOk);
+	// TODO: high score registration FUN_0041f9a0(0, score, {2500, 5000,
+	// 10000, 20000}, 0).
 
 	// Without a player profile the screen returns to the start button.
 	for (int i = 0; i < kBeltItems; i++)

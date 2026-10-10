@@ -28,6 +28,7 @@
 #include "common/algorithm.h"
 
 #include "flaaklypa/bugzzz.h"
+#include "flaaklypa/dialog.h"
 #include "flaaklypa/flaaklypa.h"
 #include "flaaklypa/resources.h"
 #include "flaaklypa/sound.h"
@@ -166,7 +167,7 @@ enum {
 BugzzzScene::BugzzzScene(FlaaklypaEngine *vm, const SceneDef *def) : Scene(vm, def),
 	_treeMask(nullptr), _treeFree(0), _sounds(nullptr), _playfield(nullptr), _playfieldKey(0),
 	_lastSelected(0), _playerCount(0), _inMenu(true), _menuBuilt(false), _running(false),
-	_timeOut(false), _gameOverDone(false), _startPressed(false), _startTime(0), _level(0),
+	_timeOut(false), _gameOverDone(false), _messageBox(false), _startPressed(false), _startTime(0), _level(0),
 	_startLevel(0), _endTime(0), _branch(-1), _nextLifeScore(300), _scrolling(false), _scrollStart(0),
 	_scrollParity(0), _loaded(false), _highlighted(0), _deathmatch(false), _multiSpit(false),
 	_requiredOverride(-1), _timeBase(0), _ticks(0), _seconds(0), _spitTicks(0), _delta(0), _resetDelta(true), _lastFrameTime(0) {
@@ -329,13 +330,6 @@ static Common::String colorKey(const char *color) {
 	Common::String k(color);
 	k.toUppercase();
 	return "bugzzz:" + k;
-}
-
-// Language strings in language.ini are sometimes quoted.
-static Common::String unquote(const Common::String &s) {
-	if (s.size() >= 2 && s[0] == '"' && s.lastChar() == '"')
-		return Common::String(s.c_str() + 1, s.size() - 2);
-	return s;
 }
 
 // ---- loading -------------------------------------------------------------
@@ -530,7 +524,7 @@ void BugzzzScene::buildMenu(bool full) {
 	if (full) {
 		// "Start" centred in (265, 295)-(493, 338) in the 18 point font.
 		Anim *a = anim("starttext");
-		setText(a, _font18, unquote(_vm->getString("bugzzz:START")), kAlignCentre | kAlignVCentre);
+		setText(a, _font18, _vm->getString("bugzzz:START"), kAlignCentre | kAlignVCentre);
 		a->add(265, 295, kZBorder);
 		addAnim("dif_backdrop", Anim::kDefaultPos, Anim::kDefaultPos, kZDialog);
 		addAnim(_startPressed ? "start_on" : "start_off", Anim::kDefaultPos, Anim::kDefaultPos, kZIcons);
@@ -642,7 +636,7 @@ void BugzzzScene::switchPanel(int player, const char *name) {
 
 // FUN_00436fe0: the same message, with the player number, on all four panels of a group.
 void BugzzzScene::setPanelMessages(int group, const Common::String &key) {
-	Common::String fmt = unquote(_vm->getString(key));
+	Common::String fmt = _vm->getString(key);
 	for (int p = 0; p < kPlayers; p++)
 		setText(anim(textName(group, p).c_str()), _fontSmall, Common::String::format(fmt.c_str(), p + 1), 0);
 }
@@ -1687,6 +1681,7 @@ void BugzzzScene::startGame() {
 	_inMenu = false;
 	_nextLifeScore = 300;
 	setPanelMessages(5, "bugzzz:READYMSG1");
+	_vm->setGameRunning(true);
 	debug(1, "Bugzzz: game started with %d players", _playerCount);
 }
 
@@ -1817,15 +1812,14 @@ void BugzzzScene::levelDone() {
 	for (int i = 0; i < kPlayers; i++)
 		if (_active[i] && (best == -1 || _worms[best].score < _worms[i].score))
 			best = i;
-	Common::String title = Common::String::format(unquote(_vm->getString("bugzzz:TITLEMSG")).c_str(), _level + 1);
+	Common::String title = Common::String::format(_vm->getString("bugzzz:TITLEMSG").c_str(), _level + 1);
 	Common::String text;
 	if (_playerCount < 2)
-		text = unquote(_vm->getString("bugzzz:SPLAYERMSG"));
+		text = _vm->getString("bugzzz:SPLAYERMSG");
 	else
-		text = Common::String::format(unquote(_vm->getString("bugzzz:MPLAYERMSG")).c_str(),
-		                              unquote(_vm->getString(colorKey(kColorNames[best]))).c_str());
-	// TODO: message box (FUN_00421310) "<title>" / "<text>" before the scroll
-	debug(1, "Bugzzz: level complete: %s %s", title.c_str(), text.c_str());
+		text = Common::String::format(_vm->getString("bugzzz:MPLAYERMSG").c_str(),
+		                              _vm->getString(colorKey(kColorNames[best])).c_str());
+	showMessage(title, text);
 	startScroll();
 }
 
@@ -1856,8 +1850,8 @@ void BugzzzScene::gameOver() {
 			if (!_active[k])
 				continue;
 			int p = order[k];
-			Common::String name = unquote(_vm->getString(colorKey(kColorNames[p])));
-			list += Common::String::format(unquote(_vm->getString("bugzzz:RANKFORMAT")).c_str(), rank, name.c_str(), _worms[p].score);
+			Common::String name = _vm->getString(colorKey(kColorNames[p]));
+			list += Common::String::format(_vm->getString("bugzzz:RANKFORMAT").c_str(), rank, name.c_str(), _worms[p].score);
 			if (_worms[p].score == lastScore) {
 				ties++;
 			} else {
@@ -1866,11 +1860,27 @@ void BugzzzScene::gameOver() {
 				lastScore = _worms[p].score;
 			}
 		}
-		// TODO: message box (FUN_00421310) "bugzzz:RANKTITLE" with the list
-		debug(1, "Bugzzz: game over: %s", list.c_str());
+		showMessage("bugzzz:RANKTITLE", list);
 	}
 	_inMenu = true;
 	_gameOverDone = true;
+	_vm->setGameRunning(false);
+}
+
+// FUN_00421310 with OK. The original sets DAT_00661fbc around the ranking
+// box, which makes its frame handler (FUN_004330d0) skip the game; its
+// message box also pauses the game clock (FUN_0040d270 -> FUN_0040c400) and
+// swallows the frame events. The engine keeps updating the scene under a
+// dialog, so the flag covers every box here: the nested frames must not
+// run the game (the level would complete again and open a second box), and
+// the time base is moved on by the time the box was open.
+void BugzzzScene::showMessage(const Common::String &title, const Common::String &text) {
+	_messageBox = true;
+	uint32 start = g_system->getMillis();
+	_vm->messageBox(title, text, MessageBox::kButtonOk);
+	_timeBase += g_system->getMillis() - start;
+	_resetDelta = true;
+	_messageBox = false;
 }
 
 // FUN_00436cd0: back on the selection screen the players keep their colours.
@@ -1979,8 +1989,7 @@ void BugzzzScene::onAnimFinished(Anim *a) {
 		addAnim("bird_hakke", Anim::kDefaultPos, Anim::kDefaultPos, kZIcons);
 		playAnim("bird_hakke");
 	} else if (n == "hakkned" || n == "branch_fall_from_top") {
-		// TODO: message box (FUN_00421310) "bugzzz:TIMEOUT" / "bugzzz:TIMEOUTMSG"
-		debug(1, "Bugzzz: %s / %s", unquote(_vm->getString("bugzzz:TIMEOUT")).c_str(), unquote(_vm->getString("bugzzz:TIMEOUTMSG")).c_str());
+		showMessage("bugzzz:TIMEOUT", "bugzzz:TIMEOUTMSG");
 		startLevel();
 		setEndTime();
 		_timeOut = false;
@@ -1990,6 +1999,9 @@ void BugzzzScene::onAnimFinished(Anim *a) {
 // ---- the frame handler (event 0x119, FUN_004330d0) -------------------------
 
 void BugzzzScene::onUpdate() {
+	// DAT_00661fbc: nothing runs while a message box is open (see showMessage()).
+	if (_messageBox)
+		return;
 	uint32 now = g_system->getMillis();
 	_ticks = (now - _timeBase) / kTickMs;
 	_seconds = (now - _timeBase) / 1000;

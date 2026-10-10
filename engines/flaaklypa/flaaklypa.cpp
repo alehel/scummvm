@@ -67,9 +67,23 @@ Common::String FlaaklypaEngine::getGameId() const {
 	return _gameDescription->gameId;
 }
 
-void FlaaklypaEngine::changeScene(const Common::String &name, int arg) {
+bool FlaaklypaEngine::changeScene(const Common::String &name, int arg) {
+	if (!confirmLeave())
+		return false;
 	_nextScene = name;
 	_nextSceneArg = arg;
+	return true;
+}
+
+// FUN_0040cd90: leaving a sub game with a round in progress asks first;
+// only Yes leaves (and clears the flag).
+bool FlaaklypaEngine::confirmLeave() {
+	if (!_scene || !_scene->def() || _scene->def()->type != kSceneSubGame || !_gameRunning)
+		return true;
+	// TODO: tournament mode (FUN_00419490 / FUN_00419410) leaves at once.
+	int r = messageBox("interfaceh:WARNING", "gamec:SUBGAMEABORT", MessageBox::kButtonYes | MessageBox::kButtonNo);
+	_gameRunning = r != MessageBox::kButtonYes;
+	return !_gameRunning;
 }
 
 // Sub games and activities that have a scene class (see createScene()).
@@ -112,14 +126,16 @@ void FlaaklypaEngine::startGame(const Common::String &name) {
 	changeScene(name, 0);
 }
 
-void FlaaklypaEngine::endGame() {
+bool FlaaklypaEngine::endGame() {
 	Common::String target = _returnScene;
 	if (target.empty() && _scene && _scene->def()->parent)
 		target = _scene->def()->parent;
 	if (target.empty())
 		target = "menu";
+	if (!changeScene(target, 1))
+		return false;
 	_returnScene.clear();
-	changeScene(target, 1);
+	return true;
 }
 
 void FlaaklypaEngine::showNavigator(const char *next, const char *prev, int nextArg, int prevArg) {
@@ -146,9 +162,35 @@ Common::String FlaaklypaEngine::getString(const Common::String &key) {
 	if (colon == Common::String::npos)
 		return key;
 	Common::String value;
-	if (_language->getKey(key.substr(colon + 1), key.substr(0, colon), value))
-		return value;
-	return key;
+	if (!_language->getKey(key.substr(colon + 1), key.substr(0, colon), value))
+		return key;
+	// The INI reader of the original (FUN_0040e0c0, FUN_0040e160) drops one
+	// leading and one trailing quote and expands \", \\, \n, \t and \0.
+	if (!value.empty() && value.firstChar() == '"')
+		value.deleteChar(0);
+	if (!value.empty() && value.lastChar() == '"')
+		value.deleteLastChar();
+	Common::String out;
+	for (uint i = 0; i < value.size(); i++) {
+		char c = value[i];
+		if (c == '\\' && i + 1 < value.size()) {
+			char n = value[i + 1];
+			if (n == '"' || n == '\\') {
+				c = n;
+				i++;
+			} else if (n == 'n') {
+				c = '\n';
+				i++;
+			} else if (n == 't') {
+				c = '\t';
+				i++;
+			} else if (n == '0') {
+				break;
+			}
+		}
+		out += c;
+	}
+	return out;
 }
 
 // Development aid: "autoclick=t:x,y;t:x,y" clicks at the given times (ms
@@ -224,6 +266,8 @@ void FlaaklypaEngine::switchScene() {
 	Common::String name = _nextScene;
 	int arg = _nextSceneArg;
 	_nextScene.clear();
+	// Leaving always clears it in the original too (Yes in confirmLeave()).
+	_gameRunning = false;
 
 	if (_scene) {
 		_scene->onClose();

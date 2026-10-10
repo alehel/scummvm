@@ -38,8 +38,10 @@ class FlaaklypaEngine;
  *
  * The dialog is a bitmap drawn above the scene with push buttons on it.
  * run() loops the engine's frame function, with the input routed to the
- * dialog, until close() is called: the scene underneath keeps animating,
- * as in the original (common/dialogue/<name>/...).
+ * dialog, until close() is called: the scene underneath keeps animating
+ * and gets its timers and frame updates, so callers must guard against
+ * re-entrancy. (The original freezes the scene under a message box: see
+ * "Dialogs" in NOTES.md.) Bitmaps from common/dialogue/<name>/...
  */
 class Dialog {
 public:

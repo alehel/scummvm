@@ -126,6 +126,7 @@ private:
 
 	// game state, see the globals listed in NOTES.md
 	bool _running;
+	bool _messageBox;          ///< the next level box is open (see endLevel())
 	bool _busy[kHoles];         ///< a fed bird / squirrel is still going back in
 	int _waits[kHoles];         ///< remaining waiting clips of the animal in the hole
 	int _balance;               ///< fed birds minus fed squirrels (not displayed)
