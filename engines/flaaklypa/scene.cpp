@@ -85,7 +85,7 @@ Anim *Scene::anim(const char *name) {
 	return a;
 }
 
-Anim *Scene::defineAnim(const char *name, bool smacker, bool transparent, int hotspot, int x, int y, int z) {
+Anim *Scene::defineAnim(const char *name, bool smacker, bool transparent, int hotspot, int x, int y, int z, bool visible) {
 	Anim *existing = findAnim(name);
 	if (existing)
 		return existing;
@@ -93,7 +93,7 @@ Anim *Scene::defineAnim(const char *name, bool smacker, bool transparent, int ho
 	_dynNames.push_back(Common::String(name));
 	d->name = _dynNames.back().c_str();
 	d->smacker = smacker;
-	d->visible = 1;
+	d->visible = visible;
 	d->transparent = transparent;
 	d->loop = 0;
 	d->hotspot = hotspot;

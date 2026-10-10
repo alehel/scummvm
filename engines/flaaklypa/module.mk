@@ -3,6 +3,7 @@ MODULE := engines/flaaklypa
 MODULE_OBJS = \
 	anim.o \
 	archive.o \
+	audiopairs.o \
 	console.o \
 	cursor.o \
 	flaaklypa.o \
