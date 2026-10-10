@@ -1538,6 +1538,75 @@ hotspots; the cursor is hidden. Music `subgame10`.
 * State across visits: none (the arg is kept for the key handler only).
 * TODO: subtitles (FUN_004094d0).
 
+## Story page `tvroom` ("TV-stua")
+
+Story page 5 (clips `S05AN-*`), event handler `FUN_004270d0`
+(0x4270d0..0x4279a0), `tvroom.cpp` (`TvroomScene`). Reodor's living room:
+Reodor (character 4, hotspot 53, z 5) on the bed, Ludvig (2, hotspot 52,
+z 0) and Solan (1, hotspot 51, z 10) in front of him, two lit candles, a
+wall clock, a moose head and the TV. Music `track5`. Right click:
+navigator next `garage`, previous `house`.
+
+* Intro (arg 0): sequence `S05AN-SS-001`, `002a`, `002b`, `003a`, `003b`.
+  When `002a` ends the candles go out: the candles are removed, the
+  full screen bitmap `bitmap/backdrop2.bmp` (the dark room; a nameless
+  element at 0x4c16b8 in the original, loaded at init by `FUN_00413940`)
+  is added at z -10, the characters get their "TV" lists (`*-T03a/T03`
+  idle, `ROD-T02` / `SOL-T02` bored, no reactions) and the TV sound
+  `S05AN-SS-003c` (audio only, 40 s) starts; while it plays the music is
+  lowered to 25 % (`FUN_0040b410(2, 2, 0.25f)` on its 0x10f "anim started"
+  event). When the intro sequence ends first, the cursor stays hidden
+  (0x11f handler). When `003c` ends the music returns to full volume and
+  the sequence `S05AN-ROD-T04a`, `T04b`, `SS-004a1`, `004a2`, `004b`
+  plays; at the end of `004a1` the candles are lit again, the normal
+  character lists come back and the dark bitmap goes.
+* Space (`FUN_004278c0`): removes the dark bitmap and `003c`, restarts
+  the candles, music volume 1.0, normal character lists. The page's key
+  handler runs before the CHAR module's (callback priority 0 vs -10), so
+  `TvroomScene` consumes the space bar (`handlesKey`) and calls
+  `stopSequence()` after this clean-up.
+* Wall clock (`FUN_00427360`, at init and on timer 0 every second): the
+  60 frame clips `long` (z -16, frame = minute) and `short` (z -15, frame
+  = minute / 12 + (hour % 12) * 5) are jumped to the local time with
+  `SmackGoto` (`FUN_00403770`) when their current frame (`FUN_00403c60`)
+  differs; the port uses `Anim::showFrame()`, which does nothing when the
+  clip already shows the frame (no accessor needed).
+* Timer 1 (first after 30 s, then every 45 s): one of `moose1`, `moose2`,
+  `moose5`, `moose6`, `moose7` (random without repeats), removed when it
+  ends. The original timers repeat (`FUN_0040c480(time, period, id)`);
+  the port re-arms them in `onTimer`.
+
+Hotspots (mouse down):
+
+| Hotspot | Action |
+|---|---|
+| 1 | activity `gallery` |
+| 2 | sequence `S05AN-SS-005a1`, `005a2` or `005b1`, `005b2` (in order, then random without repeats) |
+| 3 / 4 / 5 | `S05AN-SS-003` / `S05AN-SS-016` / `S05AN-SS-017` |
+| 7 / 8 / 14 | `phone` / `bird` / `electric` |
+| 9 | sub game `beemaze` |
+| 10 | activity `draughts` |
+| 11 | `bee` or `flower` (alternating, then random) |
+| 12 | hidden car part: profile page value 0 = 1, award dialog, removed |
+| 13 | `moose3` or `moose4` |
+| 15 | hidden 3D glasses: award "3D scene 5 found", removed |
+| 51 (Solan) | one of `S05AN-SS-007c`, `007d`, (`007e1`, `007e2`), (`007e1`, `007f2`); Solan has no reaction list |
+| 52 / 53 | Ludvig / Reodor reactions (`S05AN-SS-007b` / `007a`, CHAR module) |
+| 100..113 | fact pages (fact module, `lang/tvroom/fact.ini`) |
+
+Hotspots 6 and 215 exist in the mask but are neither in the cursor table
+nor handled.
+
+State: the masks of the five random picks (`DAT_005b8a10`, `..18`,
+`..24`, `..30`, `..34`) are kept across visits (static members); their
+counters are reset at init. The car part flag is profile page value 0
+and the glasses `FUN_0041b8c0(5)`; the port keeps both in static members
+until profiles exist.
+
+TODO: music volume (`FUN_0040b410`, no music volume API yet), the award
+dialogs, profile, fact pages; `gallery` and `draughts` are not ported yet
+(`startGame` warns).
+
 ## Development aids (config keys in the `[flaaklypa]` section)
 
 `start_scene`, `autoshot` / `autoshot_delay` / `autoshot_quit` (screenshot),

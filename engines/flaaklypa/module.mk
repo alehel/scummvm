@@ -36,6 +36,7 @@ MODULE_OBJS = \
 	sound.o \
 	textinvader.o \
 	town.o \
+	tvroom.o \
 	tvstation.o \
 	whackamole.o \
 	wheelbarrow.o \
