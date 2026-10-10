@@ -808,9 +808,17 @@ void ScriptVM::setPropertyOf(LiveObject *lo, int prop, const Value &v) {
 		_vm->spriteGotoFrame(lo, n);
 		break;
 	case kPropSpriteFrameCount: lo->frameCount = n; break;
-	case 0x3a:
-	case 0x60:
-		// Frame cache hints (preload / release a frame range); frames are loaded on demand here
+	case kPropSpriteLoadFrames:
+	case kPropSpritePreload:
+		// Point(first, last): load that frame range before it plays (the
+		// script setter FUN_00462390 calls FUN_0040a1f0; 0x3a also rejects a
+		// range outside the sprite)
+		if (v.type == kTypePoint && (prop == kPropSpritePreload || (v.pt.x >= 1 && v.pt.y <= lo->frameCount)))
+			_vm->preloadSpriteFrames(lo, v.pt.x, v.pt.y);
+		break;
+	case kPropSpriteRelease:
+		// Point(first, last): the original frees those frames (FUN_0040a440);
+		// the image cache here keeps them
 		break;
 	case kPropSpriteDelay: lo->frameDelay = MAX(25, n); break;
 	case kPropSpriteCounter1: case kPropSpriteCounter2: case kPropSpriteCounter3:
@@ -831,15 +839,13 @@ void ScriptVM::setPropertyOf(LiveObject *lo, int prop, const Value &v) {
 		}
 		break;
 	case kPropSpriteSetPos:
-	case kPropSpriteMoveTo:
 		if (v.type == kTypePoint) {
 			int w = lo->rect.width(), h = lo->rect.height();
 			lo->rect.left = lo->panel->rect.left + v.pt.x;
 			lo->rect.top = lo->panel->rect.top + v.pt.y;
 			lo->rect.right = lo->rect.left + w;
 			lo->rect.bottom = lo->rect.top + h;
-			if (prop == kPropSpriteSetPos)
-				_vm->spriteMoved(lo);
+			_vm->spriteMoved(lo);
 		}
 		break;
 	default:

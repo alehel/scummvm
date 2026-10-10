@@ -79,6 +79,7 @@ public:
 	void runScriptAction(const Action *a, Context &ctx);
 	bool scriptShouldStop() const;
 	void setSpriteFrame(LiveObject *lo, int frame);
+	void preloadSpriteFrames(LiveObject *lo, int first, int last);
 	void spriteGotoFrame(LiveObject *lo, int frame);
 	void markDirty() { _dirty = true; }
 	int getBuiltinNumber(int id) const;

@@ -946,12 +946,21 @@ void DKPengeEngine::updateNodeHotspots(LivePage *page, int node) {
 	_dirty = true;
 }
 
-// DoTransition: plays the walk animation sprite that leads to the next node;
-// its last frame script then changes to the destination page.
+// DoTransition (FUN_0044cff0): plays the walk animation sprite that leads to
+// the next node; its last frame script then changes to the destination page.
+// Every frame is loaded before the walk starts so none is decoded mid-walk.
+// With transitions switched off (option 18) the asynchronous walk jumps to
+// its last frame and the synchronous one does nothing.
 void DKPengeEngine::doTransition(LivePage *page, int mode, int spriteId, int async) {
 	LiveObject *lo = findLiveObject(spriteId, page);
 	if (!lo || lo->obj->cls != kObjSprite)
 		return;
+	if (!toggleState(18)) {
+		if (async)
+			spriteGotoFrame(lo, lo->frameCount);
+		return;
+	}
+	preloadSpriteFrames(lo, 1, -1);
 	lo->zOrder = 10;
 	lo->visible = true;
 	if (mode)
@@ -965,10 +974,12 @@ void DKPengeEngine::doTransition(LivePage *page, int mode, int spriteId, int asy
 		_dirty = true;
 		return;
 	}
-	// Synchronous variant: the original steps the frames itself, 200 ms apart
+	// Synchronous variant: the original steps the frames itself, every 200 ms
+	// from the start
 	setSpriteFrame(lo, 1);
+	uint32 start = _system->getMillis();
 	for (int f = 2; f <= lo->frameCount && !shouldQuit(); f++) {
-		uint32 until = _system->getMillis() + 200;
+		uint32 until = start + 200 * (f - 1);
 		while (_system->getMillis() < until && !shouldQuit()) {
 			handleEvents();
 			render();
@@ -1550,6 +1561,20 @@ void DKPengeEngine::setSpriteFrame(LiveObject *lo, int frame) {
 	_dirty = true;
 }
 
+// Loads frames first..last of a sprite ahead of playing them (FUN_0040a1f0):
+// a first below 1 starts at frame 1 and a last outside the sprite runs to its
+// final frame, so (1, -1) loads them all; (-1, -1) loads nothing. The
+// original also frees frames outside the range when memory runs short.
+void DKPengeEngine::preloadSpriteFrames(LiveObject *lo, int first, int last) {
+	if (lo->obj->cls != kObjSprite || lo->obj->file.empty() || (first == -1 && last == -1))
+		return;
+	first = MAX(first, 1);
+	if (last < 1 || last > lo->frameCount)
+		last = lo->frameCount;
+	for (int f = first; f <= last; f++)
+		_res->loadImage(lo->panel->dir, Common::String::format("%s%04d", lo->obj->file.c_str(), f));
+}
+
 // Runs the sprite scripts registered for a sprite event:
 //   5 click, 9 frame reached (script->b is the 1-based frame),
 //   0xd last frame reached, 0x10 loop restarted, 10 timer
@@ -1797,7 +1822,15 @@ void DKPengeEngine::updateSprites(uint32 now) {
 				// Only active (1), loaded (2) and running (4) sprites animate
 				if (!lo.playing || (lo.spriteState & 7) != 7 || now < lo.nextFrameTime)
 					continue;
-				lo.nextFrameTime = now + MAX(25, lo.frameDelay);
+				// Frames keep the sprite's own cadence: the next one is due a
+				// delay after this one was due, not after the loop got here.
+				// A sprite that just started or fell a whole frame behind
+				// starts counting from now.
+				uint32 delay = MAX(25, lo.frameDelay);
+				if (lo.nextFrameTime && now - lo.nextFrameTime < delay)
+					lo.nextFrameTime += delay;
+				else
+					lo.nextFrameTime = now + delay;
 				if (!advanceSprite(page, &lo))
 					return;
 			}

@@ -73,10 +73,12 @@ enum PropertyId {
 	kPropSpriteCounter5 = 0x2a,
 	kPropSpriteRight = 0x2b,
 	kPropSpriteSetPos = 0x39,
+	kPropSpriteLoadFrames = 0x3a,
 	kPropSpriteFrameB = 0x3d,
 	kPropSpriteRectA = 0x3e,
 	kPropSpriteRectB = 0x3f,
-	kPropSpriteMoveTo = 0x61,
+	kPropSpritePreload = 0x60,
+	kPropSpriteRelease = 0x61,
 	kPropSpriteStart = 0x62,
 	kPropSpriteBottom = 0x65,
 	kPropSpriteDelay = 0x6c
