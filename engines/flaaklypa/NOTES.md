@@ -327,6 +327,59 @@ A memory game: a cabinet with 5x4 hatches hides pairs of socks. Handler
 * Not done: message box, high score registration, help dialog, the
   "sub game in progress" flag (`FUN_0040d8a0`, abort confirmation on exit),
   tournament mode (`FUN_00419490`), `sound.ini` volumes.
+## Sub game `hopscotch` ("Solan og Ludvig i Paradis", add-on set 1)
+
+A Simon says game on a hopscotch grid. Handler `0x43bbd0` (jump table, not a
+function in the Ghidra project): 0x103 -> `FUN_0043bc90` init, 0x104 ->
+`43c7a0`, 0x105 -> `43c7d0` mouse down, 0x110 -> `43c980` anim finished,
+0x112 -> `43cbc0` frame tick, 0x116 -> `43c910` button. Engine:
+`hopscotch.cpp`. Data: `data/hopscotch.bin` plus `data1/hopscotch.bin` (the
+B/C/D tone sets and Solan's start poses), `lang/hopscotch.bin` (help.ini).
+
+* Flow (`DAT_0066ea48` state): 0 idle, 1 Solan hops the visible part of the
+  sequence (`FUN_0043c580`, one hop per 0x110 of his clip), then the
+  hourglass is removed and `rotate` plays; when it ends the `timer` clip is
+  added and the turn starts (state 3). The player clicks squares
+  (`FUN_0043c800`, 75x75 rectangles at the square positions); Ludvig hops
+  there (`ludjump<dir>`) or falls (`ludfall<dir>`) when it is the wrong one,
+  which resets him to the start and the progress to 0. Each correct square
+  gives 5 points; the last one 100 plus 5 per full second left on the
+  hourglass (`FUN_0043cb90`), then `bird` plays and the next round starts
+  (`FUN_0043cb60`). The start button becomes the hint button (state 2:
+  Solan repeats the sequence while the hourglass keeps running).
+* Levels (`0x49e788`, 16 x {base length, rounds, grid, max squares, time ms,
+  symbols}): the sequence of a level is generated once with base + rounds
+  squares (`FUN_0043c460`: random squares, each square used once before any
+  repeats, `FUN_0040a150`); round r shows base + r of them, capped at base +
+  rounds - 1 (`FUN_0043c5e0`). Levels 0..2 grid 1 (6 squares), 3..5 grid 2
+  (9), 6..8 grid 3 (9), 9..11 grid 4 (12), 12..15 base lengths 8/10/12/14 on
+  grids 1..4 again; level 15 repeats forever. Times 22..28 s. Without a
+  profile the game starts at level 0 (with one: 3 x the profile difficulty).
+* Screen: grid bitmaps `grid1..4` at (320,192) (373,200) (206,220) (251,195)
+  (`0x49e628`), square bitmaps `number01..12` / `symbol01..12` at the offsets
+  of `0x49e648..` z 2, jump clips 152x152 at square - 38 z 5, start positions
+  `0x49e5e8` (Ludvig) / `0x49e608` (Solan). Facing from the hop vector,
+  `hs_GetDeltaDirection` (`FUN_0043bfc0`): 0 up, 45, 90 right, ... 315;
+  components above 0.5 decide. A hop moves the sprite linearly over 500 ms
+  (`FUN_0043cce0`); on 0x110 the jump clip is re-added at the target as the
+  standing pose and the square's tone `<prefix><n>.smk` (prefix "", B, C, D
+  per grid) is played as a clone (`FUN_0043ca70`). The hourglass `timer` (33
+  frames, z -10) shows frame round((frames - 1) / time * elapsed); past the
+  last frame the game is over (`FUN_0043cc40`, `FUN_0043cd90`). Score box: a
+  text area (315,2)-(506,31) z -10, `Amerigo BT_14_` centred; it shows the
+  scene title in `Amerigo BT_10_` before a game and after game over.
+* Buttons (BUTTON module, `FUN_00406ed0`): `help_0/1` at (0,0), `exit_0/1`
+  at (728,0), start at (13,497) with no bitmap in the normal state, `start_1`
+  pressed, `start_2` disabled, label `hopscotch:START` / `hopscotch:HINT` in
+  the button font (`Amerigo BT_14_`) centred one z above. A press shows the
+  pressed bitmap, the release anywhere fires 0x116. The buttons' pixels have
+  their id as hotspot and the scene handler ignores clicks on 1, 2 and 10.
+  The engine keeps this button logic inside `hopscotch.cpp`.
+* Not done: the game over message box (`interfaceh:GAMEOVER` with
+  `hopscotch:GAMEOVER`), high score registration (`FUN_0041f9a0`, medals
+  3000/5000/7000 and 10000 at `0x49e918`), help dialog, the "abort the
+  game?" question on exit (`DAT_0054bf98`), profile start level and the
+  tournament "PLAYERREADY" box.
 
 ### Bitmap fonts (FONT module, `font.cpp`)
 
@@ -427,7 +480,7 @@ Sub games (`[subgame]`, score based):
 | | bugzzz | Larveliv i leiren | yard | data |
 | x | sockdrawer | Sokkeskapet | desk | data (message box, high score, help open) |
 | | wheelbarrow | Eplehøsten | pee | data |
-| | hopscotch | Solan og Ludvig i Paradis | house | data |
+| x | hopscotch | Solan og Ludvig i Paradis | house | data + data1 (message box, high score, help open) |
 | | audiopairs | Reodors Lydmaskin | house | data |
 | x | textinvader | Ordspillet | goodbye | data2 (message box, high score, help, profiles open) |
 | | balloonhunt | Solans ballongjakt | outtent | data2 (no sceneDefs entry yet) |

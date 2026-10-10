@@ -21,6 +21,7 @@
 #include "common/debug.h"
 
 #include "flaaklypa/flaaklypa.h"
+#include "flaaklypa/hopscotch.h"
 #include "flaaklypa/puzzle.h"
 #include "flaaklypa/scenes.h"
 #include "flaaklypa/sockdrawer.h"
@@ -176,6 +177,8 @@ Scene *createScene(FlaaklypaEngine *vm, const char *name) {
 		return new MenuScene(vm, def);
 	if (!scumm_stricmp(name, "yard"))
 		return new YardScene(vm, def);
+	if (!scumm_stricmp(name, "hopscotch"))
+		return new HopscotchScene(vm, def);
 	if (!scumm_stricmp(name, "puzzle"))
 		return new PuzzleScene(vm, def);
 	if (!scumm_stricmp(name, "sockdrawer"))
