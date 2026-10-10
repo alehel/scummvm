@@ -1655,6 +1655,78 @@ class with `defineAnim`, the scene table has no entries for them).
   arg 2). `track9` is not restarted when already playing (the original
   passes 1 = restart).
 
+## Story page `goodbye` ("Avslutning")
+
+Handler `FUN_00415f50` (`goodbye.cpp`). A night sky over Flåklypa; music
+`track14` (restarted on every visit: `FUN_0040b1f0(name, 1)`).
+
+* Timers (`FUN_0040c480(fireTime, interval, id)` repeats when interval is
+  non-zero): 0 every 8 s from 3 s: a firework of `list_4aa790`
+  (firework1..7) at z = its index; 1 every 2 s from the start: a star of
+  `list_4aa2d0` (star2..star11) at z = index - 100. The pick
+  (`FUN_004161d0`) draws `rand() % 7` up to 100 times for an entry that is
+  not playing (also for the nine stars, so star10/star11 only come from
+  the fallback), else the first free one (`FUN_00415680`, shared with
+  `birthday`). Finished clips are removed.
+* The second firework (`DAT_0055d000`, reset when the page is entered with
+  arg 0, kept when returning from the word game) starts `S14AN-NAR-001`
+  (42 s). When it ends, `S14AN-NAR-002` follows if the profile's session
+  counter (record 0x400 `{sessions, time}`, incremented by `FUN_00412030`
+  when a profile is chosen) is below 2, i.e. on the first session; without
+  a profile it always follows. 2 s after `S14AN-NAR-002` (timer 2) the
+  game moves on to `outro`.
+* Space: a running narration counts as finished (`FUN_00416260`); as in
+  the original one press skips both narrations, since `NAR-002` is
+  already added when it is checked.
+* Hotspots: 1 `textinvader` (word game, add-on set 2); 141..147 fact pages
+  of `lang2/goodbye/fact.ini`, handled by the fact module (TODO).
+  Right click: navigator (next `outro`, previous `tvstation`).
+* Both hotspot 1 and the fact hotspots exist only in the add-on set 2 mask
+  `data2/goodbye/hotspots.bmp`; the base `data/goodbye/hotspots.bmp` is
+  all 2. The original searches the containers highest add-on set first
+  (`FUN_0040d6d0`: lang3, data3, lang2, data2, lang1, data1, lang, data;
+  `FUN_0040f4b0` keeps the first copy of a file), `Resources` searches
+  lang..lang3 then data..data3, so it loads the base mask and the word
+  game cannot be started from the page. Same for `desk`, `house`,
+  `intent`, `outtent` (masks), `menu` / `sceneindex` (data3 backdrop and
+  bitmaps), `common/language.ini` and `outro/credits.ini` (lang3).
+* TODO: profile (session counter), fact module.
+
+## Story page `outro` ("Epilog")
+
+Handler `FUN_004182f0` (`outro.cpp`), no cursor table. Reodor, Solan and
+Ludvig watch the fireworks from the yard; music `track15`.
+
+* Init (`FUN_004183d0`): `S14AN-SS-001` (54 s) as a one clip sequence,
+  then character 1 (no hotspot) idles with `S14AN-SS-002`
+  (`list_4acac8`). `3dglasses` (hotspot 10) unless 3D scene 14 was found.
+* Timer 0 every 6 s from 3 s: a firework of `list_4ace18` (firework3, 4,
+  9, 10, 11; `rand() % 5`, up to 100 draws, else the first free one),
+  removed when finished.
+* Timer 1 at 62 s: the credits. `<lang>/outro/credits.ini` (INI module:
+  `FUN_0040dc10` load, `FUN_0040e2d0` get string, `FUN_0040e3a0` get int
+  via `sscanf("%d")`; values lose one pair of enclosing quotes and `\n`,
+  `\t`, `\"`, `\\`, `\0` are expanded). Entry n of `[credits]`:
+  `text<n>` (ends the credits when missing), `font<n>` (0 `White Amerigo
+  BT_10_` headings, 1 `White Amerigo BT_14_` names, default 1),
+  `image<n>` (any value: award), `pause<n>`. Each `\n` separated line
+  (max 63 characters) becomes a text element (`FUN_00407a30`, up to 48 at
+  `DAT_005783e0`) starting 750 ms after the previous one; the next entry
+  follows after (lines + pause) * 750 ms; an empty text counts as one
+  line.
+* Scrolling (`FUN_00418870`, frame tick 0x112): area `DAT_0049c9b8`
+  {70, -128, 800, 600}, elements left aligned at x 70, z 15;
+  y = 600 - round((now - start) * 0.001 * 0.04 * 728), i.e. 29 px/s;
+  removed when y < -128.
+* The last entry (`image42=carpart`) gives the hidden car part:
+  `FUN_00418770` checks profile record 0x402 key 0, sets it and shows
+  award dialog `FUN_0041bb20(0, outro:AWARD_TITLE, outro:AWARD_DESC, 1,
+  0)`; without a profile the award comes every time (TODO: dialog,
+  profile).
+* Hotspot 10: 3D scene 14 award (`FUN_0041c1b0(14)`, TODO) and the
+  glasses are removed. Right click: navigator (previous `goodbye`). Space:
+  back to the menu (`FUN_0040cc30`).
+
 ## Development aids (config keys in the `[flaaklypa]` section)
 
 `start_scene`, `autoshot` / `autoshot_delay` / `autoshot_quit` (screenshot),

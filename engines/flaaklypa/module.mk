@@ -16,6 +16,7 @@ MODULE_OBJS = \
 	font.o \
 	garage.o \
 	gem3d.o \
+	goodbye.o \
 	hopscotch.o \
 	house.o \
 	hustle.o \
@@ -26,6 +27,7 @@ MODULE_OBJS = \
 	metaengine.o \
 	morning.o \
 	music.o \
+	outro.o \
 	outtent.o \
 	pipeline.o \
 	puzzle.o \

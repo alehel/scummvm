@@ -237,6 +237,10 @@ Scene *createScene(FlaaklypaEngine *vm, const char *name) {
 		return new TvroomScene(vm, def);
 	if (!scumm_stricmp(name, "outtent"))
 		return new OuttentScene(vm, def);
+	if (!scumm_stricmp(name, "goodbye"))
+		return new GoodbyeScene(vm, def);
+	if (!scumm_stricmp(name, "outro"))
+		return new OutroScene(vm, def);
 	return new Scene(vm, def);
 }
 
