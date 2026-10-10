@@ -660,6 +660,81 @@ shuffle cannot be skipped, 0x110 -> `43d160`, 0x111 -> `43d950`, 0x116 ->
   frame of the hand is `round(...) + 1` in the original; the port shows the
   rounded frame (0 based). Clips with Bink audio play slower than their
   frame rate in the engine (audio clock), which stretches the shuffle.
+## Sub game `buildabike` ("Reodors sykkelverksted")
+
+A drag and drop repair shop. Handler `0x4390c0` (not a function in the
+Ghidra project; jump table: 0x103 -> `FUN_004391a0` init, 0x104 ->
+`4398c0`, 0x105 -> `439950` mouse down, 0x10b -> `439c40` drop, 0x112 ->
+`437d20` tick, 0x116 -> `43a210` buttons 0x10 exit / 0x11 help). Engine:
+`buildabike.cpp`.
+
+* Event 0x10b is the EVENT module's drop event: `FUN_0040c1f0(anim, data)`
+  starts a drag (the element follows the mouse), `FUN_0040c260` on button up
+  sends 0x10b with (x, y, hotspot, anim, data), looking the hotspot up with
+  the dragged element's own hotspot excluded. The engine polls the mouse in
+  `onUpdate()` and drops in `onMouseUp()`; the dragged element has hotspot 0.
+* Parts: 11 types (`kPartNames`, tables `0x4d7648` broken, `0x4d7674`
+  fixed, `0x4d76a0` line, `0x4d76cc` wall); 9 slots per bike
+  (`FUN_00439ec0`: both frames share slot 1, both seats slot 8; slot ->
+  random type `FUN_00438f10`). Slot bitmaps sit at bike origin (20/288/556,
+  425) + offset by type (`0x49dcd0` fixed, `0x49dc20` broken), z `0x49dbcc`.
+  Frames and the rack use the `<name>_hs.bmp` masks (hotspot mode 4), the
+  others their rectangle (mode 2) -> `Anim::setHitMask()`.
+* Hotspots: 1..11 wall parts (mask + `wall_*` bitmaps), 12 machine opening
+  (mask + `lever` pixels), 13..15 platforms (mask), 16 exit, 17 help, 18
+  `start`, 19..45 bike parts (19 + 9 bike + slot), 48..58 belt items.
+* Structures of the original: bikes `0x6631d0` (0xc4: platform anim, +0xa8
+  state, +0xac lift, +0xb0 time, +0xb4 active, +0xb8 pending, +0xbc
+  generation, +0xc0 broken slot mask), slot anims `0x661fe8` (27 x 0xa8),
+  wall anims `0x665430`, belt items `0x664c98` (11 x 0xb0: anim, generation,
+  position 0..1), machine ring `0x663420` (22 x 0xb0: name, timer, used;
+  write index `0x664548`), dragged anim `0x4d7af8` (its hotspot field
+  `0x4d7b48` remembers the origin), score `0x66341c`, health `0x664348`,
+  bikes done `0x66454c`.
+* Rules: `start` -> `FUN_00439620`: bikes done = 0/5/10 and health =
+  100/75/50 by difficulty (`0x49e014`; 1 without a profile), store 3 of each
+  part. `FUN_00438030` keeps 1/2/3 bikes in play (bikes done >= 0/15/40):
+  an empty platform (state 4) goes down (`down` sound, pending), gets 1..4
+  broken parts (`FUN_00438510`: clamp(done/3 - rand(3) + 1, 1, 4),
+  consecutive slots from a random one) and comes up (`up` sound) with time
+  `FUN_00438480` = (4 / (2 done + 10) + 0.6) * 42 s, times 1 + 0.8 + ... per
+  platform in play. Platforms take 2 s each way (`FUN_004382d0`), y = 552 +
+  170 * lift; parts move with them under `platform_cover` (z 17).
+* Mouse down (`FUN_004399a0`): pick a part off an active bike
+  (`FUN_00439a40`), the belt (`439b20`) or the wall (`439bc0`, count--);
+  `click` sound either way. Drop (`FUN_00439c70`): on a platform or bike part
+  (`439d70`): the part goes into its slot if empty; a bike whose slots
+  remember no `broken_*` name is finished: score += time left * 5 and it goes
+  down. Into the machine (`439f40`/`439f90`): any part, 25 s to repair,
+  `lever` plays; full ring = refused. On the wall (`43a050`): fixed parts of
+  that type only, count++. Success plays `drop1`; otherwise the part returns
+  (`43a0c0` bike: only if the slot is still empty and the bike's generation
+  matches, else lost; `43a170` belt: if the item's generation matches;
+  `43a1d0` wall) with `drop2`.
+* Scoring at the bottom (`FUN_00438840`): fixed part in an originally broken
+  slot +50/110/100/90/50/90/60/100/90 by slot; broken or missing part costs
+  5/20/15/10/5/10/5/15/10 health. `correct`/`wrong` plays as the platform
+  starts down. Health < 1 -> `FUN_00438c50` game over: message
+  `buildabike:ENDMESSAGE` (minutes, seconds, score), high score
+  `FUN_0041f9a0(0, score, {2500, 5000, 10000, 20000}, 0)`, then (no profile)
+  everything is cleared and `start` comes back.
+* Belt (`FUN_00438920`): 11 positions 1/11 apart move at 1/15 per second;
+  x = -100 + 900 pos, y = 60 (`line_*` clips hang from the wire). A position
+  passing 1 takes the newest repaired part out of the ring (`FUN_00438bf0`
+  scans backwards from the write index) and shows it; parts reaching the
+  right edge are lost. `lcogwheel`/`rcogwheel` and the `string` loop run
+  while a part is on the belt or being dragged from it. Machine
+  (`FUN_00438b40`): `wheel` and the `machine` loop run while a part is
+  inside.
+* Texts in the `Counter` font: bike time at (177/248/316, 377) 49x14 z 19,
+  "%.2f" under a minute else "%02d %02d", right aligned; score (555, 133)
+  73x14 z 5 "%03d %03d" counting up at 250/s (blank until the first points,
+  as in the original); store counts 11x14 z 18 centred. Health bar: the
+  PROGRESS object at (512, 162), `energy.bmp` cut to health / max, following
+  at 50/s. `points` label (lang bitmap) at (511, 128). Music `subgame8`.
+* Not done: help dialog, game over message box, high score / medals, the
+  profile difficulty, the "MAJKA" cheat (fills the store), the belt items'
+  hit rectangle margin (`0x49dbf0`), `sound.ini` volumes.
 
 ### Bitmap fonts (FONT module, `font.cpp`)
 
@@ -920,7 +995,7 @@ Sub games (`[subgame]`, score based):
 | | balloonhunt | Solans ballongjakt | outtent | data2 (no sceneDefs entry yet) |
 | x | whackamole | Dra meg baklengs! | house | data2 (message boxes, high score, help open) |
 | | beemaze | Ludvigs Labyrint | tvroom | data |
-| | buildabike | Reodors sykkelverksted | garage | data |
+| x | buildabike | Reodors sykkelverksted | garage | data (help, message box, high score open) |
 | | mountain | (no title in language.ini) | morning | data (no sceneDefs entry yet) |
 | | pipeline | Oljeeventyret | outtent | data |
 | x | butterfly | Sommerfugler i magen | pee | data (message box, high score, profile, help, info page open) |

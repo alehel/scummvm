@@ -89,6 +89,12 @@ public:
 	/** Hotspot index reported for the element's pixels (0: none). Characters override the static one. */
 	int hotspot() const { return _hotspot; }
 	void setHotspot(int h) { _hotspot = h; }
+	/**
+	 * Restricts the hit test to the non-zero pixels of an 8 bit mask of the
+	 * element's size (hotspot mode 4 of the original; the "<name>_hs.bmp"
+	 * bitmaps). The mask stays owned by the caller.
+	 */
+	void setHitMask(const Graphics::Surface *mask) { _hitMask = mask; }
 	/** Character bit mask; animations sharing a bit cannot play at the same time. */
 	uint32 group() const { return _group; }
 	void setGroup(uint32 g) { _group = g; }
@@ -124,6 +130,7 @@ private:
 
 	int _x, _y, _z;
 	int _hotspot;
+	const Graphics::Surface *_hitMask;
 	uint32 _group;
 	bool _added, _playing, _removeWhenDone;
 	bool _ownSurface;        ///< _frame was made by createSurface() and survives unload()

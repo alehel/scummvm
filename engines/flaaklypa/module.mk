@@ -5,6 +5,7 @@ MODULE_OBJS = \
 	archive.o \
 	audiopairs.o \
 	butterfly.o \
+	buildabike.o \
 	console.o \
 	cursor.o \
 	flaaklypa.o \
