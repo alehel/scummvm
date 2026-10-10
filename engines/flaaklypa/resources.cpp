@@ -31,7 +31,12 @@
 
 namespace Flaaklypa {
 
-static const char *const kDataDirs[] = { "lang", "lang1", "lang2", "lang3", "data", "data1", "data2", "data3", nullptr };
+// Search order of the original (FUN_0040d6d0): the newest add-on set first,
+// its language container before its data container, the base game last.
+// A file found in an earlier container hides the copies in later ones
+// (FUN_0040f4b0 only adds names not registered yet), so the add-on sets
+// replace backdrops, hotspot masks and ini files of the base game.
+static const char *const kDataDirs[] = { "lang3", "data3", "lang2", "data2", "lang1", "data1", "lang", "data", nullptr };
 
 Resources::Resources() {
 }

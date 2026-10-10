@@ -48,7 +48,8 @@ class DataArchive;
  * The original game addresses everything as "<dir>/<scene>/<file>" where
  * dir is the data path. The installed game has one container per scene in
  * data/ and lang/ (and data1..3, lang1..3 for the add-on sets of the Gold
- * edition). Files are looked up in all of them, language containers first.
+ * edition). Files are looked up in the original order: the newest add-on
+ * set first, each set's language container before its data container.
  *
  * Names starting with "../../<scene>/" (used for the shared "common" scene)
  * are redirected to that scene's containers.
