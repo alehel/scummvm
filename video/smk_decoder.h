@@ -43,6 +43,11 @@ namespace Audio {
 class QueuingAudioStream;
 }
 
+namespace Math {
+class DCT;
+class RDFT;
+}
+
 namespace Common {
 class SeekableReadStream;
 }
@@ -201,6 +206,53 @@ private:
 	private:
 		Audio::QueuingAudioStream *_audioStream;
 		AudioInfo _audioInfo;
+	};
+
+	/**
+	 * Audio track for Smacker files with Bink (RDFT or DCT) compressed audio,
+	 * as written by newer versions of the Smacker tools. The decoding mirrors
+	 * BinkDecoder::BinkAudioTrack.
+	 */
+	class SmackerBinkAudioTrack : public AudioTrack {
+	public:
+		SmackerBinkAudioTrack(const AudioInfo &audioInfo, Audio::Mixer::SoundType soundType);
+		~SmackerBinkAudioTrack();
+
+		bool isRewindable() const override { return true; }
+		bool rewind() override;
+
+		/** Decodes one chunk (everything after the chunk and unpacked sizes). */
+		void queuePacket(const byte *data, uint32 size, uint32 unpackedSize);
+
+	protected:
+		Audio::AudioStream *getAudioStream() const override;
+
+	private:
+		enum { kChannelsMax = 2, kBlockSizeMax = kChannelsMax << 11 };
+
+		void audioBlock(Common::BitStream32LELSB &bits, int16 *out);
+		void readAudioCoeffs(Common::BitStream32LELSB &bits, float *coeffs);
+		static float getFloat(Common::BitStream32LELSB &bits);
+
+		Audio::QueuingAudioStream *_audioStream;
+		AudioInfo _audioInfo;
+
+		bool _isDCT;
+		uint8 _channels;       ///< channels decoded per block (1 for RDFT: samples are interleaved)
+		uint8 _outChannels;
+		uint32 _outSampleRate;
+		uint32 _frameLen;
+		uint32 _overlapLen;
+		uint32 _blockSize;
+		uint32 _bandCount;
+		uint32 *_bands;
+		float _root;
+		bool _first;
+		float *_coeffs;
+		float *_coeffsPtr[kChannelsMax];
+		int16 *_prevCoeffs;
+		Math::RDFT *_rdft;
+		Math::DCT *_dct;
 	};
 
 	class SmackerEmptyTrack : public Track {

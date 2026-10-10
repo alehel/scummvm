@@ -32,6 +32,13 @@
 
 #include "video/smk_decoder.h"
 
+#include "common/bitstream.h"
+#include "common/debug.h"
+#include "common/intrinsics.h"
+#include "common/memstream.h"
+#include "math/dct.h"
+#include "math/rdft.h"
+
 #include "common/endian.h"
 #include "common/util.h"
 #include "common/stream.h"
@@ -399,9 +406,9 @@ bool SmackerDecoder::loadStream(Common::SeekableReadStream *stream) {
 
 		if (_header.audioInfo[i].hasAudio) {
 			if (_header.audioInfo[i].compression == kCompressionRDFT || _header.audioInfo[i].compression == kCompressionDCT)
-				warning("Unhandled Smacker v2 audio compression");
-
-			addTrack(new SmackerAudioTrack(_header.audioInfo[i], getSoundType()));
+				addTrack(new SmackerBinkAudioTrack(_header.audioInfo[i], getSoundType()));
+			else
+				addTrack(new SmackerAudioTrack(_header.audioInfo[i], getSoundType()));
 		} else {
 			addTrack(new SmackerEmptyTrack());
 		}
@@ -573,9 +580,9 @@ void SmackerDecoder::handleAudioTrack(byte track, uint32 chunkSize, uint32 unpac
 		_fileStream->read(soundBuffer, chunkSize);
 
 		if (_header.audioInfo[track].compression == kCompressionRDFT || _header.audioInfo[track].compression == kCompressionDCT) {
-			// TODO: Compressed audio (Bink RDFT/DCT encoded)
+			// Compressed audio (Bink RDFT/DCT encoded)
+			((SmackerBinkAudioTrack *)audioTrack)->queuePacket(soundBuffer, chunkSize, unpackedSize);
 			free(soundBuffer);
-			return;
 		} else if (_header.audioInfo[track].compression == kCompressionDPCM) {
 			// Compressed audio (Huffman DPCM encoded)
 			audioTrack->queueCompressedBuffer(soundBuffer, chunkSize + 1, unpackedSize);
@@ -1038,6 +1045,225 @@ const Common::Rect *SmackerDecoder::SmackerVideoTrack::getNextDirtyRect() {
 		int16(4 * block_y1 * doubleY)
 	);
 	return &_lastDirtyRect;
+}
+
+// Bink audio (as used by Smacker v2/v4 files with RDFT/DCT compressed sound)
+
+static const uint16 smkBinkCriticalFreqs[25] = {
+	  100,   200,  300, 400,   510,   630,   770,   920,
+	 1080,  1270, 1480, 1720, 2000,  2320,  2700,  3150,
+	 3700,  4400, 5300, 6400, 7700,  9500, 12000, 15500,
+	24500,
+};
+
+SmackerDecoder::SmackerBinkAudioTrack::SmackerBinkAudioTrack(const AudioInfo &audioInfo, Audio::Mixer::SoundType soundType) :
+		AudioTrack(soundType), _audioInfo(audioInfo), _bands(nullptr), _coeffs(nullptr), _prevCoeffs(nullptr),
+		_rdft(nullptr), _dct(nullptr) {
+	_isDCT = audioInfo.compression == kCompressionDCT;
+	_channels = audioInfo.isStereo ? 2 : 1;
+	uint32 sampleRate = audioInfo.sampleRate;
+
+	uint32 frameLenBits;
+	if (sampleRate < 22050)
+		frameLenBits = 9;
+	else if (sampleRate < 44100)
+		frameLenBits = 10;
+	else
+		frameLenBits = 11;
+	_frameLen = 1 << frameLenBits;
+
+	_outSampleRate = sampleRate;
+	_outChannels = _channels;
+
+	if (!_isDCT) {
+		// RDFT audio already interleaves the samples correctly
+		if (_channels == 2)
+			frameLenBits++;
+		sampleRate *= _channels;
+		_frameLen *= _channels;
+		_channels = 1;
+	}
+
+	_overlapLen = _frameLen / 16;
+	_blockSize = (_frameLen - _overlapLen) * _channels;
+	_root = 2.0 / sqrt((double)_frameLen);
+
+	uint32 sampleRateHalf = (sampleRate + 1) / 2;
+	for (_bandCount = 1; _bandCount < 25; _bandCount++)
+		if (sampleRateHalf <= smkBinkCriticalFreqs[_bandCount - 1])
+			break;
+
+	_bands = new uint32[_bandCount + 1];
+	_bands[0] = 1;
+	for (uint32 i = 1; i < _bandCount; i++)
+		_bands[i] = smkBinkCriticalFreqs[i - 1] * (_frameLen / 2) / sampleRateHalf;
+	_bands[_bandCount] = _frameLen / 2;
+
+	_coeffs = new float[16 * kBlockSizeMax];
+	_prevCoeffs = new int16[kBlockSizeMax];
+	memset(_prevCoeffs, 0, kBlockSizeMax * sizeof(int16));
+	for (uint8 i = 0; i < _channels; i++)
+		_coeffsPtr[i] = _coeffs + i * _frameLen;
+
+	if (_isDCT)
+		_dct = new Math::DCT(frameLenBits, Math::DCT::DCT_III);
+	else
+		_rdft = new Math::RDFT(frameLenBits, Math::RDFT::DFT_C2R);
+
+	_first = true;
+	_audioStream = Audio::makeQueuingAudioStream(_outSampleRate, _outChannels == 2);
+}
+
+SmackerDecoder::SmackerBinkAudioTrack::~SmackerBinkAudioTrack() {
+	delete _audioStream;
+	delete[] _bands;
+	delete[] _coeffs;
+	delete[] _prevCoeffs;
+	delete _rdft;
+	delete _dct;
+}
+
+bool SmackerDecoder::SmackerBinkAudioTrack::rewind() {
+	delete _audioStream;
+	_audioStream = Audio::makeQueuingAudioStream(_outSampleRate, _outChannels == 2);
+	_first = true;
+	return true;
+}
+
+Audio::AudioStream *SmackerDecoder::SmackerBinkAudioTrack::getAudioStream() const {
+	return _audioStream;
+}
+
+void SmackerDecoder::SmackerBinkAudioTrack::queuePacket(const byte *data, uint32 size, uint32 unpackedSize) {
+	Common::BitStream32LELSB bits(new Common::MemoryReadStream(data, size), DisposeAfterUse::YES);
+	uint32 outSize = _frameLen * _channels;
+	uint32 remaining = unpackedSize;
+
+	while (bits.pos() < bits.size() && remaining > 0) {
+		int16 *out = (int16 *)malloc(outSize * 2);
+		memset(out, 0, outSize * 2);
+
+		audioBlock(bits, out);
+
+		byte flags = Audio::FLAG_16BITS;
+		if (_outChannels == 2)
+			flags |= Audio::FLAG_STEREO;
+#ifdef SCUMM_LITTLE_ENDIAN
+		flags |= Audio::FLAG_LITTLE_ENDIAN;
+#endif
+		uint32 bytes = MIN<uint32>(_blockSize * 2, remaining);
+		remaining -= bytes;
+		_audioStream->queueBuffer((byte *)out, bytes, DisposeAfterUse::YES, flags);
+
+		// the next block starts at a 32 bit boundary
+		if (bits.pos() & 0x1F)
+			bits.skip(32 - (bits.pos() & 0x1F));
+	}
+	if (bits.pos() != bits.size())
+		debug(3, "Smacker Bink audio: packet of %u bytes not fully consumed (%u of %u bits)", size, bits.pos(), bits.size());
+}
+
+void SmackerDecoder::SmackerBinkAudioTrack::audioBlock(Common::BitStream32LELSB &bits, int16 *out) {
+	if (_isDCT) {
+		bits.skip(2);
+		for (uint8 i = 0; i < _channels; i++) {
+			float *coeffs = _coeffsPtr[i];
+			readAudioCoeffs(bits, coeffs);
+			coeffs[0] /= 0.5;
+			_dct->calc(coeffs);
+			for (uint32 j = 0; j < _frameLen; j++)
+				coeffs[j] *= (_frameLen / 2.0);
+		}
+	} else {
+		for (uint8 i = 0; i < _channels; i++) {
+			float *coeffs = _coeffsPtr[i];
+			readAudioCoeffs(bits, coeffs);
+			_rdft->calc(coeffs);
+		}
+	}
+
+	// float to int16, interleaved
+	if (_channels == 2) {
+		for (uint32 i = 0; i < _frameLen; i++) {
+			out[2 * i    ] = (int16)CLIP<int>((int)floor(_coeffsPtr[0][i] + 0.5), -32768, 32767);
+			out[2 * i + 1] = (int16)CLIP<int>((int)floor(_coeffsPtr[1][i] + 0.5), -32768, 32767);
+		}
+	} else {
+		for (uint32 i = 0; i < _frameLen; i++)
+			out[i] = (int16)CLIP<int>((int)floor(_coeffsPtr[0][i] + 0.5), -32768, 32767);
+	}
+
+	if (!_first) {
+		int count = _overlapLen * _channels;
+		int shift = Common::intLog2(count);
+		for (int i = 0; i < count; i++)
+			out[i] = (_prevCoeffs[i] * (count - i) + out[i] * i) >> shift;
+	}
+
+	memcpy(_prevCoeffs, out + _blockSize, _overlapLen * _channels * sizeof(*out));
+	_first = false;
+}
+
+static const uint8 smkBinkRleLengthTab[16] = {
+	2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 32, 64
+};
+
+float SmackerDecoder::SmackerBinkAudioTrack::getFloat(Common::BitStream32LELSB &bits) {
+	int power = bits.getBits<5>();
+	float f = ldexp((float)bits.getBits<23>(), power - 23);
+	if (bits.getBit())
+		f = -f;
+	return f;
+}
+
+void SmackerDecoder::SmackerBinkAudioTrack::readAudioCoeffs(Common::BitStream32LELSB &bits, float *coeffs) {
+	coeffs[0] = getFloat(bits) * _root;
+	coeffs[1] = getFloat(bits) * _root;
+
+	float quant[25];
+	for (uint32 i = 0; i < _bandCount; i++) {
+		int value = bits.getBits<8>();
+		//                              0.066399999 / log10(M_E)
+		quant[i] = exp(MIN(value, 95) * 0.15289164787221953823f) * _root;
+	}
+
+	float q = 0.0;
+	int k;
+	for (k = 0; _bands[k] < 1; k++)
+		q = quant[k];
+
+	uint32 i = 2;
+	while (i < _frameLen) {
+		uint32 j;
+		if (bits.getBit())
+			j = i + smkBinkRleLengthTab[bits.getBits<4>()] * 8;
+		else
+			j = i + 8;
+		j = MIN(j, _frameLen);
+
+		int width = bits.getBits<4>();
+		if (width == 0) {
+			memset(coeffs + i, 0, (j - i) * sizeof(*coeffs));
+			i = j;
+			while (_bands[k] * 2 < i)
+				q = quant[k++];
+		} else {
+			while (i < j) {
+				if (_bands[k] * 2 == i)
+					q = quant[k++];
+				int coeff = bits.getBits(width);
+				if (coeff) {
+					if (bits.getBit())
+						coeffs[i] = -q * coeff;
+					else
+						coeffs[i] = q * coeff;
+				} else {
+					coeffs[i] = 0.0;
+				}
+				i++;
+			}
+		}
+	}
 }
 
 } // End of namespace Video
