@@ -32,7 +32,7 @@ namespace Flaaklypa {
 
 Anim::Anim(Scene *scene, const AnimDef *def) : _scene(scene), _def(def),
 	_video(nullptr), _frame(nullptr), _hasKey(false), _keyColor(0),
-	_x(def->x), _y(def->y), _z(def->zOrder), _hotspot(def->hotspot), _group(def->group),
+	_x(def->x), _y(def->y), _z(def->zOrder), _hotspot(def->hotspot), _hitMask(nullptr), _group(def->group),
 	_added(false), _playing(false), _removeWhenDone(false), _ownSurface(false), _lastFrameTime(0), _lastFrameShown(false) {
 }
 
@@ -238,6 +238,12 @@ int Anim::hitTest(int x, int y) const {
 		return -1;
 	if (!rect().contains(x, y))
 		return 0;
+	if (_hitMask) {
+		int mx = x - _x, my = y - _y;
+		if (mx >= _hitMask->w || my >= _hitMask->h || !*(const byte *)_hitMask->getBasePtr(mx, my))
+			return 0;
+		return _hotspot;
+	}
 	if (_def->transparent && _hasKey) {
 		if (_frame->getPixel(x - _x, y - _y) == _keyColor)
 			return 0;

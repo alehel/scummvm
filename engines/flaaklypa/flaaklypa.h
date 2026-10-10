@@ -69,6 +69,7 @@ private:
 		uint32 time;
 		int x, y;
 		bool moveOnly;
+		char mode;             ///< 0 click, 'm' move, 'd' button down only, 'u' button up only
 	};
 	Common::Array<AutoClick> _autoClicks;
 
