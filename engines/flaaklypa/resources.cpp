@@ -20,7 +20,9 @@
  */
 #include "common/debug.h"
 #include "common/formats/ini-file.h"
+#include "common/str-array.h"
 #include "common/textconsole.h"
+#include "common/tokenizer.h"
 #include "image/bmp.h"
 #include "video/smk_decoder.h"
 
@@ -54,15 +56,31 @@ DataArchive *Resources::archive(const Common::String &dir, const Common::String 
 
 void Resources::resolve(Common::String &scene, Common::String &file) {
 	file.replace('\\', '/');
-	// "../../common/animation/blank1" -> scene "common", file "animation/blank1"
-	while (file.hasPrefix("../../")) {
-		Common::String rest = file.substr(6);
-		uint slash = rest.findFirstOf('/');
-		if (slash == Common::String::npos)
-			break;
-		scene = rest.substr(0, slash);
-		file = rest.substr(slash + 1);
+	// "animation/../../common/animation/blank1.smk" -> scene "common",
+	// file "animation/blank1.smk": ".." above the scene directory selects
+	// another scene's container.
+	Common::StringArray parts, stack;
+	Common::StringTokenizer tok(file, "/");
+	while (!tok.empty())
+		parts.push_back(tok.nextToken());
+	int up = 0;
+	for (const Common::String &p : parts) {
+		if (p == "..") {
+			if (stack.empty())
+				up++;
+			else
+				stack.pop_back();
+		} else if (p != ".") {
+			stack.push_back(p);
+		}
 	}
+	if (up > 0 && stack.size() >= 2) {
+		scene = stack[0];
+		stack.remove_at(0);
+	}
+	file.clear();
+	for (uint i = 0; i < stack.size(); i++)
+		file += (i ? "/" : "") + stack[i];
 }
 
 Common::SeekableReadStream *Resources::open(const Common::String &sceneIn, const Common::String &fileIn) {
