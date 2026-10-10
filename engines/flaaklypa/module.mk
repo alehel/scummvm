@@ -6,9 +6,13 @@ MODULE_OBJS = \
 	console.o \
 	cursor.o \
 	flaaklypa.o \
+	font.o \
+	gem3d.o \
 	menu.o \
 	metaengine.o \
 	music.o \
+	puzzle.o \
+	puzzledata.o \
 	resources.o \
 	scene.o \
 	scenedata.o \

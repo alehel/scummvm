@@ -21,6 +21,7 @@
 #include "common/debug.h"
 
 #include "flaaklypa/flaaklypa.h"
+#include "flaaklypa/puzzle.h"
 #include "flaaklypa/scenes.h"
 
 namespace Flaaklypa {
@@ -173,6 +174,8 @@ Scene *createScene(FlaaklypaEngine *vm, const char *name) {
 		return new MenuScene(vm, def);
 	if (!scumm_stricmp(name, "yard"))
 		return new YardScene(vm, def);
+	if (!scumm_stricmp(name, "puzzle"))
+		return new PuzzleScene(vm, def);
 	return new Scene(vm, def);
 }
 
