@@ -76,6 +76,8 @@ public:
 	virtual void onSequenceDone() {}
 	/** Called once per frame after the animations have been advanced. */
 	virtual void onUpdate() {}
+	/** Returns true when the scene consumes the key (the original's handler returning 1): the default space bar handling is skipped. */
+	virtual bool handlesKey(const Common::KeyState &key) { return false; }
 
 	void handleEvent(const Common::Event &event);
 	void update();

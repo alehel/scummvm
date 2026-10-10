@@ -110,8 +110,16 @@ void Anim::setVolume(int volume) {
 		_video->setVolume((byte)CLIP<int>(volume, 0, 255));
 }
 
+void Anim::setFrameRate(int fps) {
+	if (_video && fps > 0)
+		_video->setRate(Common::Rational(fps) / _video->getFrameRate());
+}
+
 void Anim::convertFrame(const Graphics::Surface *frame) {
 	const byte *palette = _video->getPalette();
+	// Audio only clips (4x4 pixels, no palette chunk) have nothing to show.
+	if (!palette && frame->format.bytesPerPixel == 1)
+		return;
 	Graphics::Surface *conv = frame->convertTo(g_engine->_screen->format, palette);
 	if (!_frame)
 		_frame = new Graphics::ManagedSurface();

@@ -12,6 +12,7 @@ MODULE_OBJS = \
 	gem3d.o \
 	hopscotch.o \
 	lettersort.o \
+	hustle.o \
 	menu.o \
 	metaengine.o \
 	music.o \

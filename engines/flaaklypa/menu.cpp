@@ -25,6 +25,7 @@
 #include "flaaklypa/hopscotch.h"
 #include "flaaklypa/butterfly.h"
 #include "flaaklypa/lettersort.h"
+#include "flaaklypa/hustle.h"
 #include "flaaklypa/puzzle.h"
 #include "flaaklypa/scenes.h"
 #include "flaaklypa/sockdrawer.h"
@@ -202,6 +203,8 @@ Scene *createScene(FlaaklypaEngine *vm, const char *name) {
 		return new WheelbarrowScene(vm, def);
 	if (!scumm_stricmp(name, "lettersort"))
 		return new LettersortScene(vm, def);
+	if (!scumm_stricmp(name, "hustle"))
+		return new HustleScene(vm, def);
 	return new Scene(vm, def);
 }
 

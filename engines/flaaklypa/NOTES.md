@@ -598,6 +598,68 @@ finished -> `43ea80`, 0x111 the 250 ms timer -> `43f750`, 0x112 ->
   the registry value `FUN_0040b940` writes at init, `sound.ini` volumes. A
   delivery clip that is still playing when the next level starts is
   restarted (the original only renames the struct).
+## Sub game `hustle` ("Emanuels utfordring")
+
+A shell game. Emanuel the monkey hides a red ball under one of three golden
+cups and shuffles them; the player bets bananas on where it ended up. A
+correct guess doubles the stake, a wrong one loses it. Handler `0x43ce20`
+(not a function in the Ghidra project; a jump table: 0x103 -> `FUN_0043cf20`,
+0x104 -> `43d110`, 0x105 -> `43d880`, 0x10c returns 1 for the space bar so the
+shuffle cannot be skipped, 0x110 -> `43d160`, 0x111 -> `43d950`, 0x116 ->
+`43d980`, 0x117 (slider moved) -> `43d850`). Engine: `hustle.cpp`.
+
+* Data: `data/hustle` has no backdrop; `lang/hustle` has it (plus
+  `start_0.smk`, the clock with the "Start" text, and `bet_1.bmp`, the "Sats"
+  coin), so `Scene::load()` finds it through the language container.
+  `bitmap/cups.bmp` is all green (transparent) and only carries the hit mask
+  `bitmap/cupshs.bmp` (hit mode 4 of `FUN_00413670`): cups are hotspots 3, 4,
+  5 (also in `hotspots.bmp`), 6 is the clock, 7 the bet button area. Emanuel
+  is character 1 (hotspot 20): idle `em_bo1`, `em_bo4`; bored `grooming`,
+  `look-00`, `em_bo2`, `em_bo3`; reaction `bongo`. Music `subgame11`.
+* State `DAT_00670e7c`: 0 idle (click the clock -> `start_0` plays, then
+  `FUN_0043d560` starts: 100 bananas, clock from now, bet button 7 created,
+  `clockloop` audio), 1 betting, 2 shuffling, 3 choosing.
+* Scales (`FUN_0043d320` / `FUN_0043d3c0`): the banana bar and the stake
+  slider use a 90 step scale, 18 steps per decade: level L <-> stake
+  `5 * 10^(L/18) * (L%18 + 2)` (10, 15, ..., 95, 100, 150, ...); bananas b map
+  to the largest level with stake <= b (0 below 11). PROGRESS "bar" at
+  (11, 244): the bottom `level/90` of `bar.bmp` is shown. SLIDER 21: track at
+  x 75, 15 wide, bottom 521, height `level/90 * 278` (rebuilt by
+  `FUN_0043d440` whenever the bananas change, keeping the knob's relative
+  position), range 0..level, value 0 at the top = the whole stock; knob
+  `scroll.bmp` centred on the track, dragged or placed by a click on the
+  track (`FUN_004092d0`). Text fields (15, 529)-(89, 546) stake and
+  (15, 559)-(89, 576) bananas, `Amerigo BT_10_` centred.
+* Bet (`FUN_0043d9c0`, button 7): level index = clamp(1 + L/9, 0, 11) (the 1
+  is the tournament player's level otherwise), stake from L, round counter
+  incremented. Moves (`FUN_0043da30`): `kMoveCount[idx]` = 3..17 moves, each
+  `rand() % kMoveRange[idx]` (3..11) into the list anim_b, anim_e, anim_a,
+  anim_c, anim_d, anim_f, anim_g, 2g, 2b, 2a2, 2a. Sequence (`FUN_0043da80`):
+  `intro` (rounds 1-2) or `intro2a` + `intro2b` (rounds 3-6) or `intro2a`
+  (7+), the moves, `intro3`. When the introduction clip ends the global
+  `SmackFrameRate` is forced to `kFrameRate[idx]` = 13..27 fps for the clips
+  opened afterwards (the moves and `intro3`, all 15 fps clips); `intro3`
+  resets it and sets state 3. Engine: `Anim::setFrameRate()` from
+  `onAnimStarted()`.
+* Ball (`FUN_0043d920`): starts under cup 1; each move permutes it with the
+  table at `0x49e9ec` (`kPermutation`). Choice (`FUN_0043d8c0`): right ->
+  `win<cup>`; wrong -> `lose<chosen>`, `noits<ball>`. When the win/lose clip
+  ends (`FUN_0043d160`): bananas +-= stake, state 1, game over if bananas < 10
+  or the clock has stopped.
+* Clock (`FUN_0043d5e0`, timer 0 every second): `hand_0` (60 frames, z -1)
+  shows frame `round(60 * t / 300 s)`; every step plays one of `click1..4`;
+  after 300 s the clock stops and, if the state is 1, the game is over
+  (`FUN_0043d770`: "hustle:TIMEOUT" if bananas > 10 else "hustle:NOMONEY" in
+  an "interfaceh:GAMEOVER" message box, high score `FUN_0041f9a0(0, bananas,
+  {5000, 40000, 160000, 220000}, 0)`, back to state 0 with the Start clock).
+* Buttons (BUTTON module, z 1, hotspot = id, fire on release): `help_0/1` at
+  (0, 0), `exit_0/1` at (728, 0), 7 at (693, 404) with only a hover bitmap
+  `bet_1`. The buttons highlight on the frame tick.
+* Not done: message box, high score, help dialog, the "gamec:SUBGAMEABORT"
+  confirmation when exiting a running game, tournament mode. The SmackGoto
+  frame of the hand is `round(...) + 1` in the original; the port shows the
+  rounded frame (0 based). Clips with Bink audio play slower than their
+  frame rate in the engine (audio clock), which stretches the shuffle.
 
 ### Bitmap fonts (FONT module, `font.cpp`)
 
@@ -863,6 +925,8 @@ Sub games (`[subgame]`, score based):
 | | pipeline | Oljeeventyret | outtent | data |
 | x | butterfly | Sommerfugler i magen | pee | data (message box, high score, profile, help, info page open) |
 | | hustle | Emanuels utfordring | intent | data |
+| | butterfly | Sommerfugler i magen | pee | data |
+| x | hustle | Emanuels utfordring | intent | data (message box, high score, help open) |
 
 Activities (`[activity]`, open ended):
 
