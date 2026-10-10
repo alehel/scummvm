@@ -71,9 +71,26 @@ void FlaaklypaEngine::changeScene(const Common::String &name, int arg) {
 	_nextSceneArg = arg;
 }
 
+// Sub games and activities that have a scene class (see createScene()).
+// Starting one of the others would strand the player on a backdrop without
+// an exit button.
+static const char *const kImplementedGames[] = {
+	"puzzle",
+	"sockdrawer",
+	"textinvader",
+	nullptr
+};
+
+static bool isGameImplemented(const Common::String &name) {
+	for (const char *const *g = kImplementedGames; *g; g++)
+		if (!scumm_stricmp(name.c_str(), *g))
+			return true;
+	return false;
+}
+
 void FlaaklypaEngine::startGame(const Common::String &name) {
 	const SceneDef *def = findSceneDef(name.c_str());
-	if (!def || (scumm_stricmp(name.c_str(), "puzzle") != 0 && scumm_stricmp(name.c_str(), "sockdrawer") != 0)) {
+	if (!def || !isGameImplemented(name)) {
 		// TODO: the other sub games and activities
 		warning("Sub game '%s' is not implemented yet", name.c_str());
 		return;
@@ -125,6 +142,24 @@ void FlaaklypaEngine::parseAutoClicks() {
 	}
 }
 
+// Development aid: "autokey=t:keys;t:keys" types the characters at the
+// given times (ms after start); '~' stands for Escape.
+void FlaaklypaEngine::parseAutoKeys() {
+	if (!ConfMan.hasKey("autokey"))
+		return;
+	Common::StringTokenizer tok(ConfMan.get("autokey"), ";");
+	while (!tok.empty()) {
+		Common::String item = tok.nextToken();
+		uint colon = item.findFirstOf(':');
+		if (colon == Common::String::npos)
+			continue;
+		AutoKey k;
+		k.time = (uint32)atoi(item.substr(0, colon).c_str());
+		k.keys = item.substr(colon + 1);
+		_autoKeys.push_back(k);
+	}
+}
+
 void FlaaklypaEngine::switchScene() {
 	Common::String name = _nextScene;
 	int arg = _nextSceneArg;
@@ -169,6 +204,7 @@ Common::Error FlaaklypaEngine::run() {
 	if (ConfMan.hasKey("random_seed"))
 		_randomSource.setSeed(ConfMan.getInt("random_seed"));
 	parseAutoClicks();
+	parseAutoKeys();
 	uint32 startTime = g_system->getMillis();
 
 	// Development aid: "autoshot=<file>" with "autoshot_delay=<ms>" writes a
@@ -214,6 +250,20 @@ Common::Error FlaaklypaEngine::run() {
 			_scene->handleEvent(e);
 			e.type = Common::EVENT_LBUTTONUP;
 			_scene->handleEvent(e);
+		}
+
+		while (!_autoKeys.empty() && g_system->getMillis() - startTime >= _autoKeys[0].time) {
+			Common::String keys = _autoKeys[0].keys;
+			_autoKeys.remove_at(0);
+			debug(1, "Auto keys '%s'", keys.c_str());
+			for (uint i = 0; i < keys.size(); i++) {
+				char c = keys[i];
+				e.kbd = Common::KeyState(c == '~' ? Common::KEYCODE_ESCAPE : (Common::KeyCode)tolower((byte)c), c == '~' ? 0 : (uint16)(byte)c);
+				e.type = Common::EVENT_KEYDOWN;
+				_scene->handleEvent(e);
+				e.type = Common::EVENT_KEYUP;
+				_scene->handleEvent(e);
+			}
 		}
 
 		_scene->update();

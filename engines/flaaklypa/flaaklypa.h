@@ -71,9 +71,15 @@ private:
 		bool moveOnly;
 	};
 	Common::Array<AutoClick> _autoClicks;
+	struct AutoKey {
+		uint32 time;
+		Common::String keys;
+	};
+	Common::Array<AutoKey> _autoKeys;
 
 	void switchScene();
 	void parseAutoClicks();
+	void parseAutoKeys();
 
 protected:
 	// Engine APIs

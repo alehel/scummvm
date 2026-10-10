@@ -24,6 +24,7 @@
 #include "flaaklypa/puzzle.h"
 #include "flaaklypa/scenes.h"
 #include "flaaklypa/sockdrawer.h"
+#include "flaaklypa/textinvader.h"
 
 namespace Flaaklypa {
 
@@ -179,6 +180,8 @@ Scene *createScene(FlaaklypaEngine *vm, const char *name) {
 		return new PuzzleScene(vm, def);
 	if (!scumm_stricmp(name, "sockdrawer"))
 		return new SockdrawerScene(vm, def);
+	if (!scumm_stricmp(name, "textinvader"))
+		return new TextinvaderScene(vm, def);
 	return new Scene(vm, def);
 }
 
