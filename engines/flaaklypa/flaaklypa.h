@@ -18,7 +18,6 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  */
-
 #ifndef FLAAKLYPA_H
 #define FLAAKLYPA_H
 
@@ -38,7 +37,10 @@
 
 namespace Flaaklypa {
 
-class DataArchive;
+class Cursor;
+class Music;
+class Resources;
+class Scene;
 
 struct FlaaklypaGameDescription;
 
@@ -53,14 +55,11 @@ private:
 	const ADGameDescription *_gameDescription;
 	Common::RandomSource _randomSource;
 
-	/**
-	 * Opens <dir>/<scene>.bin and returns the archive, or nullptr.
-	 * dir is "data" or "lang" (or data1..3 / lang1..3 for add-on content).
-	 */
-	DataArchive *openScene(const Common::String &dir, const Common::String &scene);
+	Scene *_scene;
+	Common::String _nextScene;
+	int _nextSceneArg;
 
-	/** Loads a .bmp from an archive and blits it at (x, y) on the screen. */
-	bool drawBitmap(DataArchive *arc, const Common::Path &name, int x, int y);
+	void switchScene();
 
 protected:
 	// Engine APIs
@@ -68,6 +67,10 @@ protected:
 
 public:
 	Graphics::Screen *_screen = nullptr;
+	Resources *_resources = nullptr;
+	Cursor *_cursor = nullptr;
+	Music *_music = nullptr;
+
 public:
 	FlaaklypaEngine(OSystem *syst, const ADGameDescription *gameDesc);
 	~FlaaklypaEngine() override;
@@ -85,6 +88,11 @@ public:
 	uint32 getRandomNumber(uint maxNum) {
 		return _randomSource.getRandomNumber(maxNum);
 	}
+
+	/** Leaves the current scene for another one at the end of the frame (GAME_Start). */
+	void changeScene(const Common::String &name, int arg = 0);
+	/** Starts a sub game or activity from a story page. */
+	void startGame(const Common::String &name);
 
 	bool hasFeature(EngineFeature f) const override {
 		return

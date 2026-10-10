@@ -18,11 +18,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  */
-
 #include "flaaklypa/flaaklypa.h"
-#include "flaaklypa/archive.h"
 #include "flaaklypa/console.h"
+#include "flaaklypa/cursor.h"
 #include "flaaklypa/detection.h"
+#include "flaaklypa/music.h"
+#include "flaaklypa/resources.h"
+#include "flaaklypa/scenes.h"
 
 #include "common/config-manager.h"
 #include "common/debug.h"
@@ -31,20 +33,25 @@
 #include "common/scummsys.h"
 #include "common/system.h"
 #include "engines/util.h"
+#include "common/file.h"
 #include "graphics/framelimiter.h"
 #include "graphics/pixelformat.h"
-#include "image/bmp.h"
+#include "image/png.h"
 
 namespace Flaaklypa {
 
 FlaaklypaEngine *g_engine;
 
 FlaaklypaEngine::FlaaklypaEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst),
-	_gameDescription(gameDesc), _randomSource("Flaaklypa") {
+	_gameDescription(gameDesc), _randomSource("Flaaklypa"), _scene(nullptr), _nextSceneArg(0) {
 	g_engine = this;
 }
 
 FlaaklypaEngine::~FlaaklypaEngine() {
+	delete _scene;
+	delete _music;
+	delete _cursor;
+	delete _resources;
 	delete _screen;
 }
 
@@ -56,34 +63,41 @@ Common::String FlaaklypaEngine::getGameId() const {
 	return _gameDescription->gameId;
 }
 
-DataArchive *FlaaklypaEngine::openScene(const Common::String &dir, const Common::String &scene) {
-	Common::Path path(dir + "/" + scene + ".bin", '/');
-	DataArchive *arc = DataArchive::open(path);
-	if (!arc)
-		warning("Could not open container %s", path.toString().c_str());
-	return arc;
+void FlaaklypaEngine::changeScene(const Common::String &name, int arg) {
+	_nextScene = name;
+	_nextSceneArg = arg;
 }
 
-bool FlaaklypaEngine::drawBitmap(DataArchive *arc, const Common::Path &name, int x, int y) {
-	Common::ScopedPtr<Common::SeekableReadStream> stream(arc->createReadStreamForMember(name));
-	if (!stream) {
-		warning("Bitmap %s not found in container", name.toString().c_str());
-		return false;
-	}
+void FlaaklypaEngine::startGame(const Common::String &name) {
+	// TODO: sub games and activities
+	warning("Sub game '%s' is not implemented yet", name.c_str());
+}
 
-	Image::BitmapDecoder decoder;
-	if (!decoder.loadStream(*stream)) {
-		warning("Could not decode bitmap %s", name.toString().c_str());
-		return false;
-	}
+void FlaaklypaEngine::switchScene() {
+	Common::String name = _nextScene;
+	int arg = _nextSceneArg;
+	_nextScene.clear();
 
-	const Graphics::Surface *src = decoder.getSurface();
-	debug(1, "Loaded bitmap %s (%dx%d, %d bpp)", name.toString().c_str(), src->w, src->h, src->format.bpp());
-	Graphics::Surface *converted = src->convertTo(_screen->format, decoder.getPalette().data());
-	_screen->blitFrom(*converted, Common::Point(x, y));
-	converted->free();
-	delete converted;
-	return true;
+	if (_scene) {
+		_scene->onClose();
+		delete _scene;
+		_scene = nullptr;
+	}
+	_cursor->set("");
+
+	Scene *scene = createScene(this, name.c_str());
+	if (!scene) {
+		warning("Unknown scene '%s'", name.c_str());
+		return;
+	}
+	if (!scene->load()) {
+		delete scene;
+		return;
+	}
+	debug(1, "Entering scene %s (arg %d)", name.c_str(), arg);
+	_scene = scene;
+	_scene->onInit(arg);
+	_scene->showCursor();
 }
 
 Common::Error FlaaklypaEngine::run() {
@@ -93,26 +107,46 @@ Common::Error FlaaklypaEngine::run() {
 	initGraphics(kScreenWidth, kScreenHeight, &format);
 	_screen = new Graphics::Screen(kScreenWidth, kScreenHeight, g_system->getScreenFormat());
 
-	// Set the engine's debugger console
 	setDebugger(new Console());
 
-	// Proof of concept: open the main menu container and show its backdrop.
-	// Everything else (hotspot masks, Smacker animations, the sub games and
-	// the racing game) still has to be written.
-	Common::ScopedPtr<DataArchive> menu(openScene("data", "menu"));
-	if (!menu)
-		return Common::kNoGameDataFoundError;
+	_resources = new Resources();
+	_cursor = new Cursor();
+	_music = new Music();
 
-	drawBitmap(menu.get(), "backdrop.bmp", 0, 0);
-	_screen->update();
+	changeScene(ConfMan.hasKey("start_scene") ? ConfMan.get("start_scene") : "menu", 0);
+
+	// Development aid: "autoshot=<file>" with "autoshot_delay=<ms>" writes a
+	// PNG of the screen after the delay; "autoshot_quit=true" then exits.
+	uint32 autoshotTime = 0;
+	if (ConfMan.hasKey("autoshot"))
+		autoshotTime = g_system->getMillis() + (ConfMan.hasKey("autoshot_delay") ? ConfMan.getInt("autoshot_delay") : 5000);
 
 	Common::Event e;
 	Graphics::FrameLimiter limiter(g_system, 60);
 	while (!shouldQuit()) {
-		while (g_system->getEventManager()->pollEvent(e)) {
-			if (e.type == Common::EVENT_KEYDOWN && e.kbd.keycode == Common::KEYCODE_ESCAPE)
+		if (autoshotTime && g_system->getMillis() >= autoshotTime) {
+			autoshotTime = 0;
+			Common::DumpFile out;
+			if (out.open(Common::Path(ConfMan.get("autoshot"), '/'))) {
+				Image::writePNG(out, *_screen->surfacePtr());
+				out.close();
+				debug(1, "Wrote screenshot %s", ConfMan.get("autoshot").c_str());
+			}
+			if (ConfMan.getBool("autoshot_quit"))
 				quitGame();
 		}
+
+		if (!_nextScene.empty())
+			switchScene();
+		if (!_scene)
+			return Common::kNoGameDataFoundError;
+
+		while (g_system->getEventManager()->pollEvent(e))
+			_scene->handleEvent(e);
+
+		_scene->update();
+		_music->update();
+		_scene->draw(*_screen);
 
 		limiter.delayBeforeSwap();
 		_screen->update();

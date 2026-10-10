@@ -1,10 +1,18 @@
 MODULE := engines/flaaklypa
 
 MODULE_OBJS = \
+	anim.o \
 	archive.o \
-	flaaklypa.o \
 	console.o \
-	metaengine.o
+	cursor.o \
+	flaaklypa.o \
+	menu.o \
+	metaengine.o \
+	music.o \
+	resources.o \
+	scene.o \
+	scenedata.o \
+	yard.o
 
 # This module can be built as a plugin
 ifeq ($(ENABLE_FLAAKLYPA), DYNAMIC_PLUGIN)
