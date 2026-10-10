@@ -107,19 +107,16 @@ void FlaaklypaEngine::startGame(const Common::String &name) {
 		warning("Sub game '%s' is not implemented yet", name.c_str());
 		return;
 	}
-	if (_scene)
-		_returnScene = _scene->name();
 	changeScene(name, 0);
 }
 
 void FlaaklypaEngine::endGame() {
-	Common::String target = _returnScene;
-	if (target.empty() && _scene && _scene->def()->parent)
-		target = _scene->def()->parent;
-	if (target.empty())
-		target = "menu";
-	_returnScene.clear();
-	changeScene(target, 1);
+	// FUN_0040cc30: always the parent from the scene table, whatever screen
+	// the scene was started from; arg 1 (skip the intro) when the parent is
+	// a story page.
+	Common::String target = _scene && _scene->def()->parent ? _scene->def()->parent : "menu";
+	const SceneDef *parent = findSceneDef(target.c_str());
+	changeScene(target, parent && parent->type == kSceneStory ? 1 : 0);
 }
 
 void FlaaklypaEngine::showNavigator(const char *next, const char *prev, int nextArg, int prevArg) {

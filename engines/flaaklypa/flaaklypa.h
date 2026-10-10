@@ -66,7 +66,6 @@ private:
 	Scene *_scene;
 	Common::String _nextScene;
 	int _nextSceneArg;
-	Common::String _returnScene;   ///< story page a sub game returns to
 	Common::INIFile *_language;
 
 	struct AutoClick {
@@ -126,7 +125,7 @@ public:
 	void changeScene(const Common::String &name, int arg = 0);
 	/** Starts a sub game or activity from a story page. */
 	void startGame(const Common::String &name);
-	/** Returns from a sub game to the page it was started from. */
+	/** Leaves the current scene for its parent in the scene table (sub game exit, navigator exit). */
 	void endGame();
 
 	/** Looks up "section:KEY" in lang/common/language.ini (Windows-1252), like the original's LANG_Get. */
