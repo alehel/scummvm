@@ -8,6 +8,7 @@ MODULE_OBJS = \
 	bugzzz.o \
 	buildabike.o \
 	butterfly.o \
+	button.o \
 	console.o \
 	cursor.o \
 	desk.o \
@@ -36,6 +37,7 @@ MODULE_OBJS = \
 	resources.o \
 	scene.o \
 	scenedata.o \
+	sceneindex.o \
 	sockdrawer.o \
 	sound.o \
 	textinvader.o \

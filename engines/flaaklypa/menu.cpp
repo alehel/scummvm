@@ -243,6 +243,8 @@ Scene *createScene(FlaaklypaEngine *vm, const char *name) {
 		return new OutroScene(vm, def);
 	if (!scumm_stricmp(name, "pee"))
 		return new PeeScene(vm, def);
+	if (!scumm_stricmp(name, "sceneindex"))
+		return new SceneindexScene(vm, def);
 	return new Scene(vm, def);
 }
 

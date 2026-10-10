@@ -1782,6 +1782,74 @@ its own hotspot numbering, not the 55..99/251.. ranges of the other pages.
   3D glasses only while 3D scene 3 is not found), the award dialogs
   (`FUN_0041c150`, `FUN_0041c1b0(3)`), the fact pages, activity `fence`.
 
+## Scene index (`sceneindex`)
+
+The chapter selector of the menu's compass button ("Innholdsoversikt";
+handler `FUN_00418990`, `sceneindex.cpp`, `SceneindexScene`; the BUTTON
+and tooltip modules are in `button.cpp`). Music `theme`.
+
+* **Data.** `scene.ini` exists in data1, data2, data3 and lang2. The
+  original merges the containers of a scene into one directory, the
+  first container to provide a file wins (`FUN_0040d6d0` /
+  `FUN_0040f4b0`), in the order lang3, data3, lang2, data2, lang1, data1,
+  lang, data; the ini files are not merged. With all add-on sets
+  installed the Gold edition therefore reads data3's file (sections
+  `SCENEINDEX:storypage`, `SCENEINDEX:subgame`, `SCENEINDEX:activity`,
+  `SCENEINDEX:gold`, tab bitmaps `button_0`/`button_1`, the Gold tab with
+  `numscenes= 4`, `frame_4` and `imagex/imagey`), data3's backdrop (four tab
+  slots) and lang3's `language.ini` (which has `[sceneindex] GOLD=`).
+  `Resources` uses that order since this port (it used lang, lang1..3,
+  data, data1..3 before, which also hid the add-on hotspots 21 in
+  `house`, 10 in `intent` and 11 in `outtent` of the data2 masks). The
+  `hint<n>` keys exist only in lang2's file and are thus never used by
+  the Gold edition.
+* **Init** (`FUN_00418a30`): `logo` (z 10), the title (`sceneindex:SCENENAME`
+  in `Amerigo BT_18_` centred in (210,62)-(588,105), z 11), push buttons
+  help (2, at 0,0) and exit (1, at 728,0) with `<name>_0`/`_1`, then one
+  tab per ini section (ids 3.., group 1, at `tabx`/`taby`, default
+  (40,498) (249,498) (457,498) (0,0); bitmaps `tabenabled`/`tabselected`;
+  label = `language.ini` lookup of the section name, centred, z 11). The
+  last selected tab is a global (kept across visits).
+* **Tab** (`FUN_00418cd0`): destroys buttons 10..24 and the slot bitmaps,
+  builds the cursor table (`cursor<n>`: 0 `storypage`, 1 `subgame`, 2
+  `activity`, 3 `actngame`), reads `name0..14`. `numscenes` other than 15
+  adds `frame_<n>` at `framex`/`framey` (z -1). Each scene n gets an
+  opaque push button 10 + n at `imagex<n>`/`imagey<n>` (default
+  51 + 142 (n % 5), 126 + 119 (n / 5)) with `<name>_0/_1/_2` (normal,
+  pressed, disabled), z 0; a missing name shows `empty` at +2,+2. The
+  state is the profile's value for the scene (`FUN_00411370`), overridden
+  by `state<n>`; < 1 disables the button. With `ismedals` the best medal
+  (`FUN_004115c0`) is drawn over the thumbnail (`medal1..4`, default
+  bronze/silver/gold/platinum, z 1).
+* **Buttons** (`FUN_00419260`, event 0x116): 1 exit to the parent (menu),
+  2 help, tabs switch, a thumbnail starts its scene with
+  `FUN_0040cd70(name, 0)` (engine: `changeScene` for pages, `startGame`
+  for sub games and activities).
+* **BUTTON module** (`FUN_00406540`..`FUN_00406fb0`): 0x278 byte records,
+  id = hotspot of the element; type 1 push (pressed bitmap only while
+  hovered, click on release over it: `FUN_00406d40`), type 2 tab (fires on
+  press, deselects its group: `FUN_00406c80`); state 0 normal, 1 pressed /
+  selected, 2 disabled; hover from the hotspot change events 0x113/0x114.
+  The engine's `SceneButtons` draws each button into its own element
+  `btn<id>` so several buttons can share a bitmap.
+* **Tooltips** (`FUN_00409b50`..`FUN_00409fc0`): 500 ms (default 1500)
+  after the hotspot under the mouse changed, event 0x11a asks the scene;
+  for thumbnails `FUN_00419320` gives `"%d. %s"` (number = scenes before
+  it on the tab, + 1 except on the story tab, so the prologue is 0) and
+  the scene title, or `sceneindex:HIDDENIN` with `hint<n>` for a disabled
+  scene. The box is `common/bitmap/tooltip.bmp` nine-sliced at
+  (6,11)-(38,15) to text + (12, 18), text `Small Fonts_07_` centred, at
+  the cursor's bottom left (moved left at the right edge, above the cursor
+  at the bottom), z 1500; `tooldot.bmp` marks the cursor's x on its top
+  edge. A click hides it. The handler also eats Tab (which opens the
+  scene index everywhere else).
+* TODO: profile (locked scenes, medals), the help dialog
+  (`FUN_0041e580`). The original also writes, reads and deletes a value
+  under an obfuscated registry key (`FUN_0040b940`/`b8b0`/`ba00`, key 7
+  of `FUN_0040ce80`), ignored here. A sub game started from the index
+  returns to the index (engine `startGame`); the original returns to the
+  game's parent page.
+
 ## Development aids (config keys in the `[flaaklypa]` section)
 
 `start_scene`, `autoshot` / `autoshot_delay` / `autoshot_quit` (screenshot),
