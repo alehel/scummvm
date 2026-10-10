@@ -55,7 +55,7 @@ namespace DKPenge {
 
 DKPengeEngine::DKPengeEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst),
 		_rnd("dkpenge"), _script(nullptr), _hoverObject(nullptr), _hoverPage(nullptr), _db(nullptr), _res(nullptr), _basePage(nullptr), _dirty(true), _paletteDirty(true), _pendingBasePage(0),
-		_pendingBase(false), _dumpCount(0), _busy(0), _busyStart(0), _walkSprite(nullptr), _ani(nullptr), _aniNextFrame(0), _quest(nullptr), _quiz(nullptr), _spyChangedFlag(false), _saveSlot(-1), _savedPage(0), _pressedObject(nullptr), _pressedPage(nullptr), _dragging(false), _dragPage(nullptr), _dungeonTimerEnd(0), _scrollObject(nullptr), _scrollPage(nullptr), _scrollNext(0), _scrollStep(1), _ambientNext(0), _ambientDone(false), _castleSection(-1),
+		_pendingBase(false), _dumpCount(0), _busy(0), _busyStart(0), _walkSprite(nullptr), _ani(nullptr), _aniNextFrame(0), _quest(nullptr), _quiz(nullptr), _spyChangedFlag(false), _saveSlot(-1), _savedPage(0), _pressedObject(nullptr), _pressedPage(nullptr), _dragging(false), _dragPage(nullptr), _dungeonTimerEnd(0), _scrollObject(nullptr), _scrollPage(nullptr), _scrollNext(0), _scrollStep(1), _ambientNext(0), _ambientDone(false), _chestRevertAt(0), _castleSection(-1),
 		_trailNavigating(false), _pendingPopup(0), _scrollBarDrag(false), _scrollBarGrab(0), _editFocus(nullptr), _editFocusPage(nullptr), _pendingTransition(0), _noScreenUpdate(false), _repeatNext(0) {
 	const Common::FSNode gameDataDir(ConfMan.getPath("path"));
 	SearchMan.addSubDirectoryMatching(gameDataDir, "dkcode");
@@ -214,7 +214,11 @@ Common::Error DKPengeEngine::run() {
 					if (loadGameState(pt.x).getCode() == Common::kNoError)
 						afterQuestLoad(true, true);
 				} else if (kind == 'r') {
-					releaseMouse(pt);
+					// Scripted buttons obey the busy gate like real ones
+					if (_busy)
+						debugC(1, kDebugScript, "DKPenge: scripted release dropped while busy");
+					else
+						releaseMouse(pt);
 				} else if (kind == 'o') {
 					openPopup(pt.x);
 				} else if (kind == 'x') {
@@ -225,9 +229,13 @@ Common::Error DKPengeEngine::run() {
 					// codes from 256 up are key codes (273 Up, 274 Down, 280/281 Page Up/Down, 278 Home, 279 End)
 					typeKey(pt.x < 256 ? pt.x : 0, pt.x == 13 ? Common::KEYCODE_RETURN : pt.x == 8 ? Common::KEYCODE_BACKSPACE : pt.x == 9 ? Common::KEYCODE_TAB : ((pt.x >= 'a' && pt.x <= 'z') || pt.x >= 256) ? pt.x : 0);
 				} else if (lo) {
-					pressObject(lo, page, pt);
-					if (kind == 'c')
-						releaseMouse(pt);
+					if (_busy) {
+						debugC(1, kDebugScript, "DKPenge: scripted %c dropped while busy", kind);
+					} else {
+						pressObject(lo, page, pt);
+						if (kind == 'c')
+							releaseMouse(pt);
+					}
 				}
 				nextClick = _system->getMillis() + clickDelay;
 			}
@@ -247,6 +255,11 @@ Common::Error DKPengeEngine::run() {
 		updateSprites(now);
 		updateScrolling(now);
 		updateAmbientSound(now, false);
+		if (_chestRevertAt && now >= _chestRevertAt) {
+			_chestRevertAt = 0;
+			debugC(1, kDebugSound, "DKPenge: chest icon closes");
+			setChestIconOpen(false);
+		}
 		updateDungeonTimer(now);
 		if (_quiz->idleExpired(now) && !_ani) {
 			_quiz->clearIdle();
@@ -783,7 +796,10 @@ void DKPengeEngine::runAction(const Action *a, LivePage *page, LiveObject *obj) 
 		switch (a->x) {
 		case 0:
 		case 6:
-			chestFlash();
+			// FUN_00411000: the chest sound again and the icon repainted closed
+			playWaveChannel(Common::String(), "@chest1s", -1);
+			setChestIconOpen(false);
+			_chestRevertAt = 0;
 			break;
 		case 1:
 			// The castle starts turning: the hourglass shows until a sprite
@@ -2373,12 +2389,35 @@ void DKPengeEngine::stopWave() {
 // Waves started on a numbered channel can be stopped again by channel (and
 // optionally by name); the library pages use channel 0 for the read-aloud
 // narration and restart it on every click.
+// Length of a RIFF wave in milliseconds from its header: data bytes over
+// the average byte rate (the ADPCM decoder does not report a length)
+static uint32 waveDurationMs(Common::SeekableReadStream &s) {
+	uint32 avgBytesPerSec = 0, dataSize = 0;
+	s.seek(12);
+	while (s.pos() + 8 <= s.size()) {
+		uint32 tag = s.readUint32BE();
+		uint32 len = s.readUint32LE();
+		int64 next = s.pos() + len + (len & 1);
+		if (tag == MKTAG('f', 'm', 't', ' ') && len >= 16) {
+			s.skip(8);
+			avgBytesPerSec = s.readUint32LE();
+		} else if (tag == MKTAG('d', 'a', 't', 'a')) {
+			dataSize = len;
+			break;
+		}
+		s.seek(next);
+	}
+	s.seek(0);
+	return avgBytesPerSec ? (uint32)((uint64)dataSize * 1000 / avgBytesPerSec) : 0;
+}
+
 void DKPengeEngine::playWaveChannel(const Common::String &dir, const Common::String &name, int channel, bool loop) {
 	Common::SeekableReadStream *s = _res->openWave(dir, name);
 	if (!s) {
 		debugC(1, kDebugSound, "DKPenge: wave '%s' not found", name.c_str());
 		return;
 	}
+	uint32 durationMs = waveDurationMs(*s);
 	Audio::SeekableAudioStream *stream = Audio::makeWAVStream(s, DisposeAfterUse::YES);
 	if (!stream)
 		return;
@@ -2392,6 +2431,8 @@ void DKPengeEngine::playWaveChannel(const Common::String &dir, const Common::Str
 	WaveChannel wc;
 	wc.channel = channel;
 	wc.name = name;
+	if (!loop)
+		wc.endTime = _system->getMillis() + durationMs;
 	if (loop)
 		_mixer->playStream(Audio::Mixer::kSFXSoundType, &wc.handle, Audio::makeLoopingAudioStream(stream, 0));
 	else
@@ -2659,8 +2700,50 @@ LivePanel *DKPengeEngine::findSpyChest(LivePage **pageOut) {
 }
 
 // Something went into the chest: the chest sound plays
+// FUN_00411160 -> FUN_00410ce0: an item dropping into the spy's chest plays
+// the chest sound and draws the icon's open-lid picture over it; the
+// original's pickup sounds play one after another and GeneralPurposeAction
+// 0/6 (FUN_00411000) then plays the chest sound again and repaints the
+// icon closed. The engine's sounds overlap, so the lid closes when the
+// last of them has finished.
 void DKPengeEngine::chestFlash() {
 	playWaveChannel(Common::String(), "@chest1s", -1);
+	setChestIconOpen(true);
+	debugC(1, kDebugSound, "DKPenge: chest icon opens");
+	uint32 now = _system->getMillis();
+	_chestRevertAt = now + 1;
+	for (uint i = 0; i < _channels.size(); i++)
+		if (_channels[i].channel == -1 && _channels[i].endTime > _chestRevertAt)
+			_chestRevertAt = _channels[i].endTime;
+}
+
+// The active chest icon (DAT_004a7eac, FUN_004111d0: the visible
+// BoxIconBitmap of the chosen spy on the page most recently opened) shows
+// its open or closed picture. The open one sits a little higher, by spy
+// (FUN_00410ce0 adjusts the rect: spy 2 up 5, spy 1 up 1).
+void DKPengeEngine::setChestIconOpen(bool open) {
+	int spy = _quest->getSpy();
+	Common::Point offset(0, spy == 2 ? -5 : spy == 1 ? -1 : 0);
+	for (int p = (int)_popups.size(); p >= 0; p--) {
+		LivePage *page = p == (int)_popups.size() ? _basePage : _popups[p];
+		if (!page)
+			continue;
+		bool found = false;
+		const Common::Array<LivePanel *> &panels = page->getPanels();
+		for (uint i = 0; i < panels.size(); i++)
+			for (uint k = 0; k < panels[i]->objects.size(); k++) {
+				LiveObject &lo = panels[i]->objects[k];
+				if (lo.obj->cls != kObjBoxIconBitmap || !lo.visible || !lo.altImage)
+					continue;
+				lo.flashed = open;
+				lo.altOffset = offset;
+				found = true;
+			}
+		if (found) {
+			_dirty = true;
+			return;
+		}
+	}
 }
 
 int DKPengeEngine::toggleCodeOf(int objectId) const {

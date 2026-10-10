@@ -125,6 +125,9 @@ void LivePage::layoutObjects(LivePanel *lp, Resources &res) {
 			lo.altImage = res.loadImage(lp->dir, obj->strs[1]);
 		if (obj->cls == kObjCollectBitmap && obj->strs.size() > 1)
 			lo.altImage = res.loadImage(lp->dir, obj->strs[1]);
+		// The chest icon's open-lid picture (FUN_00410b60 loads it at open)
+		if (obj->cls == kObjBoxIconBitmap && !obj->strs.empty() && !obj->strs[0].empty())
+			lo.altImage = res.loadImage(lp->dir, obj->strs[0]);
 		if (obj->cls == kObjToggleButton)
 			lo.value = 1;
 		if (obj->cls == kObjHighlightingCastle)
@@ -417,22 +420,30 @@ static void drawScrollBar(Graphics::Surface &screen, Resources &res, const LiveO
 		blitImage(screen, down, Common::Rect(lo.rect.left, barBottom, lo.rect.left + down->surface.w, barBottom + downH), clip);
 }
 
+// The original keeps each panel's objects in a list sorted by Z: an object
+// is inserted before the first one with a higher Z (FUN_00442be0), so equal
+// Z keeps record order, and a Z change re-inserts it (FUN_00442cb0). The
+// list is drawn from the bottom and hit-tested from the top (FUN_0044f780).
+static void zOrdered(LivePanel *lp, Common::Array<LiveObject *> &order) {
+	order.clear();
+	for (uint k = 0; k < lp->objects.size(); k++)
+		order.push_back(&lp->objects[k]);
+	for (uint a = 1; a < order.size(); a++) {
+		LiveObject *x = order[a];
+		int b = a;
+		while (b > 0 && order[b - 1]->zOrder > x->zOrder) {
+			order[b] = order[b - 1];
+			b--;
+		}
+		order[b] = x;
+	}
+}
+
 void LivePage::draw(Graphics::Surface &screen, Resources &res) const {
 	for (uint i = 0; i < _panels.size(); i++) {
-		const LivePanel *lp = _panels[i];
-		// Draw in Z order (stable for equal Z)
-		Common::Array<const LiveObject *> order;
-		for (uint k = 0; k < lp->objects.size(); k++)
-			order.push_back(&lp->objects[k]);
-		for (uint a = 1; a < order.size(); a++) {
-			const LiveObject *x = order[a];
-			int b = a;
-			while (b > 0 && order[b - 1]->zOrder > x->zOrder) {
-				order[b] = order[b - 1];
-				b--;
-			}
-			order[b] = x;
-		}
+		LivePanel *lp = _panels[i];
+		Common::Array<LiveObject *> order;
+		zOrdered(lp, order);
 		for (uint k = 0; k < order.size(); k++) {
 			const LiveObject &lo = *order[k];
 			debugC(4, kDebugGraphics, "DKPenge: draw %s %d visible=%d image=%p z=%d rect=%d,%d,%d,%d", objectClassName(lo.obj->cls), lo.obj->id, lo.visible ? 1 : 0, (const void *)lo.image, lo.zOrder, lo.rect.left, lo.rect.top, lo.rect.right, lo.rect.bottom);
@@ -532,6 +543,12 @@ void LivePage::draw(Graphics::Surface &screen, Resources &res) const {
 				img = lo.altImage;
 			if (lo.obj->cls == kObjCollectBitmap && (lo.frame & 1) && lo.altImage)
 				img = lo.altImage;
+			// The chest icon shows its lid open while an item drops in
+			// (FUN_00410ce0 draws the second picture over the icon's rect)
+			if (lo.obj->cls == kObjBoxIconBitmap && lo.flashed && lo.altImage) {
+				img = lo.altImage;
+				r = Common::Rect(r.left + lo.altOffset.x, r.top + lo.altOffset.y, r.left + lo.altOffset.x + img->surface.w, r.top + lo.altOffset.y + img->surface.h);
+			}
 			if (lo.obj->cls != kObjBitmap || transparentPanel)
 				key = img->keyIndex;
 			blitImage(screen, img, r, lp->rect, key, lo.dithered);
@@ -717,8 +734,12 @@ LiveObject *LivePage::findObject(int id) {
 LiveObject *LivePage::objectAt(const Common::Point &p, bool hotspotsOnly) {
 	for (int i = (int)_panels.size() - 1; i >= 0; i--) {
 		LivePanel *lp = _panels[i];
-		for (int k = (int)lp->objects.size() - 1; k >= 0; k--) {
-			LiveObject &lo = lp->objects[k];
+		// Topmost first: a coin raised to Z 3 wins over the zoom area hotspot
+		// under it even though the coin's record comes first
+		Common::Array<LiveObject *> order;
+		zOrdered(lp, order);
+		for (int k = (int)order.size() - 1; k >= 0; k--) {
+			LiveObject &lo = *order[k];
 			// The castle of the Castle Guide is hit whether or not a section
 			// of it is lit (visible only concerns the highlight), and a
 			// cutaway cover (DitherBitmap) can be clicked back into place

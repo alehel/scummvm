@@ -122,6 +122,7 @@ public:
 	void endSyncBusy();
 	void dropQueuedClicks();
 	void resyncPointer();
+	void setChestIconOpen(bool open);
 	void walkEnded(LiveObject *lo);
 	// Scripts read the mouse position from a document variable
 	void setMouseVar(const Common::Point &p, LivePanel *panel);
@@ -278,7 +279,8 @@ private:
 		int channel;
 		Common::String name;
 		Audio::SoundHandle handle;
-		WaveChannel() : channel(0) {}
+		uint32 endTime;       // when a one-shot wave finishes (0 for loops)
+		WaveChannel() : channel(0), endTime(0) {}
 	};
 	Common::Array<WaveChannel> _channels;
 	Quest *_quest;
@@ -300,6 +302,7 @@ private:
 	int _scrollStep;
 	Common::String _ambientName;  // looping wave of the zoom page region in view
 	uint32 _ambientNext;
+	uint32 _chestRevertAt;        // when the chest icon's lid closes again (0 = closed)
 	bool _ambientDone;            // finished (silenced) until the last popup closes
 	Audio::SoundHandle _aniAudioHandle;
 	AniDecoder *_ani;
