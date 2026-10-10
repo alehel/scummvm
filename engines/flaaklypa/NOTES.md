@@ -826,13 +826,11 @@ buttons (2 help `FUN_0041e580`, 3 exit `FUN_0040cc30`, 4 album -> scene
 ## Development aids (config keys in the `[flaaklypa]` section)
 
 `start_scene`, `autoshot` / `autoshot_delay` / `autoshot_quit` (screenshot),
-`autoclick=t:x,y;t:x,y,m` (synthetic clicks, `m` = move only, t in ms after
-start), `autokey=t:key[:hold];...` (key press at t held for hold ms, default
+`autoclick=t:x,y;t:x,y,m` (synthetic clicks, `m` = move only, `d` = press
+only, `u` = release only for drags, t in ms after start), `autokey=t:key[:hold];...` (key press at t held for hold ms, default
 100; `left`, `right`, `up`, `down`, `space`, `esc`, `tab`, `return`, a
 character, or a string of characters typed one after the other with `~` =
 Escape), `random_seed` (deterministic boards).
-`autoclick=t:x,y;t:x,y,m` (synthetic clicks, `m` = move only, `d` = press
-only, `u` = release only for drags, t in ms after start), `random_seed` (deterministic boards).
 
 ## Mini game checklist
 
