@@ -107,6 +107,15 @@ public:
 	void updateNodeHotspots(LivePage *page, int node);
 	void doTransition(LivePage *page, int mode, int spriteId, int async);
 	void setCursor(const Common::String &name);
+	void showCursor(const Common::String &name);
+	// The document's busy level (doc+0x2cc in the original): while it is
+	// raised the hourglass shows, cursor changes wait and clicks are ignored
+	void beginBusy();
+	void endBusy();
+	void setBusy(int level);
+	bool isBusy() const { return _busy != 0; }
+	void resetBusy();
+	void walkEnded(LiveObject *lo);
 	// Scripts read the mouse position from a document variable
 	void setMouseVar(const Common::Point &p, LivePanel *panel);
 	LivePanel *panelAt(const Common::Point &p);
@@ -245,6 +254,8 @@ private:
 	Common::Point _pendingScroll;
 
 	Common::String _cursorName;
+	int _busy;
+	LiveObject *_walkSprite;   // the sprite of a 3D room walk in progress
 	Common::String _dumpDir;
 	int _dumpCount;
 	Audio::SoundHandle _waveHandle;

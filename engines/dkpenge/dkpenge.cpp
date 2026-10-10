@@ -55,7 +55,7 @@ namespace DKPenge {
 
 DKPengeEngine::DKPengeEngine(OSystem *syst, const ADGameDescription *gameDesc) : Engine(syst),
 		_rnd("dkpenge"), _script(nullptr), _hoverObject(nullptr), _hoverPage(nullptr), _db(nullptr), _res(nullptr), _basePage(nullptr), _dirty(true), _paletteDirty(true), _pendingBasePage(0),
-		_pendingBase(false), _dumpCount(0), _ani(nullptr), _aniNextFrame(0), _quest(nullptr), _quiz(nullptr), _spyChangedFlag(false), _saveSlot(-1), _savedPage(0), _pressedObject(nullptr), _pressedPage(nullptr), _dragging(false), _dragPage(nullptr), _dungeonTimerEnd(0), _scrollObject(nullptr), _scrollPage(nullptr), _scrollNext(0), _scrollStep(1), _ambientNext(0), _castleSection(-1),
+		_pendingBase(false), _dumpCount(0), _busy(0), _walkSprite(nullptr), _ani(nullptr), _aniNextFrame(0), _quest(nullptr), _quiz(nullptr), _spyChangedFlag(false), _saveSlot(-1), _savedPage(0), _pressedObject(nullptr), _pressedPage(nullptr), _dragging(false), _dragPage(nullptr), _dungeonTimerEnd(0), _scrollObject(nullptr), _scrollPage(nullptr), _scrollNext(0), _scrollStep(1), _ambientNext(0), _castleSection(-1),
 		_trailNavigating(false), _pendingPopup(0), _scrollBarDrag(false), _scrollBarGrab(0), _editFocus(nullptr), _editFocusPage(nullptr), _pendingTransition(0), _noScreenUpdate(false), _repeatNext(0) {
 	const Common::FSNode gameDataDir(ConfMan.getPath("path"));
 	SearchMan.addSubDirectoryMatching(gameDataDir, "dkcode");
@@ -264,6 +264,9 @@ void DKPengeEngine::handleEvents() {
 	while (_eventMan->pollEvent(event)) {
 		switch (event.type) {
 		case Common::EVENT_LBUTTONDOWN: {
+			// The original drops mouse buttons while the document is busy
+			if (_busy)
+				break;
 			LivePage *page = nullptr;
 			LiveObject *lo = hitTest(event.mouse, &page);
 			if (lo) {
@@ -283,7 +286,8 @@ void DKPengeEngine::handleEvents() {
 			break;
 		}
 		case Common::EVENT_LBUTTONUP:
-			releaseMouse(event.mouse);
+			if (!_busy)
+				releaseMouse(event.mouse);
 			break;
 		case Common::EVENT_WHEELUP:
 		case Common::EVENT_WHEELDOWN: {
@@ -435,6 +439,7 @@ void DKPengeEngine::openBasePage(uint index, const Common::Point &scroll) {
 	_dragging = false;
 	_dragPage = nullptr;
 	_hoverPage = nullptr;
+	resetBusy();
 	closeAllPopups();
 	if (_basePage)
 		pageClosing(_basePage);
@@ -751,12 +756,22 @@ void DKPengeEngine::runAction(const Action *a, LivePage *page, LiveObject *obj) 
 			chestFlash();
 			break;
 		case 1:
+			// The castle starts turning: the hourglass shows until a sprite
+			// script ends the turn with code 2
+			beginBusy();
 			if (toggleState(0x12))
 				playWave(Common::String(), "@rot1s", true);
 			break;
 		case 2:
-		case 0x10:
 			stopWave();
+			setBusy(0);
+			break;
+		case 0x10:
+			beginBusy();
+			stopWave();
+			break;
+		case 0xf:
+			setBusy(0);
 			break;
 		case 3: {
 			// Toggles the chest's lid artwork (objects 0 and 1 of the chest panel)
@@ -960,6 +975,9 @@ void DKPengeEngine::doTransition(LivePage *page, int mode, int spriteId, int asy
 			spriteGotoFrame(lo, lo->frameCount);
 		return;
 	}
+	// The hourglass shows for the whole walk (FUN_0040eba0 raises the busy
+	// level, the walk's completion FUN_0040f190 or the page change clears it)
+	beginBusy();
 	preloadSpriteFrames(lo, 1, -1);
 	lo->zOrder = 10;
 	lo->visible = true;
@@ -968,12 +986,14 @@ void DKPengeEngine::doTransition(LivePage *page, int mode, int spriteId, int asy
 	else
 		lo->spriteState &= ~0x40;
 	if (async) {
+		_walkSprite = lo;
 		lo->spriteFlags |= 8;
 		lo->playing = lo->frameDelay > 0;
 		lo->nextFrameTime = 0;
 		_dirty = true;
 		return;
 	}
+	_walkSprite = lo;
 	// Synchronous variant: the original steps the frames itself, every 200 ms
 	// from the start
 	setSpriteFrame(lo, 1);
@@ -990,6 +1010,7 @@ void DKPengeEngine::doTransition(LivePage *page, int mode, int spriteId, int asy
 		if (scriptShouldStop())
 			return;
 	}
+	walkEnded(lo);
 }
 
 // The zoom caption object (by id, else the first one on the base page)
@@ -1571,8 +1592,15 @@ void DKPengeEngine::preloadSpriteFrames(LiveObject *lo, int first, int last) {
 	first = MAX(first, 1);
 	if (last < 1 || last > lo->frameCount)
 		last = lo->frameCount;
+	// The hourglass shows while the frames load, unless the sprite carries
+	// flag bit 0x20 (property 0x45; FUN_0040a1f0)
+	bool busy = !(lo->spriteFlags & 0x20);
+	if (busy)
+		beginBusy();
 	for (int f = first; f <= last; f++)
 		_res->loadImage(lo->panel->dir, Common::String::format("%s%04d", lo->obj->file.c_str(), f));
+	if (busy)
+		endBusy();
 }
 
 // Runs the sprite scripts registered for a sprite event:
@@ -1863,9 +1891,11 @@ bool DKPengeEngine::advanceSprite(LivePage *page, LiveObject *lo) {
 		case 3:
 			lo->spriteFlags &= ~8;
 			lo->playing = false;
+			walkEnded(lo);
 			return true;
 		default:
 			spriteFinished(page, lo);
+			walkEnded(lo);
 			return !scriptShouldStop();
 		}
 	} else {
@@ -1937,11 +1967,72 @@ void DKPengeEngine::objectCursorChanged(LiveObject *lo) {
 void DKPengeEngine::setCursor(const Common::String &name) {
 	if (name == _cursorName)
 		return;
+	_cursorName = name;
+	// While the document is busy the hourglass stays and the change waits
+	// until the busy level drops (FUN_004376e0)
+	if (!_busy)
+		showCursor(name);
+}
+
+void DKPengeEngine::showCursor(const Common::String &name) {
 	Graphics::Cursor *cursor = _res->getCursor(name);
 	if (!cursor)
 		return;
 	CursorMan.replaceCursor(cursor);
-	_cursorName = name;
+}
+
+// FUN_00439120: raises the busy level by two and shows the hourglass. The
+// cursor is only repainted from updateScreen(), and the busy state usually
+// covers blocking work, so the screen is updated at once.
+void DKPengeEngine::beginBusy() {
+	if (_busy == 0) {
+		showCursor("Watch");
+		_system->updateScreen();
+	}
+	_busy += 2;
+	debugC(2, kDebugScript, "DKPenge: busy level %d", _busy);
+}
+
+// FUN_00439150: lowers the busy level by two; back at zero the pointer is
+// re-synchronised (FUN_00438e70 sends the window under it a mouse move,
+// which restores the cursor the page wants there)
+void DKPengeEngine::endBusy() {
+	for (int i = 0; i < 2 && _busy; i++)
+		_busy--;
+	if (_busy == 0)
+		showCursor(_cursorName);
+	debugC(2, kDebugScript, "DKPenge: busy level %d", _busy);
+}
+
+// FUN_004369b0: loading a base page zeroes the busy level
+void DKPengeEngine::resetBusy() {
+	_walkSprite = nullptr;
+	if (!_busy)
+		return;
+	_busy = 0;
+	showCursor(_cursorName);
+	debugC(2, kDebugScript, "DKPenge: busy level 0 (page load)");
+}
+
+// A 3D room walk ended without leaving the page (FUN_0040f190)
+void DKPengeEngine::walkEnded(LiveObject *lo) {
+	if (lo != _walkSprite)
+		return;
+	_walkSprite = nullptr;
+	endBusy();
+	setBusy(0);
+}
+
+// FUN_00439190: sets the busy level outright
+void DKPengeEngine::setBusy(int level) {
+	if (_busy == 0 && level != 0) {
+		showCursor("Watch");
+		_system->updateScreen();
+	} else if (_busy != 0 && level == 0) {
+		showCursor(_cursorName);
+	}
+	_busy = level;
+	debugC(2, kDebugScript, "DKPenge: busy level %d", _busy);
 }
 
 void DKPengeEngine::handleMouseMove(const Common::Point &p) {
