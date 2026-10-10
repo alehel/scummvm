@@ -16,6 +16,7 @@ MODULE_OBJS = \
 	resources.o \
 	scene.o \
 	scenedata.o \
+	textinvader.o \
 	yard.o
 
 # This module can be built as a plugin

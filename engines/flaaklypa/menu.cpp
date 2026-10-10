@@ -23,6 +23,7 @@
 #include "flaaklypa/flaaklypa.h"
 #include "flaaklypa/puzzle.h"
 #include "flaaklypa/scenes.h"
+#include "flaaklypa/textinvader.h"
 
 namespace Flaaklypa {
 
@@ -176,6 +177,8 @@ Scene *createScene(FlaaklypaEngine *vm, const char *name) {
 		return new YardScene(vm, def);
 	if (!scumm_stricmp(name, "puzzle"))
 		return new PuzzleScene(vm, def);
+	if (!scumm_stricmp(name, "textinvader"))
+		return new TextinvaderScene(vm, def);
 	return new Scene(vm, def);
 }
 

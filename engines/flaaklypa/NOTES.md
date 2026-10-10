@@ -278,11 +278,81 @@ glyph's top left pixel. Glyphs keep their colours; the advance is the glyph
 width. Text areas are animation structs with a surface filled with the key
 colour 0x00ff00, flags 0x101 = centred.
 
+## Sub game `textinvader` ("Ordspillet", add-on set 2)
+
+A typing game started from the `goodbye` page. Words fall from the night sky
+and are typed away before they reach the ground. Handler `0x44c640` (jump
+table: 0x103 -> `FUN_0044c740`, 0x104 -> `44cf70`, 0x105 -> `44d720`,
+0x10c -> `44cfe0` (key filter), 0x10e -> `44d030` (character), 0x110 ->
+`44c920`, 0x111 -> `44cea0`, 0x112 -> `44d4f0`, 0x116 -> `44d4d0`). Engine:
+`textinvader.cpp`.
+
+* Data: `data2/textinvader` (backdrop, `fjell` hill bitmap at z 6, `julelys1`
+  / `julelys2` light chains, `li.smk` 128x128 shooting star, the 4x4 sound
+  clips `start`, `right`, `wrong`, `drop`, buttons), `lang2/textinvader`
+  (`skilt.smk` the sign turning round and `skilt.bmp` the sign showing the
+  score, both hotspot 4 at (0, 518); `wordlist/wordlist.txt`, 4035 words;
+  `help.ini`). Fonts `Comic Sans MS_16_lightish_blue` / `_green` / `_yellow`
+  / `_orange` / `_red` (data2/common/fonts) and `Comic Sans MS_10_` for the
+  score. The hotspot mask is empty; the only hotspots are the sign element
+  and the buttons. Music `track22`.
+* Word list (`FUN_0044d7e0`): one word per line, sorted into buckets by
+  length 1..31. `FUN_0044d770` picks a random length up to the current
+  maximum (empty buckets are redrawn) and a random word of it.
+* Screen: start sign = first frame of `skilt.smk` at z 7; clicking it
+  (`FUN_0044d720`) plays the clip and the `start` sound while the chain of
+  lights fills over 300 ms (`(now - clickTime) * 1/300`); when the clip ends
+  (`FUN_0044c920`) the game starts (`FUN_0044c950`) and the bitmap sign
+  with the score (`%d`, centred in (20, 546)-(105, 566), z 8) replaces it.
+  Energy meter = PROGRESS module (`FUN_004089a0`/`FUN_00408b00`): the left
+  `round(350 * energy / 100)` columns of `julelys1` at (165, 493), z 100,
+  over the unlit `julelys2` (z 7). Buttons `help_0/1` (2, 1), `exit_0/1`
+  (726, 2).
+* Word slots (`FUN_0044ca50`, 10 structs of 600 bytes at `0x682c20`:
+  active, done, bonus, word, two text areas, a copy of the `li` clip, x, y,
+  star offsets, text extent, float y, rect): a slot gets a word whose first
+  letter no other active word has, placed at `x = rand(640 - w) + 80`,
+  `y = rand(150)`, retried up to 100 times until it overlaps no other word.
+  Text area 1 (z 3) shows the word in blue (yellow/orange/red for bonus
+  words), text area 2 (z 4) the typed prefix in green on top; the star
+  plays once at (x + w/2 - 64, y + h/2 - 64), z 5, and is removed when done.
+* Falling (`FUN_0044d4f0`, every frame): `y += slow * speed * dt` with dt
+  in seconds, speed 8/10/12 px/s for difficulty 0/1/2 (`0x4de620`). A word
+  that is not finished and reaches y >= 491 is lost: energy -= 5, `drop`
+  sound, slot freed, a new word in `rand(500)` ms, typing reset if it was
+  the target.
+* Typing (`FUN_0044d030`): only `isalpha()` (C locale: ASCII letters) and
+  `-` are accepted, lower cased. The first letter picks the first active,
+  unfinished slot starting with it (`FUN_0044d3b0`); `FUN_0044d320` then
+  returns ok (prefix, +3 points), wrong (longer than the word or a
+  mismatch: energy -= 3, `wrong`, everything redrawn, typing reset) or done
+  (+4 * length, `right`, the slot is marked done, removed after 500 ms by
+  timer data 1000 + slot, new word `rand(500)` ms later; bonus applied).
+  Words with æ/ø/å cannot be completed in the original either.
+* Bonus words (`FUN_0044d220`): every 10/15/20 typed words
+  (`0x4de644`) the next spawned word gets the next colour of a cycle
+  (`(rand(2) + 1 + cur) % 3`). Yellow (1): all words vanish, every slot
+  respawns in `rand(6000)` ms (the 3 * length points per word use a slot
+  field that is never written: zero). Orange (2): speed factor 0.5 for
+  15000/10000/6000 ms (timer data -2). Red (3): energy += 10, max 100.
+* Levels (`FUN_0044d680`): level = removed words (typed, lost or cleared)
+  / 12/10/8 (`0x4de650`); each new level multiplies the speed by
+  1.02/1.03/1.04; odd levels add a slot (max 10, filled in `rand(500)` ms),
+  even levels raise the maximum word length (max 32).
+* Game over (`FUN_0044d450`) when energy <= 0: all slots cleared, message
+  box `textinvader:GAMEOVER`, high score `FUN_0041f9a0(0, score, 0x49f0a0, 0)`,
+  then the start sign again (without a profile).
+* Difficulty comes from the profile (`FUN_004194a0`); without one it is 0.
+  With a profile the original shows `tournament:PLAYERREADY` and starts at
+  once. Not done: profiles/difficulty, help dialog, game over message box,
+  high score, `sound.ini` volumes.
+
 ## Development aids (config keys in the `[flaaklypa]` section)
 
 `start_scene`, `autoshot` / `autoshot_delay` / `autoshot_quit` (screenshot),
 `autoclick=t:x,y;t:x,y,m` (synthetic clicks, `m` = move only, t in ms after
-start), `random_seed` (deterministic boards).
+start), `autokey=t:keys;t:keys` (synthetic key presses, one per character,
+`~` = Escape), `random_seed` (deterministic boards).
 
 ## Mini game checklist
 
@@ -300,7 +370,7 @@ Sub games (`[subgame]`, score based):
 | | wheelbarrow | Eplehøsten | pee | data |
 | | hopscotch | Solan og Ludvig i Paradis | house | data |
 | | audiopairs | Reodors Lydmaskin | house | data |
-| | textinvader | Ordspillet | goodbye | data2 |
+| x | textinvader | Ordspillet | goodbye | data2 (message box, high score, help, profiles open) |
 | | balloonhunt | Solans ballongjakt | outtent | data2 (no sceneDefs entry yet) |
 | | whackamole | Dra meg baklengs! | house | data2 |
 | | beemaze | Ludvigs Labyrint | tvroom | data |
