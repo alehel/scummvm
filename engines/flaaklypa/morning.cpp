@@ -75,10 +75,7 @@ void MorningScene::onInit(int arg) {
 
 // FUN_00425f40: after Ludvig's line (or on space) ask whether to ride down.
 void MorningScene::rideDown() {
-	_vm->messageBox("interfaceh:WARNING", "morning:RIDEDOWN", kMsgYes | kMsgNo);
-	// TODO: messageBox() is a stub on this branch; use the button it returns
-	// (the main branch's dialog does) instead of assuming YES.
-	const int answer = kMsgYes;
+	const int answer = _vm->messageBox("interfaceh:WARNING", "morning:RIDEDOWN", kMsgYes | kMsgNo);
 	debug(1, "Morning: ride down answered %s", answer == kMsgYes ? "YES" : "NO");
 	// Both answers go through GAME_Start (FUN_0040cd70)
 	if (answer == kMsgYes)

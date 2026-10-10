@@ -1493,6 +1493,51 @@ random ambience clip (`FUN_0040b0f0`, TODO). Narration `S07AN-NAR-001` and
   this branch, the page assumes YES); the `mountain` sub game itself
   (`startGame` only warns).
 
+## Story page `intro` ("Prolog")
+
+`intro.cpp`, handler FUN_00416520. The prologue: the narrator (character 1,
+no hotspot, idle `S00AN-RAN-B01`, bored `S00AN-RAN-001..004`) stands by an
+easel with the game's title board (`title` bitmap). No hotspots and no cursor
+table.
+
+* Init (FUN_004165c0): stops the music, starts the random ambience
+  (FUN_0040b0f0: one of `common/music/ambience1..4`, the next random one when
+  it ends; done locally in `IntroScene` with the global ambience animation
+  structures, see below), adds `title`, creates the character and plays the
+  sequence `S00AN-SS-001a, -001b, -001c`.
+* When `-001a` ends the narration `S00AN-NAR-001` starts; when `-001b` ends
+  `title` is removed, music `track1` starts and `S00AN-NAR-002` plays; when
+  `-001c` ends the game goes to `yard`. Narration clips are removed when they
+  end.
+* Space goes to `yard` at once (the handler returns 1, so the framework does
+  not abort the sequence first). Right click opens the navigator (next
+  `yard`, no previous page). Escape does nothing.
+* State across visits: none.
+* TODO: the ambience player belongs in the SOUND module (FUN_0040b0f0 also
+  registers a module callback that stops the clips on close); `house` has a
+  TODO for the same call, so it could move into `Music`/`Scene` later.
+  Subtitles (FUN_004094d0) are not shown.
+
+## Story page `town` ("Flaaklypa bygdeby")
+
+`town.cpp`, handler FUN_00426f30, parent `outtent`. A transition page without
+hotspots; the cursor is hidden. Music `subgame10`.
+
+* arg 0 (from `morning`, FUN_00425f40, riding down to the village): `bike`
+  (Solan on the bike) plays, then the game goes to `outtent`.
+* arg 2 (the navigator's "next page" on `intent`, FUN_00425af0): `ben` plays;
+  when it ends it is removed, the bitmap `frame` is added at z 7, the film
+  `reel1` plays at its default z 10, the music stops and the screen is
+  dimmed below z 5 (FUN_00407110(0, 5): the dialog dimmer, a full screen
+  checkerboard of transparent and COLORREF 0x402020 pixels, here a surface
+  element `mesh`). When `reel1` ends the game goes to `buildacar`. On close
+  the mesh is removed (FUN_00407210).
+* Escape or space go straight to the next page (`outtent`, or `buildacar`
+  for arg 2).
+* `birds` is in the page's table but the handler never uses it.
+* State across visits: none (the arg is kept for the key handler only).
+* TODO: subtitles (FUN_004094d0).
+
 ## Development aids (config keys in the `[flaaklypa]` section)
 
 `start_scene`, `autoshot` / `autoshot_delay` / `autoshot_quit` (screenshot),

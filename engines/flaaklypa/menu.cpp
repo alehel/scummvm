@@ -229,6 +229,10 @@ Scene *createScene(FlaaklypaEngine *vm, const char *name) {
 		return new TvstationScene(vm, def);
 	if (!scumm_stricmp(name, "morning"))
 		return new MorningScene(vm, def);
+	if (!scumm_stricmp(name, "intro"))
+		return new IntroScene(vm, def);
+	if (!scumm_stricmp(name, "town"))
+		return new TownScene(vm, def);
 	return new Scene(vm, def);
 }
 

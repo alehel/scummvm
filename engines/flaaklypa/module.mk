@@ -20,6 +20,7 @@ MODULE_OBJS = \
 	house.o \
 	hustle.o \
 	intent.o \
+	intro.o \
 	lettersort.o \
 	menu.o \
 	metaengine.o \
@@ -34,6 +35,7 @@ MODULE_OBJS = \
 	sockdrawer.o \
 	sound.o \
 	textinvader.o \
+	town.o \
 	tvstation.o \
 	whackamole.o \
 	wheelbarrow.o \
