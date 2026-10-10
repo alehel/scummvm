@@ -27,6 +27,7 @@ MODULE_OBJS = \
 	scenedata.o \
 	sockdrawer.o \
 	textinvader.o \
+	tvstation.o \
 	whackamole.o \
 	wheelbarrow.o \
 	sound.o \
