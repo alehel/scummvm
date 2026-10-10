@@ -82,6 +82,7 @@ static const char *const kImplementedGames[] = {
 	"audiopairs",
 	"whackamole",
 	"butterfly",
+	"wheelbarrow",
 	nullptr
 };
 
@@ -146,21 +147,52 @@ void FlaaklypaEngine::parseAutoClicks() {
 	}
 }
 
-// Development aid: "autokey=t:keys;t:keys" types the characters at the
-// given times (ms after start); '~' stands for Escape.
+// Development aid: "autokey=t:key[:hold];..." presses a key at t ms after
+// start and releases it hold ms later (default 100). key is left, right, up,
+// down, space, esc, tab, return, a single character, or a string of
+// characters typed one after the other ('~' stands for Escape).
 void FlaaklypaEngine::parseAutoKeys() {
 	if (!ConfMan.hasKey("autokey"))
 		return;
 	Common::StringTokenizer tok(ConfMan.get("autokey"), ";");
 	while (!tok.empty()) {
-		Common::String item = tok.nextToken();
-		uint colon = item.findFirstOf(':');
-		if (colon == Common::String::npos)
+		Common::StringTokenizer parts(tok.nextToken(), ":");
+		Common::String t = parts.nextToken(), name = parts.nextToken(), hold = parts.nextToken();
+		if (t.empty() || name.empty())
 			continue;
+		static const struct { const char *name; Common::KeyCode code; } named[] = {
+			{ "left", Common::KEYCODE_LEFT }, { "right", Common::KEYCODE_RIGHT },
+			{ "up", Common::KEYCODE_UP }, { "down", Common::KEYCODE_DOWN },
+			{ "space", Common::KEYCODE_SPACE }, { "esc", Common::KEYCODE_ESCAPE },
+			{ "tab", Common::KEYCODE_TAB }, { "return", Common::KEYCODE_RETURN },
+			{ nullptr, Common::KEYCODE_INVALID }
+		};
 		AutoKey k;
-		k.time = (uint32)atoi(item.substr(0, colon).c_str());
-		k.keys = item.substr(colon + 1);
-		_autoKeys.push_back(k);
+		k.time = (uint32)atoi(t.c_str());
+		k.key = Common::KEYCODE_INVALID;
+		k.ascii = 0;
+		for (int i = 0; named[i].name; i++)
+			if (name == named[i].name)
+				k.key = named[i].code;
+		uint32 holdMs = hold.empty() ? (name.size() == 1 || k.key != Common::KEYCODE_INVALID ? 100 : 0) : (uint32)atoi(hold.c_str());
+		if (k.key != Common::KEYCODE_INVALID) {
+			k.down = true;
+			_autoKeys.push_back(k);
+			k.time += holdMs;
+			k.down = false;
+			_autoKeys.push_back(k);
+			continue;
+		}
+		for (uint i = 0; i < name.size(); i++) {
+			char c = name[i];
+			k.key = c == '~' ? Common::KEYCODE_ESCAPE : (Common::KeyCode)tolower((byte)c);
+			k.ascii = c == '~' ? 0 : (uint16)(byte)c;
+			k.down = true;
+			_autoKeys.push_back(k);
+			k.time += holdMs;
+			k.down = false;
+			_autoKeys.push_back(k);
+		}
 	}
 }
 
@@ -256,18 +288,17 @@ Common::Error FlaaklypaEngine::run() {
 			_scene->handleEvent(e);
 		}
 
-		while (!_autoKeys.empty() && g_system->getMillis() - startTime >= _autoKeys[0].time) {
-			Common::String keys = _autoKeys[0].keys;
-			_autoKeys.remove_at(0);
-			debug(1, "Auto keys '%s'", keys.c_str());
-			for (uint i = 0; i < keys.size(); i++) {
-				char c = keys[i];
-				e.kbd = Common::KeyState(c == '~' ? Common::KEYCODE_ESCAPE : (Common::KeyCode)tolower((byte)c), c == '~' ? 0 : (uint16)(byte)c);
-				e.type = Common::EVENT_KEYDOWN;
-				_scene->handleEvent(e);
-				e.type = Common::EVENT_KEYUP;
-				_scene->handleEvent(e);
+		for (uint i = 0; i < _autoKeys.size();) {
+			if (g_system->getMillis() - startTime < _autoKeys[i].time) {
+				i++;
+				continue;
 			}
+			AutoKey k = _autoKeys[i];
+			_autoKeys.remove_at(i);
+			debug(1, "Auto key %d '%c' %s", k.key, k.ascii ? (char)k.ascii : ' ', k.down ? "down" : "up");
+			e.type = k.down ? Common::EVENT_KEYDOWN : Common::EVENT_KEYUP;
+			e.kbd = Common::KeyState(k.key, k.ascii);
+			_scene->handleEvent(e);
 		}
 
 		_scene->update();

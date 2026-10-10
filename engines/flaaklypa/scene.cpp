@@ -538,6 +538,9 @@ void Scene::handleEvent(const Common::Event &event) {
 			stopSequence();
 		onKey(event.kbd);
 		break;
+	case Common::EVENT_KEYUP:
+		onKeyUp(event.kbd);
+		break;
 	default:
 		break;
 	}

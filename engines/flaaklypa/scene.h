@@ -69,6 +69,7 @@ public:
 	virtual void onMouseUp(int hotspot, int x, int y) {}
 	virtual void onMouseMove(int hotspot, int x, int y) {}
 	virtual void onKey(const Common::KeyState &key) {}
+	virtual void onKeyUp(const Common::KeyState &key) {}
 	virtual void onAnimStarted(Anim *anim) {}
 	virtual void onAnimFinished(Anim *anim) {}
 	virtual void onTimer(int id, int data) {}

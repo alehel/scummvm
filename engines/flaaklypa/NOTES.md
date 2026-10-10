@@ -450,6 +450,82 @@ table, not a function in the Ghidra project): 0x103 -> `FUN_00428bd0` init,
 * Not done: help dialog, game over message box, high score / award
   registration, profile difficulty, the GAME module "game in progress"
   flag (`FUN_0040d8a0`), `sound.ini` volumes.
+## Sub game `wheelbarrow` ("Eplehøsten", started from `pee`)
+
+Catch the apples that ripen on the roof. Handler `0x44ed50` (not a function
+in the Ghidra project; the jump table dispatches 0x103 -> `FUN_0044ee50`
+init, 0x104 -> `44f5f0` close, 0x105 -> `44f630` mouse down, 0x10c ->
+`44f640` key down, 0x10d -> `44f730` key up, 0x110 -> `44f780` anim
+finished, 0x111 -> `450270` timer, 0x112 -> `44fb70` tick, 0x116 ->
+`429320` buttons: 1 help `FUN_0041e580`, 2 exit `FUN_0040cc30`). Engine:
+`wheelbarrow.cpp`. The hotspot mask is empty; the only hotspots are the
+`start` bitmap (3) and the two buttons.
+
+* State (`.bss`): running `0x68ba28`, score `ba2c`, level `ba30`, apples in
+  the basket `ba34`, lives `ba38`, basket capacity `bae8` (24), Solan's
+  animation struct `baf0` with x `bb98` (float, start 324), direction
+  `bb9c` (0 left, 1 right), speed `bba0` (300 px/s), apples in the
+  wheelbarrow `bba4`, Solan's state `bba8`; 12 apple counter bitmaps at
+  `bbb0` (`apple` at (208 + 30 i, 3), z 100), 10 pie bitmaps at `c398`
+  (`pie` at (732, 546 - 10 i), z i - 100), spawn timer handle `c394`, 10
+  apple structs at `ca28` (0xc4 bytes: active, type 0 good / 1 rotten, x,
+  y floats = sprite centre, bounce stage, vy, clip state, animation
+  struct). The engine keeps these as `Anim` objects of its own with
+  mutable `AnimDef`s (the original sprintf's the clip names into them).
+* Solan (`FUN_0044f300`): clip `<left|right>_<neutral|cycle|stop|dump|bonk>
+  <fullness>` at (round(x), 478) z 100, fullness = apples * 5 / 12 (0..5).
+  `neutral` is a bitmap, `cycle` loops while an arrow key is held (x +=
+  300 dt, clamped to 55..578), `dump` plays once. `stop` and `bonk` exist
+  as files but nothing in the executable starts them. Keys (`FUN_0044f640`,
+  `44f730`): left/right start and stop walking, up tips the wheelbarrow
+  when x <= 60, facing left, with apples and a basket present (sound
+  `empty1`); after `dump` ends (`FUN_0044faf0`) the apples go into the
+  basket (20 points each) and walking resumes if a key is still held
+  (`FUN_0044f870`, GetAsyncKeyState -> `onKeyUp` tracking).
+* Apples: the spawn timer fires 2 s after (re)start and then every 3750 -
+  300 level ms (`FUN_0044f550`, period re-armed by the EVENT module; a
+  negative period at level 13 would hang the original, clamped to 50 ms).
+  `FUN_00450270` picks one of 10 roof spots (`0x49f158`: x, y, start
+  stage), 10 % rotten, plays `<apple|rotten>_0` once (ripening, the apple
+  stands still), then `_1` looping while falling (started by the first
+  bounce). Physics `FUN_0044ff80` per tick: y += vy dt, vy += 600 dt; the
+  sprite is centred on (x, y) (`FUN_00412cf0`). Roof table `0x49f1d0`:
+  stage n bounces when y >= 273/300/335/362/570 with action 0/0/0/1/3,
+  vy = -vy * {0.5, 0.8, 0.3, 0.2}[action], sounds `roof1-4` / `rotten1-3`
+  for actions 0-1 and `ground1-2` / `splash1-4` for the ground (action 3).
+  A good apple on the ground costs a life (`lifedown1`; game over when
+  none left), a rotten one plays `rotten_2` and vanishes. Apples past
+  y 620 are removed. Z = slot index + 10 stage.
+* Catching (`FUN_0044fe50`): only apples in stage 4 (past the eaves); the
+  union of the sprite's rectangles before and after the move is tested
+  against the wheelbarrow, (x + 39, 520, 94 x 65) facing left or (x + 57,
+  520, 112 x 65) facing right. Good apple: `cart1-3`, counter + 1, 10 + 2
+  level points (`(level * 0.2 + 1) * 10` truncated); when the wheelbarrow
+  holds 12 the apple drops through. Rotten: `splash`, the load is lost.
+* Basket (`FUN_0044f280`): `basket<n>` at (54, 535) z 50 with n = apples *
+  4 / 24 clamped to 3. Tipping 24 or more (`FUN_0044faf0`) stops the spawn
+  timer, removes the basket and plays `pickup` (Ludvig carries it off) ->
+  `pie` (the pie out of the window) -> level + 1, 500 points, pies
+  redrawn, timer restarted -> `putdown` -> `basket0`.
+* Score (`FUN_0044f8d0`): every 3000 points give a life (`lifeup1`). Start:
+  3 lives, level 0 (with a profile the original starts at 3 x the
+  profile's value and shows `tournament:PLAYERREADY`). The wheelbarrow
+  counter is not reset by a new game (quirk of `FUN_0044f110`).
+* Screen: `help_0/1` at (0, 0), `exit_0/1` at (728, 0), z 100; `start`
+  (353, 267) z 100 with `wheelbarrow:START` in `Amerigo BT_14_` centred in
+  (356, 296, 89 x 33) z 101; labels `wheelbarrow:SCORE` / `:LIFE` centred in
+  (6, 85)-(85, 110) and (715, 85)-(795, 110), values below in (6, 110)-
+  (85, 135) and (715, 110)-(795, 135), z 200. Music `subgame18`, ambient
+  loop `birds`. `sound.ini` volumes are not applied.
+* Game over (`FUN_00450180`): Solan neutral, pie/pickup/putdown removed,
+  then (not done) the message box `wheelbarrow:GAMEOVER` via
+  `interfaceh:GAMEOVER` and the high score registration `FUN_0041f9a0`
+  (`wheelbarrow:LONGNAME`, medals 2500/5000/10000/15000); without a
+  profile the start button returns and the apples are cleared. Also not
+  done: the help dialog, the "abort the game?" box (`gamec:SUBGAMEABORT`,
+  flag `FUN_0040d8a0`) when leaving a running game, Tab to the scene index.
+* Testing: `autokey=t:key[:hold];...` (see "Development aids") presses the
+  arrow keys; the start button is at (400, 300).
 
 ### Bitmap fonts (FONT module, `font.cpp`)
 
@@ -679,8 +755,10 @@ buttons (2 help `FUN_0041e580`, 3 exit `FUN_0040cc30`, 4 album -> scene
 
 `start_scene`, `autoshot` / `autoshot_delay` / `autoshot_quit` (screenshot),
 `autoclick=t:x,y;t:x,y,m` (synthetic clicks, `m` = move only, t in ms after
-start), `autokey=t:keys;t:keys` (synthetic key presses, one per character,
-`~` = Escape), `random_seed` (deterministic boards).
+start), `autokey=t:key[:hold];...` (key press at t held for hold ms, default
+100; `left`, `right`, `up`, `down`, `space`, `esc`, `tab`, `return`, a
+character, or a string of characters typed one after the other with `~` =
+Escape), `random_seed` (deterministic boards).
 
 ## Mini game checklist
 
@@ -697,6 +775,9 @@ Sub games (`[subgame]`, score based):
 | x | sockdrawer | Sokkeskapet | desk | data (message box, high score, help open) |
 | | wheelbarrow | Eplehøsten | pee | data |
 | x | hopscotch | Solan og Ludvig i Paradis | house | data + data1 (message box, high score, help open) |
+| | sockdrawer | Sokkeskapet | desk | data |
+| x | wheelbarrow | Eplehøsten | pee | data (message box, high score, help open) |
+| | hopscotch | Solan og Ludvig i Paradis | house | data |
 | | audiopairs | Reodors Lydmaskin | house | data |
 | x | textinvader | Ordspillet | goodbye | data2 (message box, high score, help, profiles open) |
 | | hopscotch | Solan og Ludvig i Paradis | house | data |

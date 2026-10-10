@@ -29,6 +29,7 @@
 #include "flaaklypa/sockdrawer.h"
 #include "flaaklypa/textinvader.h"
 #include "flaaklypa/whackamole.h"
+#include "flaaklypa/wheelbarrow.h"
 
 namespace Flaaklypa {
 
@@ -196,6 +197,8 @@ Scene *createScene(FlaaklypaEngine *vm, const char *name) {
 		return new ButterflyScene(vm, def);
 	if (!scumm_stricmp(name, "buttercol"))
 		return new ButtercolScene(vm, def);
+	if (!scumm_stricmp(name, "wheelbarrow"))
+		return new WheelbarrowScene(vm, def);
 	return new Scene(vm, def);
 }
 

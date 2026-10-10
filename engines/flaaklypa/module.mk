@@ -22,6 +22,7 @@ MODULE_OBJS = \
 	sockdrawer.o \
 	textinvader.o \
 	whackamole.o \
+	wheelbarrow.o \
 	yard.o
 
 # This module can be built as a plugin
