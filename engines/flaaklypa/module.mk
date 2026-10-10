@@ -4,6 +4,7 @@ MODULE_OBJS = \
 	anim.o \
 	archive.o \
 	audiopairs.o \
+	butterfly.o \
 	console.o \
 	cursor.o \
 	flaaklypa.o \

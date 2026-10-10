@@ -23,6 +23,7 @@
 #include "flaaklypa/audiopairs.h"
 #include "flaaklypa/flaaklypa.h"
 #include "flaaklypa/hopscotch.h"
+#include "flaaklypa/butterfly.h"
 #include "flaaklypa/puzzle.h"
 #include "flaaklypa/scenes.h"
 #include "flaaklypa/sockdrawer.h"
@@ -191,6 +192,10 @@ Scene *createScene(FlaaklypaEngine *vm, const char *name) {
 		return new AudiopairsScene(vm, def);
 	if (!scumm_stricmp(name, "whackamole"))
 		return new WhackamoleScene(vm, def);
+	if (!scumm_stricmp(name, "butterfly"))
+		return new ButterflyScene(vm, def);
+	if (!scumm_stricmp(name, "buttercol"))
+		return new ButtercolScene(vm, def);
 	return new Scene(vm, def);
 }
 

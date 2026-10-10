@@ -81,6 +81,7 @@ static const char *const kImplementedGames[] = {
 	"hopscotch",
 	"audiopairs",
 	"whackamole",
+	"butterfly",
 	nullptr
 };
 
