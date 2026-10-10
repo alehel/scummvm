@@ -84,6 +84,28 @@ private:
 	static int _introCount, _introMask; ///< random pick without repeats, kept across visits like the original
 };
 
+/** Story page 9: outside the sheik's tent (foran sjeikens telt). */
+class OuttentScene : public Scene {
+public:
+	OuttentScene(FlaaklypaEngine *vm, const SceneDef *def);
+
+	void onInit(int arg) override;
+	void onMouseDown(int hotspot, int x, int y) override;
+	void onRightClick(int x, int y) override;
+	void onKey(const Common::KeyState &key) override;
+	void onAnimStarted(Anim *anim) override;
+	void onAnimFinished(Anim *anim) override;
+	void onTimer(int id, int data) override;
+
+private:
+	int pickNoRepeat(int &count, int &mask, int n);
+	void playAmbience();
+
+	int _cushionsCount, _grassCount, _tableCount; ///< random pick counters, reset on every visit
+	int _dreamNarrationCount;                  ///< the dream narration plays once per visit
+	static int _cushionsMask, _grassMask, _tableMask; ///< random pick masks, kept across visits like the original
+};
+
 } // End of namespace Flaaklypa
 
 #endif
