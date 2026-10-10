@@ -278,6 +278,85 @@ glyph's top left pixel. Glyphs keep their colours; the advance is the glyph
 width. Text areas are animation structs with a surface filled with the key
 colour 0x00ff00, flags 0x101 = centred.
 
+## Sub game `butterfly` ("Sommerfugler i magen") and its album `buttercol`
+
+Catch butterflies with a net on a meadow; wasps and bees cost points. Handler
+`0x43a410` (jump table; not a function in the Ghidra project): 0x103 ->
+`FUN_0043a4f0` init, 0x104 -> `43a8c0` close (frees fonts and text areas),
+0x105 -> `43a920` mouse down, 0x108 -> `43b3e0` mouse move, 0x110 ->
+`43b990` anim finished, 0x112 -> `43b410` frame tick, 0x116 -> `43b3b0`
+buttons (2 help `FUN_0041e580`, 3 exit `FUN_0040cc30`, 4 album -> scene
+`buttercol`). Engine: `butterfly.cpp` (`ButterflyScene`, `ButtercolScene`).
+
+* Tables: species at `0x49e078` (15 x 0x40 bytes: class 0/1 common, 2 rare;
+  name; points 4..100; spawn weight, the weights add up to 100; then for the
+  normal and the "scared" mode: min/max ms between turns, min/max speed in
+  px/s, min/max turn in degrees), insects at `0x49e438` (wasp -10, bee -20
+  points; the help text says 5 and 10), levels at `0x49e4b8` (11 x {time
+  limit ms 120000..190000, points needed 250..7500, speed factor 0.7..1.2}),
+  meadow rectangle (24, 88)-(702, 532) at `0x49e550`, text rectangles at
+  `0x49e560`.., medal thresholds {1500, 3000, 5000} at `0x49e53c`.
+* Entities: 30 butterfly slots at `0x66a1a8` and 30 insect slots at
+  `0x667e40`, 0xd8 bytes each: active, insect flag, species, resting, mode,
+  next turn time, float x/y (top left of the 32x32 sprite), heading (0 up,
+  90 right), direction vector, speed, then an embedded animation struct whose
+  name is `sprintf("%s%d", species, clip * 45)`: clip = ((heading + 22) mod
+  360) / 45 for butterflies (`FUN_0043ae60`), ((heading + 45) mod 360) / 90 *
+  2 for insects (`43ae10`, 4 clips). The clip is removed and re-added when it
+  changes (`43acd0`), butterflies at z -100, insects at z 0.
+* Spawning (`43b4c0`, `43b820`): a butterfly every 550 / 10 frames (/ 11 on
+  level 11), an insect every 900 / 10; species by weight (`43b5d0`). They
+  enter at the left edge (x = 24 - 32, heading 90) or the right edge (x =
+  702, heading 270), y random in 88..500 (`43b550`), speed from the mode
+  table, and are removed once the 32x32 rectangle no longer touches the
+  meadow (`43ee30`).
+* Turning (`43ac40`): at the next turn time, heading += random turn with a
+  random sign; a butterfly in normal mode whose quadrant is "down" rests
+  (clip stopped, `43af30`) one time in four (`43aef0`); next turn time =
+  now + random interval. Movement (`43b790`): pos += speed * dir * dt *
+  0.001 * level speed factor.
+* Net (`43a950`): the "catcher" clip (124x124) follows the mouse at (x - 35,
+  y - 35), z 250, while the cursor is hidden (cursor mode 3). A click plays
+  it; insects within 35 px of the sprite centre (pos + 16, distance rounded)
+  are "stung" (points subtracted, "scream" clip, the insects stay); otherwise
+  butterflies within 35 px are caught (points, caught[species]++, removed,
+  "catch" clip) and those within 150 px are scared into mode 1 ("miss" clip
+  when nothing was caught). When the level points exceed the level's score
+  after a catch: bonus = remaining time / time limit * 100 * (level + 1),
+  then the next level (max 11, `43b220`): level points reset, background
+  `level_<level mod 4>.bmp` at (20, 82) z -200, texts, timer restart.
+* Timer (`43b920`): "timermove" (looping) at (728, 425 - elapsed * 322 /
+  limit); when the limit passes, "timerend" plays at (728, 103) and the tick
+  stops; when it has finished (`43b990`): net removed, message box
+  `interfaceh:GAMEOVER` / `butterfly:ENDMESSAGE`, all entities removed, the
+  caught species go into profile item 7 (`FUN_0041b740(7, i, 0x10, 0)`),
+  high score `FUN_0041f9a0(0, score, medals)`. Start: "startanim" (hotspot 1,
+  looping, z 150) is clicked -> "timerstart" plays -> game starts
+  (`43b990`), `FUN_0040d8a0(1)` sets the "sub game running" flag (leaving
+  asks `gamec:SUBGAMEABORT`), album button disabled.
+* Screen: borders at z 100, icons of the species in the air in the top window
+  (`43afc0`: bitmap/<species>.bmp at y 6, common ones from x 77 step 52,
+  rare ones from x 581 step 61, in table order), labels COMMON/RARE/LEVEL/
+  NEXTLEVEL in `Amerigo BT_10_`, score / next level score / level number in
+  `Amerigo BT_18_` (rectangles (268,554)-(446,584), (553,545)-(613,577),
+  (616,545)-(666,577)), all z 110. Buttons help (0, 0), exit (728, 0), album
+  (24, 541) z 150. Music `subgame5`.
+* `buttercol` (`0x43a230`: init `43a2a0`, mouse down `43a3b0`, buttons
+  `432d10`): reads the 15 collected flags from profile item 7, adds the
+  `*_coll` bitmaps of the collected species at z -10 with hotspot 20 + i
+  (list `0x4d8bd0`, note that it starts small_white, large_white while the
+  species table starts largewhite, smallwhite). A click on one opens the
+  "info" fact page about it; exit returns to `butterfly`. Registers the
+  cheat "LOVELYFLIES" (`FUN_0040ad50`) which marks all as collected.
+* Engine notes: ticks are frames (60 fps limiter; the original's rate is
+  unknown). The collected flags live in a static of `ButterflyScene` until
+  profiles exist. After game over the start clip is shown again (the
+  original stays in the end state behind its dialogs). `debug(3)` dumps all
+  entity positions once a second.
+* Not done: message box, help dialog, profile storage, high score / medals,
+  the sub game abort confirmation, the "info" fact page, `sound.ini`
+  volumes, the LOVELYFLIES cheat.
+
 ## Development aids (config keys in the `[flaaklypa]` section)
 
 `start_scene`, `autoshot` / `autoshot_delay` / `autoshot_quit` (screenshot),
@@ -307,7 +386,7 @@ Sub games (`[subgame]`, score based):
 | | buildabike | Reodors sykkelverksted | garage | data |
 | | mountain | (no title in language.ini) | morning | data (no sceneDefs entry yet) |
 | | pipeline | Oljeeventyret | outtent | data |
-| | butterfly | Sommerfugler i magen | pee | data |
+| x | butterfly | Sommerfugler i magen | pee | data (message box, high score, profile, help, info page open) |
 | | hustle | Emanuels utfordring | intent | data |
 
 Activities (`[activity]`, open ended):

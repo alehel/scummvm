@@ -21,6 +21,7 @@
 #include "common/debug.h"
 
 #include "flaaklypa/flaaklypa.h"
+#include "flaaklypa/butterfly.h"
 #include "flaaklypa/puzzle.h"
 #include "flaaklypa/scenes.h"
 
@@ -176,6 +177,10 @@ Scene *createScene(FlaaklypaEngine *vm, const char *name) {
 		return new YardScene(vm, def);
 	if (!scumm_stricmp(name, "puzzle"))
 		return new PuzzleScene(vm, def);
+	if (!scumm_stricmp(name, "butterfly"))
+		return new ButterflyScene(vm, def);
+	if (!scumm_stricmp(name, "buttercol"))
+		return new ButtercolScene(vm, def);
 	return new Scene(vm, def);
 }
 
