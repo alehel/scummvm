@@ -4,10 +4,10 @@ MODULE_OBJS = \
 	anim.o \
 	archive.o \
 	audiopairs.o \
-	butterfly.o \
-	buildabike.o \
 	beemaze.o \
 	bugzzz.o \
+	buildabike.o \
+	butterfly.o \
 	console.o \
 	cursor.o \
 	dialog.o \
@@ -17,8 +17,9 @@ MODULE_OBJS = \
 	gem3d.o \
 	hopscotch.o \
 	house.o \
-	lettersort.o \
 	hustle.o \
+	intent.o \
+	lettersort.o \
 	menu.o \
 	metaengine.o \
 	music.o \
@@ -29,10 +30,10 @@ MODULE_OBJS = \
 	scene.o \
 	scenedata.o \
 	sockdrawer.o \
+	sound.o \
 	textinvader.o \
 	whackamole.o \
 	wheelbarrow.o \
-	sound.o \
 	yard.o
 
 # This module can be built as a plugin

@@ -123,6 +123,30 @@ private:
 	int _audiopairsHotspot;                      ///< DAT_005b877c
 };
 
+/** Story page 10: inside the sheik's tent (I sjeikens telt). */
+class IntentScene : public Scene {
+public:
+	IntentScene(FlaaklypaEngine *vm, const SceneDef *def);
+
+	void onInit(int arg) override;
+	void onMouseDown(int hotspot, int x, int y) override;
+	void onRightClick(int x, int y) override;
+	void onKey(const Common::KeyState &key) override;
+	void onAnimStarted(Anim *anim) override;
+	void onAnimFinished(Anim *anim) override;
+	void onTimer(int id, int data) override;
+
+private:
+	void setMusicVolume(float volume);
+	/** Puts the idle/bored/reaction lists of the given characters (bit mask of ids) back to the defaults. */
+	void restoreLists(int chars);
+	int pickChessVariant();
+
+	int _chessCount;         ///< clicks on the chess board this visit
+	static int _chessMask;   ///< variants played, kept across visits like the original
+	bool _wakeUpTimer;       ///< the trance wake up timer is pending
+};
+
 } // End of namespace Flaaklypa
 
 #endif

@@ -1321,6 +1321,48 @@ next `tvroom`, previous `desk`.
 * TODO: ambience clip, fact pages, profile (car part / 3D glasses found),
   award dialogs, the navigator dialog itself (engine stub).
 
+## Story page `intent` ("I sjeikens telt")
+
+Inside the sheik's tent (`intent.cpp`, handler `FUN_004256c0`; init
+`FUN_004257a0`, mouse `FUN_00425960`, right click `FUN_00425af0`, anim
+started `FUN_00425b20`, anim finished `FUN_00425b60`, timer `FUN_004258c0`,
+key `FUN_00425cb0`). Music `track10`, cursor table `intent_0` (never
+switched).
+
+Characters (ids are the clip group bits): Ben 0x100 (hotspot 50, z -10),
+Emanuel 0x200 (hotspot 52), Soline 0x400 (hotspot 51, no reaction list).
+On a fresh visit (arg 0) Soline starts idling and the intro `S10AN-SS-001`
+(Ben and Emanuel, about a minute) plays; with arg != 0 the characters are
+reset to idle.
+
+Hotspots:
+
+* 1 → sub game `chess` (not ported, `startGame` warns), 2 → `hustle`,
+  51 (a click on Soline) → `puzzle`.
+* 3 chess board: `S10AN-SS-005` or the sequence `S10AN-SS-005b1/b2`, picked
+  with the no-repeat helper (`FUN_0040a150`; count reset per visit, mask kept
+  across visits).
+* 4 `S10AN-SS-004`, 5 `smoke`, 6 `S10AN-SS-008` (single clips), 10
+  `S10AN-SS-003a` (the cursor table lists 10 but neither the mask nor any
+  element carries it, so it is unreachable, as in the original data).
+* 7 trance: sequence `S10AN-SLI-T01`, `S10AN-SS-002b`. When T01 ends all
+  three switch to their T02 pose lists (Ben/Emanuel via T01); when 002b
+  *starts* (event 0x10f) the music is ducked to 0.25 and a 43 s timer is
+  set, after which everybody gets the default lists back and plays T03.
+* 8 belly dance: sequence `S10AN-SS-006a/c/d`. After 006a the looping
+  `S10AN-SS-006b` is added, music ducked, Ben/Emanuel play D01 then loop D02;
+  after 006c 006b is removed, music restored and they play D03.
+* 9 hidden car part (`carpart`, shown while profile key 0 is 0), 11 3D
+  glasses (`3dglasses`, while 3D scene 9 is not found): removed on click.
+* 100..113 fact pages. Ben/Emanuel clicks play their reaction lists
+  (framework).
+* Right click: navigator, next `town` (arg 2), previous `outtent`.
+* Space: removes 006b, restores the music volume and the default lists of
+  all three, kills the wake up timer.
+
+TODO: music volume (`FUN_0040b410(2, 2, v)`, only logged), profile key 0 /
+3D scene 9 checks and the award dialogs, fact pages, the `chess` sub game.
+
 ## Development aids (config keys in the `[flaaklypa]` section)
 
 `start_scene`, `autoshot` / `autoshot_delay` / `autoshot_quit` (screenshot),

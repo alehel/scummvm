@@ -221,6 +221,8 @@ Scene *createScene(FlaaklypaEngine *vm, const char *name) {
 		return new BeemazeScene(vm, def);
 	if (!scumm_stricmp(name, "bugzzz"))
 		return new BugzzzScene(vm, def);
+	if (!scumm_stricmp(name, "intent"))
+		return new IntentScene(vm, def);
 	return new Scene(vm, def);
 }
 
