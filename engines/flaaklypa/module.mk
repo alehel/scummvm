@@ -13,12 +13,14 @@ MODULE_OBJS = \
 	flaaklypa.o \
 	font.o \
 	gem3d.o \
+	goodbye.o \
 	hopscotch.o \
 	lettersort.o \
 	hustle.o \
 	menu.o \
 	metaengine.o \
 	music.o \
+	outro.o \
 	pipeline.o \
 	puzzle.o \
 	puzzledata.o \
