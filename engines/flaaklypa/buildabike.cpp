@@ -104,7 +104,7 @@ static const float kHealthSpeed = 50.0f;     ///< health bar units per second (0
 static const float kTimeBonus = 5.0f;        ///< points per second left when a bike is finished (0x49d9fc)
 
 BuildabikeScene::BuildabikeScene(FlaaklypaEngine *vm, const SceneDef *def) : Scene(vm, def),
-	_energy(nullptr), _queueWrite(0), _scoreText(nullptr), _healthBar(nullptr), _drag(nullptr),
+	_solidMask(nullptr), _energy(nullptr), _queueWrite(0), _scoreText(nullptr), _healthBar(nullptr), _drag(nullptr),
 	_dragKind(kKindNone), _dragType(0), _dragOrigin(0), _dragData(0), _running(false), _level(1),
 	_bikesDone(0), _score(0), _scoreDisplay(0), _health(0), _maxHealth(100), _healthDisplay(0),
 	_healthWidth(-1), _lastTick(0), _startTime(0), _highlighted(0) {
@@ -181,6 +181,10 @@ BuildabikeScene::~BuildabikeScene() {
 				_hitMasks[k][t]->free();
 				delete _hitMasks[k][t];
 			}
+	if (_solidMask) {
+		_solidMask->free();
+		delete _solidMask;
+	}
 	delete _energy;
 }
 
@@ -196,6 +200,11 @@ bool BuildabikeScene::load() {
 			_hitMasks[kKindFixed][t] = resources()->loadMask(_name, Common::String::format("bitmap/fixed_%s_hs.bmp", kPartNames[t]));
 		}
 	_font.load("Counter");
+	// Parts are hit tested by their rectangle (hotspot mode 2); the largest
+	// bitmap is 200x100.
+	_solidMask = new Graphics::Surface();
+	_solidMask->create(256, 256, Graphics::PixelFormat::createFormatCLUT8());
+	memset(_solidMask->getPixels(), 1, 256 * 256);
 
 	// Sound effects, played as clones by the original (FUN_00438250).
 	static const char *const sounds[] = { "click", "correct", "wrong", "down", "up", "drop1", "drop2", nullptr };
@@ -330,8 +339,8 @@ void BuildabikeScene::clearText(Anim *a) {
 Anim *BuildabikeScene::newPart(int kind, int type, int hotspot) {
 	Anim *a = new Anim(this, &_partDefs[kind][type]);
 	a->setHotspot(hotspot);
-	if (kind == kKindBroken || kind == kKindFixed)
-		a->setHitMask(_hitMasks[kind][type]);
+	const Graphics::Surface *mask = (kind == kKindBroken || kind == kKindFixed) ? _hitMasks[kind][type] : nullptr;
+	a->setHitMask(mask ? mask : _solidMask);
 	return a;
 }
 
@@ -379,6 +388,7 @@ void BuildabikeScene::placePart(int bike, int slot, int kind, int type) {
 	// by the next platform move (always in the same frame for new bikes).
 	a->add(x, y + (b.platform->y() - kPlatformPos[bike][1]), kSlotZ[slot]);
 	b.parts[slot] = a;
+	debug(1, "Buildabike: bike %d slot %d gets %s", bike, slot, a->name());
 }
 
 void BuildabikeScene::removePart(int bike, int slot) {
@@ -691,6 +701,7 @@ void BuildabikeScene::endDrag() {
 void BuildabikeScene::onMouseUp(int hotspot, int x, int y) {
 	if (!_running || !_drag)
 		return;
+	debug(1, "Buildabike: drop %s on hotspot %d at %d,%d", _drag->name(), hotspot, x, y);
 	bool ok = false;
 	if ((hotspot >= kHotspotPlatformFirst && hotspot < kHotspotPlatformFirst + kBikes) ||
 	    (hotspot >= kHotspotSlotFirst && hotspot < kHotspotSlotFirst + kBikes * kSlots))
@@ -797,7 +808,8 @@ bool BuildabikeScene::queuePart(int type) {
 	return true;
 }
 
-// FUN_00438bf0: the oldest repaired part, or -1.
+// FUN_00438bf0: the most recently queued repaired part (the ring is
+// scanned backwards from the write index), or -1.
 int BuildabikeScene::machineOutput() {
 	int i = _queueWrite;
 	while (true) {

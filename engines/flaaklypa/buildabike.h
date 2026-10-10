@@ -188,6 +188,7 @@ private:
 	Common::String _defNames[4][kTypes];
 	AnimDef _partDefs[4][kTypes];          ///< broken, fixed, wall bitmaps and the line clips
 	Graphics::Surface *_hitMasks[2][kTypes];
+	Graphics::Surface *_solidMask;         ///< all ones: the rectangle hit test (mode 2) of the original
 	Graphics::ManagedSurface *_energy;
 	BitmapFont _font;
 
