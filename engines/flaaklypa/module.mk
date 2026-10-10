@@ -7,6 +7,7 @@ MODULE_OBJS = \
 	butterfly.o \
 	buildabike.o \
 	beemaze.o \
+	bugzzz.o \
 	console.o \
 	cursor.o \
 	flaaklypa.o \
@@ -28,6 +29,7 @@ MODULE_OBJS = \
 	textinvader.o \
 	whackamole.o \
 	wheelbarrow.o \
+	sound.o \
 	yard.o
 
 # This module can be built as a plugin

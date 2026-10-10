@@ -892,6 +892,102 @@ down, 0x10d -> `42f340` key up, 0x110 -> `432d30` anim finished, 0x111 ->
   round), `sound.ini` volumes, the cheat console commands (SHROOMS, ...).
   Development: `autohold=t:d;t:d` holds (l/r/u/d) or releases (0) an
   arrow key t ms after the scene starts.
+## Sub game `bugzzz` ("Larveliv i leiren", started from `yard`)
+
+A Snake game for one to four players on a tree trunk. Handler `0x432fe0`
+(not a function in the Ghidra project; dispatches 0x103 -> `FUN_00437040`
+init, 0x104 -> `4378b0`, 0x105 -> `437a10` (hotspot), 0x10c -> `437c10`
+(keys '1'..'4'), 0x110 -> `437c80`, 0x111 -> `437c00` (timer counters),
+0x116 -> `4379f0` (buttons 0x1f help, 0x20 exit), 0x119 -> `4330d0`). Event
+0x119 is sent by the main loop *after* `SCENE_Draw` (`FUN_0040d110`): the
+game draws its sprites straight onto the frame buffer. Engine:
+`bugzzz.cpp` draws them into a full screen overlay element ("playfield",
+z 200) instead; `sound.cpp` (`SoundPlayer`) plays the 28 WAV effects, the
+only scene besides racing that uses WAV files.
+
+* Players: four worms (green, blue, red, yellow; `0x659cd0 + i * 0xeb4`),
+  keys left/right/spit: arrows + Enter, A/S + Ctrl, J/K + Space, numpad
+  * / - / /. Start corners and angles at `0x4d3888`: (25, 140, -pi/4),
+  (25, 475, pi/4), (475, 25, 5pi/4), (475, 475, 3pi/4). All heads use the
+  `head3` sheet, bodies `body4` / `bbod` / `rbod` / `ybod`.
+* Selection screen (`FUN_00434060`): `dif_backdrop` at (203, 243) with
+  `<colour>_on/off` icons (hotspots 1..4 are the whole bottom columns) and
+  `start_off/on` (hotspot 5); clicking a colour or pressing its digit
+  toggles the player and slides its bottom panel out and in
+  (`FUN_00433c20`, 60 steps/s along the eased table `524 + 0.3 i(i-1)/2`,
+  `FUN_00437560`). Panels per player: `<colour>_text` (join message),
+  `_info` (keys / ready message), `_Leaf` (score, spits, lives, ants left)
+  at x = -100 + 200 i, y 524, z 20 - i; their text areas (relative
+  rectangles at `0x4d60c0..`, font `Comic Sans MS_08_VERY_DARK`) follow the
+  bitmaps (`FUN_00433db0`). The green panels are not in `scenedata.cpp`
+  (the generator skipped them); they are defined in `load()`. During a game
+  a free colour can join in two clicks (`FUN_00437a10`).
+* Time: three counters driven by timers of 66 ms (`gTicks`, animation
+  frames), 1000 ms (`gSeconds`) and 333 ms (one spit per tick); the engine
+  derives them from the elapsed time. Movement is scaled by `delta` =
+  ms since the last frame / 20 (`FUN_00436c70`).
+* Level table `0x4d7210` (9 levels x 0x30): ants green/red/brown, mushrooms
+  speed/slow/death/spit/stop, seconds, ants required, worm speed (x2), ant
+  speed; `kLevels_` in `bugzzz.cpp`. Ants appear after 0..4 s, mushrooms at
+  a random second before time - 10, at x 30..450, y 100..450.
+* Worm (`FUN_004367e0`): the head moves `speed * delta` per frame along its
+  angle, the keys turn it 0.12 rad per frame; every 11 pixels a knot is
+  dropped and the 100 body knots shift (`FUN_00436980`); segments are drawn
+  interpolated between knots (`FUN_00436900`), the first one under the
+  head, 7 segments at first, +1 per bite, max 97. The "nose" 22 px ahead of
+  the head does the eating (`FUN_004362d0`, square of size/3 around the
+  object, size/5 for the death mushroom) and the collisions
+  (`FUN_00435850`): screen edge or tree mask (`bitmap/Tree mask.bmp`, level
+  1, `Tree mask02.bmp` later; a pixel differing from pixel (200, 0) blocks),
+  own body beyond the sixth segment (16 px squares), another worm's head
+  or body, another player's spit (owner gets a frag). Death
+  (`FUN_00435ee0`): a life, the body sheet becomes `explode`, the head
+  plays `die`; afterwards the worm respawns in its corner and blinks for 22
+  ticks (`FUN_00433650`). Points (`FUN_004365e0`): green ant 5, red 10,
+  brown 15, speed mushroom 10, slow 5, spit mushroom 10 (+5 spits), stop
+  15 (ants freeze), death 0 (poison kills), larva: an extra life (one larva
+  per 300 points, `FUN_00435370`). Points appear as the `5` / `10` / `15`
+  sprites 20 px off the nose. Speed / slow last 10 s (+2 / -1).
+* Ants (`FUN_004348a0`, `FUN_00434af0`): walk along their angle at the
+  level's ant speed (x1.5 red, x2 brown), turn away from worms, bounce off
+  the 30..600 x 30..522 play area with a random new heading and a pause of
+  24..68 ticks showing the turning sheet, or (half of them) roam off screen
+  and reappear; near the tree mask they turn, after six contacts they
+  respawn; overlapping ants turn once. Draw states (`FUN_00435070`): appear,
+  walk, turn, frozen, explode; sheets `yapp/ywalk/ystop` (green),
+  `rapp/rwalk/rstop` (red), `appear/ant/stop` (brown), mushrooms `white`,
+  `black`, `red`, `blue`, `green` + `<name>exp`, larva `life`.
+* Spits (`FUN_00436a20`, `FUN_00435400`): from the nose at speed + 3, 300
+  px range, stop at the tree; ants hit freeze, mushrooms explode, another
+  worm's head dies, its body absorbs the spit.
+* Sprite sheets (`0x4d1158`, 0x120 bytes each, `kSpriteDefs`): frames
+  across, direction rows down (32 directions >> shift), frame = ticks
+  since start x speed, colour key = pixel (0, 0); direction row =
+  ((angle + pi/2) mod 2pi) / 2pi x 32 (`FUN_00434e20`).
+* Woodpecker: `bird_in` then the looping `bird_hakke` at (637, 198); the
+  branch `branch01..30` at (698, 242) shrinks with the time
+  (`(1 - left / time) * 30`, `FUN_004352c0`). Level number (80x20 at
+  725, 230) and time left (725, 310) in `Amerigo BT_10_`, two copies each
+  because they scroll. Time out (`FUN_00435f50`): every worm dies, `hakkned`
+  (level 1) or `branch_fall_from_top` plays, then the TIMEOUT message and
+  the level restarts. Level complete (ants eaten >= required,
+  `FUN_00436db0`): message, then the trunk scrolls down 600 px in 4 s
+  (`FUN_00433e40`: `bottom` / `middle01` / `middle02` alternate, texts and
+  bird move along), then `FUN_00433220` starts the next level (max 9).
+  Game over when nobody has lives (`FUN_00434530`): single player -> high
+  score, several -> ranking message; back to the selection screen.
+* Music `subgame2`; volumes from `sound.ini` (`sound=0.69`). Buttons
+  `help_0/1` (hotspot 31) and `exit_0/1` (32) over the `Help` / `Exit`
+  bitmaps (z 90).
+* Not done: the message boxes (level complete, time out, ranking), the
+  high score registration (`FUN_0041f9a0`, medals 500/1000/1500 at
+  `0x4d7200`), the help dialog, tournament mode (`FUN_00419490`: one life,
+  no joining), the unused "frags" and five way spit debug modes, Tab to the
+  scene index. The woodpecker's first branch is added at z 10 (the original
+  uses z 99 once, a quirk). Development aids: `bugzzz_keys=t:name[,u][*n/ms]`
+  presses / releases keys (left, right, return, space, ctrl, a, s, j, k,
+  1..4, kpmul, kpminus, kpdiv, esc) t ms after the scene starts, repeated n
+  times every ms; `bugzzz_required=N` overrides the ants needed per level.
 
 ### Bitmap fonts (FONT module, `font.cpp`)
 
@@ -1142,6 +1238,9 @@ Sub games (`[subgame]`, score based):
 | x | lettersort | Postsorteringsmaskinen | yard | data (help, message box, high score open) |
 | | bugzzz | Larveliv i leiren | yard | data |
 | x | sockdrawer | Sokkeskapet | desk | data (message box, high score, help open) |
+| | lettersort | Postsorteringsmaskinen | yard | data |
+| x | bugzzz | Larveliv i leiren | yard | data (message boxes, high score, help open) |
+| | sockdrawer | Sokkeskapet | desk | data |
 | | wheelbarrow | Eplehøsten | pee | data |
 | x | hopscotch | Solan og Ludvig i Paradis | house | data + data1 (message box, high score, help open) |
 | | sockdrawer | Sokkeskapet | desk | data |

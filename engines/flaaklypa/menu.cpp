@@ -22,6 +22,7 @@
 
 #include "flaaklypa/audiopairs.h"
 #include "flaaklypa/beemaze.h"
+#include "flaaklypa/bugzzz.h"
 #include "flaaklypa/flaaklypa.h"
 #include "flaaklypa/hopscotch.h"
 #include "flaaklypa/butterfly.h"
@@ -214,6 +215,8 @@ Scene *createScene(FlaaklypaEngine *vm, const char *name) {
 		return new PipelineScene(vm, def);
 	if (!scumm_stricmp(name, "beemaze"))
 		return new BeemazeScene(vm, def);
+	if (!scumm_stricmp(name, "bugzzz"))
+		return new BugzzzScene(vm, def);
 	return new Scene(vm, def);
 }
 
