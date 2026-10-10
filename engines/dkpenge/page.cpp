@@ -202,8 +202,16 @@ bool LivePage::open(Database &db, Resources &res, uint index, const Common::Poin
 	if (_rec->isPage && !_tmpl)
 		debugC(1, kDebugGeneral, "DKPenge: page %u (type %d) has no template with id %d", index, _rec->type, _rec->id);
 
+	// A popup whose template carries a position opens there and nothing
+	// else is consulted (FUN_00454c90): the drop-down explore bars, the chest
+	// pages and the ending's options bar. Otherwise the record's own
+	// position applies. (Child pages do the same in FUN_00486aa0, but no
+	// child page template has a position; base pages always sit at 0,0.)
 	Common::Point base = origin;
-	if (_rec->isPage && (_rec->type == kPagePopup || _rec->type == kPageDragPopup || _rec->type == kPageRolloffClose))
+	bool popupType = _rec->isPage && (_rec->type == kPagePopup || _rec->type == kPageDragPopup || _rec->type == kPageRolloffClose);
+	if (popupType && _tmpl && _tmpl->hasPos4c)
+		base += _tmpl->pos4c;
+	else if (popupType)
 		base += _rec->pos;
 
 	// Panels stored with the record, placed according to the template
@@ -256,7 +264,7 @@ bool LivePage::open(Database &db, Resources &res, uint index, const Common::Poin
 	// original's window creation centres it in its parent; the questions,
 	// save prompts, zoom captions, glossary and help pages are such pages
 	if (isPopup() && origin == Common::Point(0, 0) && _rec->pos == Common::Point(0, 0) && !_bounds.isEmpty() &&
-			((_tmpl && _tmpl->centred) || (_bounds.left == 0 && _bounds.top == 0 && !(_tmpl && _tmpl->hasPos4c))))
+			!(_tmpl && _tmpl->hasPos4c) && ((_tmpl && _tmpl->centred) || (_bounds.left == 0 && _bounds.top == 0)))
 		moveBy((640 - _bounds.width()) / 2 - _bounds.left, (480 - _bounds.height()) / 2 - _bounds.top);
 	createCollages(db, res);
 	debugC(1, kDebugGeneral, "DKPenge: opened page %u type %d template %d dir '%s' panels %u bounds %d,%d,%d,%d",
