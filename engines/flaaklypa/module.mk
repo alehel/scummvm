@@ -13,6 +13,7 @@ MODULE_OBJS = \
 	dialog.o \
 	flaaklypa.o \
 	font.o \
+	garage.o \
 	gem3d.o \
 	hopscotch.o \
 	lettersort.o \
