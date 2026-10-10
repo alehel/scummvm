@@ -26,6 +26,7 @@ MODULE_OBJS = \
 	metaengine.o \
 	morning.o \
 	music.o \
+	outtent.o \
 	pipeline.o \
 	puzzle.o \
 	puzzledata.o \

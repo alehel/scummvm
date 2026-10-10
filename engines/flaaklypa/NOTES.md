@@ -1607,6 +1607,54 @@ TODO: music volume (`FUN_0040b410`, no music volume API yet), the award
 dialogs, profile, fact pages; `gallery` and `draughts` are not ported yet
 (`startGame` warns).
 
+## Story page `outtent` ("Foran sjeikens telt")
+
+Story page 9: Solan and Emanuel Desperados in front of the sheik's tent
+("Aladin Oil"), with the car on the left. Handler `FUN_00425ff0`: 0x103 ->
+`FUN_004260d0` init, 0x105 -> `426380` mouse down, 0x107 -> `426540`
+navigator (next `intent`, previous `garage`), 0x10c -> `426560` key, 0x10f
+-> `426230` anim started, 0x110 -> `4262a0` anim finished, 0x111 ->
+`426630` timer. Engine: `outtent.cpp` (`OuttentScene`). Music `track9`
+plus the MUSIC module's random ambience clips (`FUN_0040b0f0`: one of
+`common/music/ambience1..4`, the next one when it ends; done in the page
+class with `defineAnim`, the scene table has no entries for them).
+
+* Init: `bitmap/backdrop2.bmp` (the night view behind the dream clips) is
+  loaded into the empty-named element `0x4bdd58` (opaque, 0,0). Characters
+  Solan (id 1, hotspot 50, z 10, idle `S09AN-SOL-B04..B07`) and Emanuel (id
+  0x10, hotspot 51, idle `EMN-B00/B04/B06/B05`, bored `EMN-004`), `windmill`
+  playing, `carpart` (profile key 0 of the page) and `3dglasses` (3D scene
+  8) at z -11 while not found. Arg 0: `paper` at z -20, Emanuel idle, intro
+  list `0x4bfb68` (001a, 001b, D01, 001d1, 001d2, 001e); else characters
+  reset. A periodic timer (id 0) first fires after a random 60..180 s and
+  then every 180 s: `balloon` plays if it is not playing (hotspot 12).
+* Hotspots (`hotspots.bmp`): 1 the sign -> sub game `pipeline`; 2 fruit
+  bowl -> `007a, 007b` (`banana` bitmap shown between them); 3 car ->
+  single `S09AN-SS-010`; 4 cushions -> random without repeats of `006a,
+  006b, 006c` / `011a, 006d, 001e`; 5 vase -> `005a, D02, 011, 001e`; 6
+  tent pole -> `005a, D01, 005b, 001e`; 7 tent door -> page `intent`; 8
+  grass -> `011a, 011b1, 001e` / `011a, 011b2, 001e`; 9 table -> `010b1,
+  008a, blank2, 001e` / `008b, blank2, 001e` / `008c, 008d, 001e` (010b1
+  chains `010b2` as a free clip); 10 car part, 13 3D glasses; 11 ->
+  activity `mahjong` (no pixels in the Gold `hotspots.bmp`, only in the
+  cursor table); 12 the balloon -> sub game `balloonhunt`; 201..214 fact
+  pages. 30 and 215 exist in the mask but are not handled.
+* Dream clips D01/D02: when one starts, music volume factor 0
+  (`FUN_0040b410(2, 2, 0.0)`), `backdrop2` added at z -10 and, the first
+  time per visit, the narration `S09AN-SS-D01a`; when it ends, factor 1
+  and `backdrop2` removed. `bike` (z -20) is shown from the end of 001a to
+  the end of 001d1, which also removes `paper`. Space: factor 1, removes
+  `backdrop2`, `bike`, `banana`, `paper`, `D01a`, `010b2`.
+* State across visits: only the three random pick masks (`DAT_005b87a4`,
+  `5b8798`, `5b87a0`); the pick counters and the narration counter are reset
+  on init.
+* Not done: profile (car part flag, 3D scene 8), award dialogs, fact pages,
+  music volume factors, `balloonhunt` and `mahjong` (not ported). The page
+  never starts `town` itself (no reference in its handler); `town`
+  (`FUN_00426f30`) is a cutscene that returns here (or to `buildacar` with
+  arg 2). `track9` is not restarted when already playing (the original
+  passes 1 = restart).
+
 ## Development aids (config keys in the `[flaaklypa]` section)
 
 `start_scene`, `autoshot` / `autoshot_delay` / `autoshot_quit` (screenshot),
