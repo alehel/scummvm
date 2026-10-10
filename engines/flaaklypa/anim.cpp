@@ -117,6 +117,9 @@ void Anim::setFrameRate(int fps) {
 
 void Anim::convertFrame(const Graphics::Surface *frame) {
 	const byte *palette = _video->getPalette();
+	// Audio only clips (4x4 pixels, no palette chunk) have nothing to show.
+	if (!palette && frame->format.bytesPerPixel == 1)
+		return;
 	Graphics::Surface *conv = frame->convertTo(g_engine->_screen->format, palette);
 	if (!_frame)
 		_frame = new Graphics::ManagedSurface();

@@ -252,6 +252,7 @@ void HustleScene::setSliderPixel(int py) {
 
 // FUN_0043d850 (event 0x117)
 void HustleScene::sliderMoved() {
+	debug(1, "Hustle: slider %d of %d, bet %d", _sliderValue, _sliderRange, betForLevel(sliderLevel()));
 	if (_state == kStateBetting)
 		setBetText(betForLevel(sliderLevel()));
 }
@@ -332,6 +333,7 @@ bool HustleScene::updateClock() {
 	if (frame != _handFrame) {
 		_handFrame = frame;
 		hand->showFrame(CLIP(frame, 0, frames - 1));
+		debug(2, "Hustle: clock frame %d of %d", frame, frames);
 		playClick();
 		if (frac >= 1.0f)
 			return false;
