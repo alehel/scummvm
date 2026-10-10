@@ -16,6 +16,7 @@ MODULE_OBJS = \
 	hopscotch.o \
 	lettersort.o \
 	hustle.o \
+	intro.o \
 	menu.o \
 	metaengine.o \
 	music.o \
@@ -30,6 +31,7 @@ MODULE_OBJS = \
 	whackamole.o \
 	wheelbarrow.o \
 	sound.o \
+	town.o \
 	yard.o
 
 # This module can be built as a plugin

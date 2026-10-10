@@ -84,6 +84,43 @@ private:
 	static int _introCount, _introMask; ///< random pick without repeats, kept across visits like the original
 };
 
+/** Story page 0: the prologue (intro), played before the yard. */
+class IntroScene : public Scene {
+public:
+	IntroScene(FlaaklypaEngine *vm, const SceneDef *def);
+
+	void onInit(int arg) override;
+	void onRightClick(int x, int y) override;
+	void onKey(const Common::KeyState &key) override;
+	bool handlesKey(const Common::KeyState &key) override;
+	void onAnimFinished(Anim *anim) override;
+
+private:
+	/** FUN_0040b0f0: plays one of the four common/music/ambience clips, the next one when it ends. */
+	void playAmbience();
+};
+
+/** The town ("Flaaklypa bygdeby"): a transition page, the bike ride to `outtent` or the film on the way to `buildacar`. */
+class TownScene : public Scene {
+public:
+	TownScene(FlaaklypaEngine *vm, const SceneDef *def);
+
+	void onInit(int arg) override;
+	void onClose() override;
+	void onKey(const Common::KeyState &key) override;
+	bool handlesKey(const Common::KeyState &key) override;
+	void onAnimFinished(Anim *anim) override;
+
+private:
+	void leave();
+	/** FUN_00407110 / FUN_00407210: the checkerboard mesh that dims the page (the dialog dimmer). */
+	void addMesh(int z);
+	void removeMesh();
+
+	int _arg;       ///< init argument (2: the Ben / film reel variant)
+	Anim *_mesh;
+};
+
 } // End of namespace Flaaklypa
 
 #endif
